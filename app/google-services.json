@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "552673599287",
+    "project_id": "agrolynch",
+    "storage_bucket": "agrolynch.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:552673599287:android:a91a0d284e0e21952ec4b2",
+        "android_client_info": {
+          "package_name": "com.dasariravi145.agrolynch"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHjlSAO42TQ_AW5uxzph1KgBShgAoCe_4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

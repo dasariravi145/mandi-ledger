@@ -1,0 +1,80 @@
+<resources>
+    <string name="app_name">மண்டி லெட்ஜர்</string>
+    <string name="mandi_ledger">மண்டி லெட்ஜர்</string>
+    <string name="choose_language">உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்</string>
+
+    <!-- Dashboard -->
+    <string name="add_stock">பங்கு சேர்க்க</string>
+    <string name="sale">விற்பனை</string>
+    <string name="payment">பணம்</string>
+    <string name="khata">கணக்கு</string>
+    <string name="farmers">விவசாயிகள்</string>
+    <string name="traders">வியாபாரிகள்</string>
+    <string name="expenses">செலவுகள்</string>
+    <string name="reports">அறிக்கைகள்</string>
+    <string name="settings">அமைப்புகள்</string>
+    <string name="more">மேலும்</string>
+    <string name="home">முகப்பு</string>
+    <string name="ledger">கணக்கு</string>
+    <string name="payments">பணம்</string>
+
+    <!-- Stats -->
+    <string name="today_sales">இன்றைய விற்பனை</string>
+    <string name="today_commission">இன்றைய கமிஷன்</string>
+    <string name="total_commission">மொத்த கமிஷன்</string>
+    <string name="cash_received">பெறப்பட்ட பணம்</string>
+    <string name="commission">கம்மிஷன்</string>
+    <string name="buyer_due">வாங்குபவர் பாக்கி</string>
+    <string name="farmer_due">விவசாயி பாக்கி</string>
+    <string name="no_sales_today">இன்று விற்பனை இல்லை</string>
+    <string name="add_stock_entry">சரக்கு பதிவு</string>
+    <string name="add_sale_entry">விற்பனை பதிவு</string>
+    <string name="analytics">பகுப்பாய்வு</string>
+    <string name="bill_scan">பில் ஸ்கேன் (OCR)</string>
+    <string name="voice_entry">குரல் பதிவு</string>
+    <string name="market_rates">சந்தை விலை</string>
+    <string name="backup_sync">காப்புப்பிரதி மற்றும் ஒத்திசைவு</string>
+    <string name="products">தயாரிப்புகள்</string>
+    <string name="stock_entry">சரக்கு பதிவு</string>
+    <string name="farmer_details">விவசாயி விவரங்கள்</string>
+    <string name="phone">தொலைபேசி</string>
+    <string name="village">கிராமம்</string>
+    <string name="product_grade">தயாரிப்பு மற்றும் தரம்</string>
+    <string name="unit">அலகு</string>
+    <string name="quantity_rate">அளவு மற்றும் விலை</string>
+    <string name="save_arrival">சேமிக்கவும்</string>
+    <string name="gross_amount">மொத்த தொகை</string>
+    <string name="farmer_amount">விவசாயி தொகை</string>
+    <string name="farmer_name_label">விவசாயி பெயர்</string>
+    <string name="product_label">தயாரிப்பு</string>
+    <string name="grade_label">தரம்</string>
+    <string name="rate">விலை</string>
+    <string name="sale_entry">விற்பனை பதிவு</string>
+    <string name="new_buyer_details">புதிய வாங்குபவர் விவரங்கள்</string>
+    <string name="mobile_number">தொலைபேசி எண்</string>
+    <string name="address">முகவரி / ஊர்</string>
+    <string name="gst_number">GST எண்</string>
+    <string name="buyer_sale_rate">வாங்குபவர் விற்பனை விலை</string>
+    <string name="available_farmer_stock">விவசாயி சரக்கு</string>
+    <string name="select_enter_buyer">வாங்குபவரைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="type_buyer_name">வாங்குபவர் பெயரை உள்ளிடவும்...</string>
+    <string name="product_v">வస్తుவு</string>
+    <string name="select_product_stock">சரக்கை ஏற்ற தயாரிப்பைத் தேர்ந்தெடுக்கவும்...</string>
+    <string name="enter_sale_qty">விற்பனை அளவை உள்ளிடவும்</string>
+    <string name="confirm_multi_farmer_sale">விற்பனையை உறுதிப்படுத்தவும்</string>
+    <string name="no_available_stock">இந்தத் தயாரிப்பிற்குப் பங்குகள் எதுவும் இல்லை.</string>
+    <string name="search_farmers_hint">பெயர், கிராமம் அல்லது தொலைபேசி மூலம் தேடவும்</string>
+    <string name="no_farmers_found">விவசாயிகள் யாரும் காணப்படவில்லை</string>
+
+    <!-- Buttons -->
+    <string name="save">சேமி</string>
+    <string name="cancel">ரத்துசெய்</string>
+    <string name="delete">நீக்கு</string>
+    <string name="edit">திருத்து</string>
+    <string name="confirm">உறுதிசெய்</string>
+
+    <!-- Validation -->
+    <string name="enter_amount">தொகையை உள்ளிடவும்</string>
+    <string name="enter_quantity">அளவை உள்ளிடவும்</string>
+    <string name="select_buyer">வாங்குபவரைத் தேர்ந்தெடுக்கவும்</string>
+</resources>

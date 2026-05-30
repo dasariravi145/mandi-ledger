@@ -1,0 +1,37 @@
+<resources>
+    <string name="app_name">മണ്ടി ലെഡ്ജർ</string>
+    <string name="mandi_ledger">മണ്ടി ലെഡ്ജർ</string>
+    <string name="choose_language">ഭാഷ തിരഞ്ഞെടുക്കുക</string>
+
+    <!-- Dashboard -->
+    <string name="add_stock">സ്റ്റോക്ക് ചേർക്കുക</string>
+    <string name="sale">വിൽപന</string>
+    <string name="payment">പേയ്മെന്റ്</string>
+    <string name="khata">കണക്ക്</string>
+    <string name="farmers">കർഷകർ</string>
+    <string name="traders">വ്യാപാരികൾ</string>
+    <string name="expenses">ചെലവുകൾ</string>
+    <string name="reports">റിപ്പോർട്ടുകൾ</string>
+    <string name="settings">സെറ്റിംഗ്സ്</string>
+    <string name="more">കൂടുതൽ</string>
+
+    <!-- Stats -->
+    <string name="today_sales">ഇന്നത്തെ വിൽപന</string>
+    <string name="cash_received">ലഭിച്ച പണം</string>
+    <string name="commission">കമ്മീഷൻ</string>
+    <string name="buyer_due">വാങ്ങുന്നയാളുടെ കുടിശ്ശിക</string>
+    <string name="farmer_due">കർഷകന്റെ കുടിശ്ശിക</string>
+    <string name="no_sales_today">ഇന്ന് വിൽപനയില്ല</string>
+
+    <!-- Buttons -->
+    <string name="save">സേവ് ചെയ്യുക</string>
+    <string name="cancel">റദ്ദാക്കുക</string>
+    <string name="delete">ഡിലീറ്റ് ചെയ്യുക</string>
+    <string name="edit">തിരുത്തുക</string>
+    <string name="confirm">ഉറപ്പാക്കുക</string>
+
+    <!-- Validation -->
+    <string name="enter_amount">തുക രേഖപ്പെടുത്തുക</string>
+    <string name="enter_quantity">അളവ് രേഖപ്പെടുത്തുക</string>
+    <string name="select_buyer">വാങ്ങുന്നയാളെ തിരഞ്ഞെടുക്കുക</string>
+</resources>

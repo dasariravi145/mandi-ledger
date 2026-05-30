@@ -1,0 +1,37 @@
+<resources>
+    <string name="app_name">मंडी लेजर</string>
+    <string name="mandi_ledger">मंडी लेजर</string>
+    <string name="choose_language">तुमची भाषा निवडा</string>
+
+    <!-- Dashboard -->
+    <string name="add_stock">स्टॉक जोडा</string>
+    <string name="sale">विक्री</string>
+    <string name="payment">पेमेंट</string>
+    <string name="khata">खाते</string>
+    <string name="farmers">शेतकरी</string>
+    <string name="traders">व्यापारी</string>
+    <string name="expenses">खर्च</string>
+    <string name="reports">अहवाल</string>
+    <string name="settings">सेटिंग्ज</string>
+    <string name="more">अधिक</string>
+
+    <!-- Stats -->
+    <string name="today_sales">आजची विक्री</string>
+    <string name="cash_received">मिळालेले रोख</string>
+    <string name="commission">कमिशन</string>
+    <string name="buyer_due">खरेदीदाराची थकबाकी</string>
+    <string name="farmer_due">शेतकऱ्याची थकबाकी</string>
+    <string name="no_sales_today">आज कोणतीही विक्री झाली नाही</string>
+
+    <!-- Buttons -->
+    <string name="save">सेव्ह करा</string>
+    <string name="cancel">रद्द करा</string>
+    <string name="delete">हटवा</string>
+    <string name="edit">दुरुस्त करा</string>
+    <string name="confirm">निश्चित करा</string>
+
+    <!-- Validation -->
+    <string name="enter_amount">कृपया रक्कम टाका</string>
+    <string name="enter_quantity">कृपया प्रमाण टाका</string>
+    <string name="select_buyer">कृपया खरेदीदार निवडा</string>
+</resources>

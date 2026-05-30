@@ -1,0 +1,80 @@
+<resources>
+    <string name="app_name">मंडी लेजर</string>
+    <string name="mandi_ledger">मंडी लेजर</string>
+    <string name="choose_language">अपनी भाषा चुनें</string>
+
+    <!-- Dashboard -->
+    <string name="add_stock">स्टॉक जोड़ें</string>
+    <string name="sale">बिक्री</string>
+    <string name="payment">भुगतान</string>
+    <string name="khata">खाता</string>
+    <string name="farmers">किसान</string>
+    <string name="traders">व्यापारी</string>
+    <string name="expenses">खर्च</string>
+    <string name="reports">रिपोर्ट</string>
+    <string name="settings">सेटिंग्स</string>
+    <string name="more">अधिक</string>
+    <string name="home">होम</string>
+    <string name="ledger">लेजर</string>
+    <string name="payments">भुगतान</string>
+
+    <!-- Stats -->
+    <string name="today_sales">आज की बिक्री</string>
+    <string name="today_commission">आज का कमीशन</string>
+    <string name="total_commission">कुल कमीशन</string>
+    <string name="cash_received">प्राप्त नकद</string>
+    <string name="commission">कमीशन</string>
+    <string name="buyer_due">खरीदार का बकाया</string>
+    <string name="farmer_due">किसान का बकाया</string>
+    <string name="no_sales_today">आज कोई बिक्री नहीं हुई</string>
+    <string name="add_stock_entry">स्टॉक एंट्री</string>
+    <string name="add_sale_entry">बिक्री एंट्री</string>
+    <string name="analytics">एनालिटिक्स</string>
+    <string name="bill_scan">बिल स्कैन (OCR)</string>
+    <string name="voice_entry">वॉयस एंट्री</string>
+    <string name="market_rates">बाजार दर</string>
+    <string name="backup_sync">बैकअप और सिंक</string>
+    <string name="products">उत्पाद</string>
+    <string name="stock_entry">स्टॉक एंट्री</string>
+    <string name="farmer_details">किसान विवरण</string>
+    <string name="phone">फोन</string>
+    <string name="village">गाँव</string>
+    <string name="product_grade">उत्पाद और ग्रेड</string>
+    <string name="unit">इकाई</string>
+    <string name="quantity_rate">मात्रा और दर</string>
+    <string name="save_arrival">सेव करें</string>
+    <string name="gross_amount">कुल राशि</string>
+    <string name="farmer_amount">किसान राशि</string>
+    <string name="farmer_name_label">किसान का नाम</string>
+    <string name="product_label">उत्पाद</string>
+    <string name="grade_label">ग्रेड</string>
+    <string name="rate">दर</string>
+    <string name="sale_entry">बिक्री एंट्री</string>
+    <string name="new_buyer_details">नए खरीदार का विवरण</string>
+    <string name="mobile_number">मोबाइल नंबर</string>
+    <string name="address">पता</string>
+    <string name="gst_number">GST नंबर</string>
+    <string name="buyer_sale_rate">खरीदार बिक्री दर</string>
+    <string name="available_farmer_stock">उपलब्ध किसान स्टॉक</string>
+    <string name="select_enter_buyer">खरीदार चुनें या दर्ज करें</string>
+    <string name="type_buyer_name">खरीदार का नाम लिखें...</string>
+    <string name="product_v">उत्पाद</string>
+    <string name="select_product_stock">स्टॉक लोड करने के लिए उत्पाद चुनें...</string>
+    <string name="enter_sale_qty">बिक्री मात्रा दर्ज करें</string>
+    <string name="confirm_multi_farmer_sale">बिक्री की पुष्टि करें</string>
+    <string name="no_available_stock">इस उत्पाद के लिए कोई स्टॉक उपलब्ध नहीं है।</string>
+    <string name="search_farmers_hint">नाम, गाँव या मोबाइल से खोजें</string>
+    <string name="no_farmers_found">कोई किसान नहीं मिला</string>
+
+    <!-- Buttons -->
+    <string name="save">सेव करें</string>
+    <string name="cancel">रद्द करें</string>
+    <string name="delete">हटाएं</string>
+    <string name="edit">बदलें</string>
+    <string name="confirm">पुष्टि करें</string>
+
+    <!-- Validation -->
+    <string name="enter_amount">कृपया राशि दर्ज करें</string>
+    <string name="enter_quantity">कृपया मात्रा दर्ज करें</string>
+    <string name="select_buyer">कृपया खरीदार चुनें</string>
+</resources>

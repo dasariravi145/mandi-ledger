@@ -1,0 +1,80 @@
+<resources>
+    <string name="app_name">మండి లెడ్జర్</string>
+    <string name="mandi_ledger">మండి లెడ్జర్</string>
+    <string name="choose_language">మీ భాషను ఎంచుకోండి</string>
+
+    <!-- Dashboard -->
+    <string name="add_stock">స్టాక్ నమోదు</string>
+    <string name="sale">అమ్మకం</string>
+    <string name="payment">చెల్లింపు</string>
+    <string name="khata">ఖాతా</string>
+    <string name="farmers">రైతులు</string>
+    <string name="traders">వ్యాపారులు</string>
+    <string name="expenses">ఖర్చులు</string>
+    <string name="reports">రిపోర్ట్స్</string>
+    <string name="settings">సెట్టింగ్స్</string>
+    <string name="more">మరిన్ని</string>
+    <string name="home">హోమ్</string>
+    <string name="ledger">లెడ్జర్</string>
+    <string name="payments">చెల్లింపులు</string>
+
+    <!-- Stats -->
+    <string name="today_sales">నేటి అమ్మకాలు</string>
+    <string name="today_commission">నేటి కమీషన్</string>
+    <string name="total_commission">మొత్తం కమీషన్</string>
+    <string name="cash_received">వసూలైన నగదు</string>
+    <string name="commission">కమీషన్</string>
+    <string name="buyer_due">కొనుగోలుదారు బాకీ</string>
+    <string name="farmer_due">రైతుకు చెల్లించాల్సినది</string>
+    <string name="no_sales_today">ఈరోజు అమ్మకాలు లేవు</string>
+    <string name="add_stock_entry">సరుకు ఎంట్రీ</string>
+    <string name="add_sale_entry">అమ్మకం ఎంట్రీ</string>
+    <string name="analytics">అనలిటిక్స్</string>
+    <string name="bill_scan">బిల్ స్కాన్ (OCR)</string>
+    <string name="voice_entry">వాయిస్ ఎంట్రీ</string>
+    <string name="market_rates">మార్కెట్ రేట్లు</string>
+    <string name="backup_sync">బ్యాకప్ &amp; సింక్</string>
+    <string name="products">ఉత్పత్తులు</string>
+    <string name="stock_entry">సరుకు ఎంట్రీ</string>
+    <string name="farmer_details">రైతు వివరాలు</string>
+    <string name="phone">ఫోన్</string>
+    <string name="village">గ్రామం</string>
+    <string name="product_grade">ఉత్పత్తి &amp; గ్రేడ్</string>
+    <string name="unit">యూనిట్</string>
+    <string name="quantity_rate">పరిమాణం &amp; ధర</string>
+    <string name="save_arrival">సేవ్ చేయండి</string>
+    <string name="gross_amount">మొత్తం మొత్తం</string>
+    <string name="farmer_amount">రైతుకి ఇవ్వాల్సిన మొత్తం</string>
+    <string name="farmer_name_label">రైతు పేరు</string>
+    <string name="product_label">ఉత్పత్తి</string>
+    <string name="grade_label">గ్రేడ్</string>
+    <string name="rate">ధర</string>
+    <string name="sale_entry">అమ్మకం ఎంట్రీ</string>
+    <string name="new_buyer_details">కొత్త వ్యాపారి వివరాలు</string>
+    <string name="mobile_number">మొబైల్ నంబర్</string>
+    <string name="address">చిరునామా / ఊరు</string>
+    <string name="gst_number">GST నంబర్</string>
+    <string name="buyer_sale_rate">అమ్మకం ధర</string>
+    <string name="available_farmer_stock">రైతు సరుకు</string>
+    <string name="select_enter_buyer">వ్యాపారిని ఎంచుకోండి</string>
+    <string name="type_buyer_name">వ్యాపారి పేరు నమోదు చేయండి...</string>
+    <string name="product_v">వస్తువు</string>
+    <string name="select_product_stock">సరుకు లోడ్ చేయడానికి వస్తువును ఎంచుకోండి...</string>
+    <string name="enter_sale_qty">అమ్మకం పరిమాణం</string>
+    <string name="confirm_multi_farmer_sale">అమ్మకాన్ని ఖాయం చేయండి</string>
+    <string name="no_available_stock">ఈ వస్తువుకు ప్రస్తుతం సరుకు లేదు.</string>
+    <string name="search_farmers_hint">పేరు, ఊరు లేదా నంబర్ ద్వారా వెతకండి</string>
+    <string name="no_farmers_found">రైతులు కనుగొనబడలేదు</string>
+
+    <!-- Buttons -->
+    <string name="save">సేవ్</string>
+    <string name="cancel">రద్దు</string>
+    <string name="delete">తొలగించు</string>
+    <string name="edit">సవరించు</string>
+    <string name="confirm">నిర్ధారించు</string>
+
+    <!-- Validation -->
+    <string name="enter_amount">దయచేసి నగదును నమోదు చేయండి</string>
+    <string name="enter_quantity">దయచేసి పరిమాణం నమోదు చేయండి</string>
+    <string name="select_buyer">దయచేసి వ్యాపారిని ఎంచుకోండి</string>
+</resources>

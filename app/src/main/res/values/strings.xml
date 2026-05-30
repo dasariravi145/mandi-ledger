@@ -1,0 +1,80 @@
+<resources>
+    <string name="app_name">Mandi Ledger</string>
+    <string name="mandi_ledger">Mandi Ledger</string>
+    <string name="choose_language">Choose Your Language</string>
+
+    <!-- Dashboard -->
+    <string name="add_stock">Add Stock</string>
+    <string name="sale">Sale</string>
+    <string name="payment">Payment</string>
+    <string name="khata">Khata</string>
+    <string name="farmers">Farmers</string>
+    <string name="traders">Traders</string>
+    <string name="expenses">Expenses</string>
+    <string name="reports">Reports</string>
+    <string name="settings">Settings</string>
+    <string name="more">More</string>
+    <string name="home">Home</string>
+    <string name="ledger">Ledger</string>
+    <string name="payments">Payments</string>
+
+    <!-- Stats -->
+    <string name="today_sales">Today\'s Sales</string>
+    <string name="today_commission">Today\'s Commission</string>
+    <string name="total_commission">Total Commission</string>
+    <string name="cash_received">Cash Received</string>
+    <string name="commission">Commission</string>
+    <string name="buyer_due">Buyer Due</string>
+    <string name="farmer_due">Farmer Due</string>
+    <string name="no_sales_today">No sales today</string>
+    <string name="add_stock_entry">Add Stock Entry</string>
+    <string name="add_sale_entry">Add Sale Entry</string>
+    <string name="analytics">Analytics</string>
+    <string name="bill_scan">Bill Scan (OCR)</string>
+    <string name="voice_entry">Voice Entry</string>
+    <string name="market_rates">Market Rates</string>
+    <string name="backup_sync">Backup &amp; Sync</string>
+    <string name="products">Products</string>
+    <string name="stock_entry">Stock Entry</string>
+    <string name="farmer_details">Farmer Details</string>
+    <string name="phone">Phone</string>
+    <string name="village">Village</string>
+    <string name="product_grade">Product &amp; Grade</string>
+    <string name="unit">Unit</string>
+    <string name="quantity_rate">Quantity &amp; Rate</string>
+    <string name="save_arrival">Save Arrival</string>
+    <string name="gross_amount">Gross Amount</string>
+    <string name="farmer_amount">Farmer Amount</string>
+    <string name="farmer_name_label">Farmer Name</string>
+    <string name="product_label">Product</string>
+    <string name="grade_label">Grade</string>
+    <string name="rate">Rate</string>
+    <string name="sale_entry">Sale Entry</string>
+    <string name="new_buyer_details">New Buyer Details</string>
+    <string name="mobile_number">Mobile Number</string>
+    <string name="address">Address</string>
+    <string name="gst_number">GST Number</string>
+    <string name="buyer_sale_rate">Buyer Sale Rate</string>
+    <string name="available_farmer_stock">Available Farmer Stock</string>
+    <string name="select_enter_buyer">Select or Enter Buyer</string>
+    <string name="type_buyer_name">Type Buyer Name...</string>
+    <string name="product_v">Product</string>
+    <string name="select_product_stock">Select Product to Load Stock...</string>
+    <string name="enter_sale_qty">Enter Sale Qty</string>
+    <string name="confirm_multi_farmer_sale">Confirm Multi-Farmer Sale</string>
+    <string name="no_available_stock">No available stock for this product.</string>
+    <string name="search_farmers_hint">Search by name, village or mobile</string>
+    <string name="no_farmers_found">No farmers found</string>
+
+    <!-- Buttons -->
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="confirm">Confirm</string>
+
+    <!-- Validation -->
+    <string name="enter_amount">Please enter amount</string>
+    <string name="enter_quantity">Please enter quantity</string>
+    <string name="select_buyer">Please select buyer</string>
+</resources>
