@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
 import java.io.File
+import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
 
@@ -68,25 +69,83 @@ class BackupRepositoryImpl @Inject constructor(
     }
 
     override suspend fun uploadBackupToCloud(file: File): Resource<Unit> {
+        val uid = auth.currentUser?.uid ?: return Resource.Error("User not logged in")
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val fileName = file.name
+        val storagePath = "cloud_backups/$uid/${timestamp}_$fileName"
+        
+        timber.log.Timber.d("Backup Started: File=${file.absolutePath}, Size=${file.length()}, Exists=${file.exists()}")
+
+        if (!file.exists()) {
+            timber.log.Timber.e("Backup File Not Found at: ${file.absolutePath}")
+            return Resource.Error("Backup file not found")
+        }
+
+        if (file.length() == 0L) {
+            timber.log.Timber.e("Backup File is Empty")
+            return Resource.Error("Backup file is empty")
+        }
+
         return try {
-            val uid = auth.currentUser?.uid ?: return Resource.Error("User not logged in")
-            val ref = storage.reference.child("backups/$uid/${file.name}")
-            ref.putFile(Uri.fromFile(file)).await()
+            val ref = storage.reference.child(storagePath)
+            timber.log.Timber.d("Upload Started to: $storagePath")
             
-            val backup = BackupEntity(
-                id = UUID.randomUUID().toString(),
-                fileName = file.name,
-                filePath = "cloud/${file.name}",
-                size = file.length(),
-                type = "CLOUD",
-                reportType = "MANUAL",
-                status = "SUCCESS"
-            )
-            backupDao.insertBackup(backup)
+            // Wait for upload to complete
+            val uploadSnapshot = ref.putFile(Uri.fromFile(file)).await()
             
-            Resource.Success(Unit)
+            if (uploadSnapshot.task.isSuccessful) {
+                timber.log.Timber.i("Upload Success: ${uploadSnapshot.bytesTransferred} bytes")
+                
+                // Robust download URL retrieval with retries for eventual consistency
+                var downloadUrl: String? = null
+                var lastError: Exception? = null
+                for (i in 1..3) {
+                    try {
+                        val uri = ref.downloadUrl.await()
+                        downloadUrl = uri.toString()
+                        break
+                    } catch (e: Exception) {
+                        lastError = e
+                        timber.log.Timber.w("Download URL attempt $i failed: ${e.message}. Retrying...")
+                        kotlinx.coroutines.delay(1000L * i)
+                    }
+                }
+
+                if (downloadUrl != null) {
+                    timber.log.Timber.d("Download URL Generated: $downloadUrl")
+
+                    val backup = BackupEntity(
+                        id = UUID.randomUUID().toString(),
+                        fileName = fileName,
+                        filePath = downloadUrl, // Store URL for cloud backups
+                        size = file.length(),
+                        type = "CLOUD",
+                        reportType = "MANUAL",
+                        status = "SUCCESS"
+                    )
+                    backupDao.insertBackup(backup)
+                    Resource.Success(Unit)
+                } else {
+                    throw lastError ?: Exception("Could not generate download URL")
+                }
+            } else {
+                val error = uploadSnapshot.task.exception?.message ?: "Unknown upload error"
+                timber.log.Timber.e("Upload Failed: $error")
+                Resource.Error(error)
+            }
         } catch (e: Exception) {
-            Resource.Error(e.message ?: "Cloud upload failed")
+            val msg = e.message ?: "Cloud upload failed"
+            timber.log.Timber.e(e, "Upload Exception at path: $storagePath")
+            
+            if (msg.contains("Object does not exist", ignoreCase = true)) {
+                timber.log.Timber.e("CRITICAL: Firebase reports object missing immediately after upload. Ensure storage bucket and paths are correct.")
+            }
+            
+            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().apply {
+                recordException(e)
+                log("Backup Upload Failure Path: $storagePath")
+            }
+            Resource.Error(msg)
         }
     }
 

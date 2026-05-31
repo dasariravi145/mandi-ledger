@@ -45,7 +45,8 @@ object AppModule {
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_21_22,
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_22_23,
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_23_24,
-            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_24_25
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_24_25,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_25_26
         )
         .build()
     }

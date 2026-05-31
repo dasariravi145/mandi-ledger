@@ -9,12 +9,20 @@ enum class VoiceStep {
 }
 
 enum class VoiceService {
-    ADD_FARMER, ADD_BUYER, ADD_PRODUCT, ADD_STOCK, ADD_SALE, ADD_PAYMENT
+    ADD_STOCK, ADD_SALE, BUYER_PAYMENT, FARMER_PAYMENT, ADD_FARMER, ADD_BUYER, ADD_PRODUCT
 }
 
 data class VoiceLanguage(val name: String, val code: String, val locale: String)
 
-data class Question(val key: String, val text: Map<String, String>)
+data class Question(
+    val key: String, 
+    val text: Map<String, String>,
+    val fieldType: QuestionType = QuestionType.TEXT
+)
+
+enum class QuestionType {
+    TEXT, NUMBER, CHOICE
+}
 
 data class VoiceState(
     val step: VoiceStep = VoiceStep.LANGUAGE_SELECTION,
@@ -28,5 +36,6 @@ data class VoiceState(
     val isPremium: Boolean = false,
     val existingRecordFound: Boolean = false,
     val isLoading: Boolean = false,
-    val suggestedRecord: Any? = null
+    val suggestedRecord: Any? = null,
+    val dynamicQuestions: List<Question> = emptyList()
 )

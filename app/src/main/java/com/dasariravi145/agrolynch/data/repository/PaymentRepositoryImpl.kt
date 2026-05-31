@@ -64,6 +64,10 @@ class PaymentRepositoryImpl @Inject constructor(
                     
                     paymentDao.insertPayment(updatedPayment)
                     farmerDao.updateFarmer(updatedFarmer)
+
+                    timber.log.Timber.i("Farmer Payment Added: Farmer=%s, Amount=%f", 
+                        payment.partyName, payment.amount)
+
                     updatedFarmer to updatedPayment
                 }
                 
@@ -93,6 +97,10 @@ class PaymentRepositoryImpl @Inject constructor(
                     )
                     paymentDao.insertPayment(payment)
                     buyerDao.updateBuyer(updatedBuyer)
+
+                    timber.log.Timber.i("Buyer Collection Added: Buyer=%s, Amount=%f", 
+                        payment.partyName, payment.amount)
+
                     updatedBuyer
                 }
 

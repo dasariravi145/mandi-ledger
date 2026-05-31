@@ -35,6 +35,9 @@ class TransactionRepositoryImpl @Inject constructor(
         return try {
             // 1. Save Transaction
             dao.insertTransaction(transaction)
+
+            timber.log.Timber.i("Manual/OCR Transaction Added: Farmer=%s, Product=%s, Amount=%f", 
+                transaction.farmerName, transaction.productName, transaction.totalAmount)
             
             // 2. Update Farmer Balance if farmerId is present
             var updatedFarmer: com.dasariravi145.agrolynch.data.local.entity.FarmerEntity? = null

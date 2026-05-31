@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import timber.log.Timber
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,14 +61,22 @@ fun VoiceEntryScreen(
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when (state.step) {
-                VoiceStep.LANGUAGE_SELECTION -> LanguageSelectionStep(viewModel)
-                VoiceStep.SERVICE_SELECTION -> ServiceSelectionStep(viewModel)
-                VoiceStep.INTERACTIVE_QUESTIONS -> InteractiveStep(viewModel, state)
-                VoiceStep.REVIEW -> ReviewStep(viewModel, state)
-                VoiceStep.SUCCESS -> SuccessStep {
-                    viewModel.reset()
-                    onBackClick()
+            AnimatedContent(
+                targetState = state.step,
+                transitionSpec = {
+                    fadeIn() + slideInHorizontally { it } togetherWith fadeOut() + slideOutHorizontally { -it }
+                },
+                label = "VoiceStepAnimation"
+            ) { step ->
+                when (step) {
+                    VoiceStep.LANGUAGE_SELECTION -> LanguageSelectionStep(viewModel)
+                    VoiceStep.SERVICE_SELECTION -> ServiceSelectionStep(viewModel)
+                    VoiceStep.INTERACTIVE_QUESTIONS -> InteractiveStep(viewModel, state)
+                    VoiceStep.REVIEW -> ReviewStep(viewModel, state)
+                    VoiceStep.SUCCESS -> SuccessStep {
+                        viewModel.reset()
+                        onBackClick()
+                    }
                 }
             }
 
@@ -202,15 +211,28 @@ fun InteractiveStep(viewModel: VoiceViewModel, state: VoiceState) {
 @Composable
 fun ReviewStep(viewModel: VoiceViewModel, state: VoiceState) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Review Entry", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("Confirm Details / వివరాలను నిర్ధారించండి", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
         
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                state.capturedData.forEach { (key, value) ->
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                state.capturedData.filter { !it.key.contains("id") }.forEach { (key, value) ->
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                        Text(key.replaceFirstChar { it.uppercase() } + ":", color = Color.Gray)
-                        Text(value, fontWeight = FontWeight.Bold)
+                        Text(key.replace("_", " ").replaceFirstChar { it.uppercase() } + ":", color = Color.Gray, fontSize = 14.sp)
+                        Text(value, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+                
+                // Add Calculated Summaries
+                if (state.selectedService == VoiceService.ADD_STOCK || state.selectedService == VoiceService.ADD_SALE) {
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    val qty = state.capturedData["quantity"]?.toDoubleOrNull() ?: 0.0
+                    val rate = state.capturedData["rate"]?.toDoubleOrNull() ?: 0.0
+                    val gross = qty * rate
+                    
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                        Text("Gross Total:", fontWeight = FontWeight.Bold)
+                        Text("₹${String.format(Locale.US, "%.2f", gross)}", color = Color(0xFF1B5E20), fontWeight = FontWeight.Black)
                     }
                 }
             }
@@ -219,11 +241,16 @@ fun ReviewStep(viewModel: VoiceViewModel, state: VoiceState) {
         Spacer(Modifier.weight(1f))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = { viewModel.reset() }, modifier = Modifier.weight(1f)) {
+            OutlinedButton(onClick = { viewModel.reset() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
                 Text("Cancel")
             }
-            Button(onClick = { viewModel.saveEntry() }, modifier = Modifier.weight(1f)) {
-                Text("Save Record")
+            Button(
+                onClick = { viewModel.saveEntry() }, 
+                modifier = Modifier.weight(1f), 
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+            ) {
+                Text("Confirm & Save")
             }
         }
     }

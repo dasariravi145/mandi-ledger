@@ -79,6 +79,10 @@ class ArrivalRepositoryImpl @Inject constructor(
                 
                 arrivalDao.insertArrival(toInsert)
                 farmerDao.updateFarmer(updatedFarmer)
+                
+                timber.log.Timber.i("Stock Entry Added: Farmer=%s, Product=%s, NetAmount=%f", 
+                    toInsert.farmerName, toInsert.productName, toInsert.netAmount)
+
                 toInsert to updatedFarmer
             }
             

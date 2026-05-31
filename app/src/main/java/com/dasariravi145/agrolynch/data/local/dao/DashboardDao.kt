@@ -16,26 +16,33 @@ interface DashboardDao {
     @Query("SELECT SUM(totalAmount) FROM sales WHERE date >= :todayStart AND isDeleted = 0")
     fun getTodaySalesFlow(todayStart: Long): Flow<Double?>
 
-    @Query("SELECT SUM(grossAmount) FROM arrivals WHERE date >= :todayStart AND isDeleted = 0")
-    fun getTodayArrivalsFlow(todayStart: Long): Flow<Double?>
+    @Query("SELECT SUM(commissionAmount) FROM arrivals WHERE date >= :todayStart AND isDeleted = 0")
+    fun getTodayArrivalsCommissionFlow(todayStart: Long): Flow<Double?>
 
     @Query("SELECT SUM(totalMargin) FROM sales WHERE date >= :todayStart AND isDeleted = 0")
     fun getTodaySalesMarginFlow(todayStart: Long): Flow<Double?>
 
-    @Query("SELECT SUM(commissionAmount) FROM arrivals WHERE date >= :todayStart AND isDeleted = 0")
-    fun getTodayArrivalsCommissionFlow(todayStart: Long): Flow<Double?>
+    @Query("SELECT SUM(commissionAmount) FROM arrivals WHERE isDeleted = 0")
+    fun getTotalArrivalsCommissionFlow(): Flow<Double?>
 
     @Query("SELECT SUM(totalMargin) FROM sales WHERE isDeleted = 0")
     fun getTotalSalesMarginFlow(): Flow<Double?>
 
-    @Query("SELECT SUM(commissionAmount) FROM arrivals WHERE isDeleted = 0")
-    fun getTotalArrivalsCommissionFlow(): Flow<Double?>
+    // Pending Calculation Components
+    @Query("SELECT SUM(totalAmount + transportCharges + otherCharges) FROM sales WHERE isDeleted = 0")
+    fun getTotalSalesNetFlow(): Flow<Double?>
 
-    @Query("SELECT SUM(pendingAmount) FROM buyers WHERE isDeleted = 0")
-    fun getBuyerPendingFlow(): Flow<Double?>
+    @Query("SELECT SUM(amount) FROM payments WHERE partyType = 'BUYER' AND isDeleted = 0")
+    fun getTotalBuyerPaymentsFlow(): Flow<Double?>
 
-    @Query("SELECT SUM(pendingAmount) FROM farmers WHERE isDeleted = 0")
-    fun getFarmerPendingFlow(): Flow<Double?>
+    @Query("SELECT SUM(netAmount) FROM arrivals WHERE isDeleted = 0")
+    fun getTotalArrivalsNetFlow(): Flow<Double?>
+
+    @Query("SELECT SUM(totalAmount) FROM transactions WHERE isDeleted = 0")
+    fun getTotalTransactionsAmountFlow(): Flow<Double?>
+
+    @Query("SELECT SUM(amount) FROM payments WHERE partyType = 'FARMER' AND isDeleted = 0")
+    fun getTotalFarmerPaymentsFlow(): Flow<Double?>
 
     // Raw aggregation queries for background worker to refresh the summary table
     @Query("SELECT SUM(totalAmount) FROM sales WHERE date >= :todayStart AND isDeleted = 0")

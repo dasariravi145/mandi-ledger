@@ -282,4 +282,17 @@ object DatabaseMigrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_ocr_scans_createdAt` ON `ocr_scans` (`createdAt`)")
         }
     }
+
+    val MIGRATION_25_26 = object : Migration(25, 26) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `users` ADD COLUMN `isPremium` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `users` ADD COLUMN `premiumExpiry` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `users` ADD COLUMN `cloudBackupEnabled` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `users` ADD COLUMN `multiDeviceSyncEnabled` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `users` ADD COLUMN `voiceEntryEnabled` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `users` ADD COLUMN `ocrEnabled` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `users` ADD COLUMN `ocrCloudStorageEnabled` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `users` ADD COLUMN `pdfCloudStorageEnabled` INTEGER NOT NULL DEFAULT 0")
+        }
+    }
 }

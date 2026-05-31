@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -19,7 +20,8 @@ import javax.inject.Inject
 class PremiumViewModel @Inject constructor(
     private val billingManager: BillingManager,
     private val premiumStateManager: PremiumStateManager,
-    private val subscriptionDao: SubscriptionDao
+    private val subscriptionDao: SubscriptionDao,
+    private val userRepository: com.dasariravi145.agrolynch.domain.repository.UserRepository
 ) : ViewModel() {
 
     val isPremium = premiumStateManager.isPremium
@@ -39,7 +41,17 @@ class PremiumViewModel @Inject constructor(
         }
         viewModelScope.launch {
             billingManager.purchaseSuccess.collect {
+                syncPremiumStatus()
                 _uiState.value = PremiumUiState.Success
+            }
+        }
+    }
+
+    private fun syncPremiumStatus() {
+        viewModelScope.launch {
+            val user = userRepository.getUserProfile().first()
+            user?.let { 
+                userRepository.saveProfile(it.copy(isPremium = true))
             }
         }
     }

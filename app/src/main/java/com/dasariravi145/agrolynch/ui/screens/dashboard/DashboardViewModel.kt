@@ -26,7 +26,8 @@ class DashboardViewModel @Inject constructor(
                 updateState { it.copy(isLoading = true) } 
             }
             .onEach { summary ->
-                Timber.d("DashboardViewModel: Received data update")
+                Timber.d("DashboardViewModel: Received data update - TodaySales=%f, TodayComm=%f, BuyerPending=%f, FarmerPending=%f",
+                    summary.todaySales, summary.todayCommission, summary.buyerPending, summary.farmerPending)
                 updateState { it.copy(isLoading = false, summary = summary, error = null) }
             }
             .catch { e ->

@@ -18,24 +18,6 @@ class DashboardRepositoryImpl @Inject constructor(
 ) : DashboardRepository {
 
     override fun getDashboardSummary(): Flow<DashboardSummary> {
-        return combine(
-            dashboardDao.getSummary(),
-            transactionDao.getRecentTransactions(5)
-        ) { summaryEntity, recent ->
-            val summary = summaryEntity ?: DashboardSummaryEntity(id = 1)
-            DashboardSummary(
-                todaySales = summary.todaySales,
-                todayCommission = summary.todayCommission,
-                commissionEarned = summary.totalCommission,
-                buyerPending = summary.buyerPending,
-                farmerPending = summary.farmerPending,
-                netBalance = summary.netBalance,
-                recentTransactions = recent
-            )
-        }
-    }
-
-    override suspend fun refreshSummary() = withContext(Dispatchers.IO) {
         val calendar = Calendar.getInstance()
         calendar.set(Calendar.HOUR_OF_DAY, 0)
         calendar.set(Calendar.MINUTE, 0)
@@ -43,28 +25,57 @@ class DashboardRepositoryImpl @Inject constructor(
         calendar.set(Calendar.MILLISECOND, 0)
         val todayStart = calendar.timeInMillis
 
-        val todaySales = (dashboardDao.calculateTodaySales(todayStart) ?: 0.0) + 
-                         (dashboardDao.calculateTodayArrivals(todayStart) ?: 0.0)
-        
-        val todayCommission = (dashboardDao.calculateTodaySalesMargin(todayStart) ?: 0.0) + 
-                              (dashboardDao.calculateTodayArrivalsCommission(todayStart) ?: 0.0)
-        
-        val totalCommission = (dashboardDao.calculateTotalSalesMargin() ?: 0.0) + 
-                              (dashboardDao.calculateTotalArrivalsCommission() ?: 0.0)
-        
-        val buyerPending = dashboardDao.calculateBuyerPending() ?: 0.0
-        val farmerPending = dashboardDao.calculateFarmerPending() ?: 0.0
+        return combine(
+            dashboardDao.getTodaySalesFlow(todayStart),
+            dashboardDao.getTodaySalesMarginFlow(todayStart),
+            dashboardDao.getTodayArrivalsCommissionFlow(todayStart),
+            dashboardDao.getTotalSalesMarginFlow(),
+            dashboardDao.getTotalArrivalsCommissionFlow(),
+            dashboardDao.getTotalSalesNetFlow(),
+            dashboardDao.getTotalBuyerPaymentsFlow(),
+            dashboardDao.getTotalArrivalsNetFlow(),
+            dashboardDao.getTotalFarmerPaymentsFlow(),
+            dashboardDao.getTotalTransactionsAmountFlow(),
+            transactionDao.getRecentTransactions(10)
+        ) { flows ->
+            val todaySales = (flows[0] as? Double) ?: 0.0
+            val todaySalesMargin = (flows[1] as? Double) ?: 0.0
+            val todayArrivalsComm = (flows[2] as? Double) ?: 0.0
+            
+            val totalSalesMargin = (flows[3] as? Double) ?: 0.0
+            val totalArrivalsComm = (flows[4] as? Double) ?: 0.0
+            
+            val totalSalesNet = (flows[5] as? Double) ?: 0.0
+            val totalBuyerPayments = (flows[6] as? Double) ?: 0.0
+            
+            val totalArrivalsNet = (flows[7] as? Double) ?: 0.0
+            val totalFarmerPayments = (flows[8] as? Double) ?: 0.0
+            val totalLegacyTrans = (flows[9] as? Double) ?: 0.0
+            
+            @Suppress("UNCHECKED_CAST")
+            val recent = (flows[10] as? List<com.dasariravi145.agrolynch.data.local.entity.TransactionEntity>) ?: emptyList()
 
-        val newSummary = DashboardSummaryEntity(
-            id = 1,
-            todaySales = todaySales,
-            todayCommission = todayCommission,
-            totalCommission = totalCommission,
-            buyerPending = buyerPending,
-            farmerPending = farmerPending,
-            netBalance = buyerPending - farmerPending,
-            updatedAt = System.currentTimeMillis()
-        )
-        dashboardDao.updateSummary(newSummary)
+            val buyerPending = totalSalesNet - totalBuyerPayments
+            val farmerPending = (totalArrivalsNet + totalLegacyTrans) - totalFarmerPayments
+            val todayCommission = todaySalesMargin + todayArrivalsComm
+            val totalCommission = totalSalesMargin + totalArrivalsComm
+
+            timber.log.Timber.d("Dashboard Recalculated: TodaySales=%f, TodayComm=%f, TotalComm=%f, BuyerPending=%f, FarmerPending=%f", 
+                todaySales, todayCommission, totalCommission, buyerPending, farmerPending)
+
+            DashboardSummary(
+                todaySales = todaySales,
+                todayCommission = todayCommission,
+                commissionEarned = totalCommission,
+                buyerPending = buyerPending,
+                farmerPending = farmerPending,
+                netBalance = buyerPending - farmerPending,
+                recentTransactions = recent
+            )
+        }
+    }
+
+    override suspend fun refreshSummary() {
+        // No-op: Dashboard is now fully reactive and doesn't rely on the summary table
     }
 }

@@ -9,6 +9,14 @@ data class UserEntity(
     val name: String,
     val phoneNumber: String,
     val location: String = "",
-    val pinHash: String = "", // In production, use hashed PIN
+    val pinHash: String = "", 
+    val isPremium: Boolean = false,
+    val premiumExpiry: Long = 0L,
+    val cloudBackupEnabled: Boolean = false,
+    val multiDeviceSyncEnabled: Boolean = false,
+    val voiceEntryEnabled: Boolean = false,
+    val ocrEnabled: Boolean = false,
+    val ocrCloudStorageEnabled: Boolean = false,
+    val pdfCloudStorageEnabled: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )

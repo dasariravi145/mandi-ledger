@@ -12,6 +12,9 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE id = :id")
     suspend fun getUserById(id: String): UserEntity?
 
+    @Query("SELECT * FROM users WHERE id = :id")
+    fun getUserByIdFlow(id: String): Flow<UserEntity?>
+
     @Query("SELECT * FROM users WHERE phoneNumber = :phone")
     suspend fun getUserByPhone(phone: String): UserEntity?
 }

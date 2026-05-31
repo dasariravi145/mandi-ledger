@@ -8,6 +8,7 @@ import com.dasariravi145.agrolynch.data.local.dao.*
 import com.dasariravi145.agrolynch.domain.repository.ReportRepository
 import com.dasariravi145.agrolynch.util.PremiumStateManager
 import com.dasariravi145.agrolynch.util.ReportExportService
+import com.dasariravi145.agrolynch.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -81,24 +82,26 @@ class ReportViewModel @Inject constructor(
                 Timber.d("Report Download Clicked: $reportName as $format")
                 
                 val file = when (format) {
-                    ExportFormat.PDF -> {
-                        Timber.d("PDF Generation Started")
-                        exportService.exportToPdf(context, reportName, data)
-                    }
-                    ExportFormat.EXCEL -> {
-                        Timber.d("Excel Generation Started")
-                        exportService.exportToExcel(context, reportName, data)
-                    }
-                    ExportFormat.CSV -> {
-                        exportService.exportToCsv(context, reportName, data)
-                    }
+                    ExportFormat.PDF -> exportService.exportToPdf(context, reportName, data)
+                    ExportFormat.EXCEL -> exportService.exportToExcel(context, reportName, data)
+                    ExportFormat.CSV -> exportService.exportToCsv(context, reportName, data)
                 }
 
                 if (file != null && file.exists()) {
                     Timber.d("Report Export Success: ${file.absolutePath}")
+                    
+                    // Cloud Upload for Premium
+                    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                    if (uid != null) {
+                        val remotePath = "reports/$uid/${file.name}"
+                        val uploadResult = exportService.uploadToCloud(file, remotePath)
+                        if (uploadResult is Resource.Success) {
+                            Timber.d("Cloud Upload Success: ${uploadResult.data}")
+                        }
+                    }
+                    
                     _exportStatus.emit("SUCCESS:${file.absolutePath}")
                 } else {
-                    Timber.e("Report Export Failed: File not created")
                     _exportStatus.emit("FAILED: File generation failed")
                 }
             } catch (e: Exception) {

@@ -61,6 +61,10 @@ class SaleRepositoryImpl @Inject constructor(
                     isSynced = false
                 )
                 buyerDao.updateBuyer(updatedBuyer)
+                
+                timber.log.Timber.i("Sale Entry Added: Buyer=%s, Amount=%f, TotalMargin=%f", 
+                    sale.buyerName, sale.totalAmount, sale.totalMargin)
+
                 updatedBuyer
             }
 

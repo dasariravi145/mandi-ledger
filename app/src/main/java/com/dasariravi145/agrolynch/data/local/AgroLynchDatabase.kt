@@ -26,7 +26,7 @@ import com.dasariravi145.agrolynch.data.local.entity.*
         BackupEntity::class,
         DashboardSummaryEntity::class
     ],
-    version = 25,
+    version = 26,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
