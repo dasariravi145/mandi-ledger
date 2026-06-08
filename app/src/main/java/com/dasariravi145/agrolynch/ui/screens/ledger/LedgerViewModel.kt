@@ -3,9 +3,12 @@ package com.dasariravi145.agrolynch.ui.screens.ledger
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import com.dasariravi145.agrolynch.domain.model.LedgerSummary
 import com.dasariravi145.agrolynch.domain.model.TransactionType
 import com.dasariravi145.agrolynch.domain.repository.LedgerRepository
+import com.dasariravi145.agrolynch.domain.repository.CompanyRepository
+import com.dasariravi145.agrolynch.domain.repository.SyncRepository
 import com.dasariravi145.agrolynch.util.LedgerExportService
 import com.dasariravi145.agrolynch.util.PremiumStateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,11 +28,15 @@ data class LedgerFilter(
 @HiltViewModel
 class LedgerViewModel @Inject constructor(
     private val repository: LedgerRepository,
+    private val companyRepository: CompanyRepository,
+    private val syncRepository: SyncRepository,
     private val premiumStateManager: PremiumStateManager,
     private val exportService: LedgerExportService
 ) : ViewModel() {
 
     val isPremium = premiumStateManager.isPremium
+    private val companyProfile = companyRepository.getProfile()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _exportStatus = MutableSharedFlow<String>()
     val exportStatus = _exportStatus.asSharedFlow()
@@ -82,22 +89,21 @@ class LedgerViewModel @Inject constructor(
 
             try {
                 _isLoading.value = true
-                Timber.d("PDF Button Clicked for ${summary.partyName}")
-                
-                Timber.d("PDF Generation Started")
-                val file = exportService.exportLedgerToPdf(context, summary, partyType)
+                val profile = companyProfile.value ?: CompanyProfileEntity()
+                val file = exportService.exportLedgerToPdf(context, profile, summary, partyType)
 
                 if (file != null && file.exists()) {
-                    Timber.d("PDF Generation Success: ${file.absolutePath}")
+                    // Premium Backup logic
+                    if (premiumStateManager.getCachedPremiumStatus()) {
+                        syncRepository.uploadFile(file, "ledgers/${summary.partyName}")
+                    }
                     _exportStatus.emit("SUCCESS:${file.absolutePath}")
                 } else {
-                    Timber.e("PDF Generation Failed: File not created")
                     _exportStatus.emit("FAILED: PDF generation failed")
                 }
             } catch (e: Exception) {
                 Timber.e(e, "PDF Generation Failed")
                 _exportStatus.emit("FAILED: ${e.message}")
-                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(e)
             } finally {
                 _isLoading.value = false
             }

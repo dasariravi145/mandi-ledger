@@ -13,23 +13,23 @@ interface DashboardDao {
     suspend fun updateSummary(summary: DashboardSummaryEntity)
 
     // Reactive aggregation queries for live dashboard updates
-    @Query("SELECT SUM(totalAmount) FROM sales WHERE date >= :todayStart AND isDeleted = 0")
-    fun getTodaySalesFlow(todayStart: Long): Flow<Double?>
+    @Query("SELECT SUM(totalAmount) FROM sales WHERE date BETWEEN :todayStart AND :todayEnd AND isDeleted = 0")
+    fun getTodaySalesFlow(todayStart: Long, todayEnd: Long): Flow<Double?>
 
-    @Query("SELECT SUM(commissionAmount) FROM arrivals WHERE date >= :todayStart AND isDeleted = 0")
-    fun getTodayArrivalsCommissionFlow(todayStart: Long): Flow<Double?>
+    @Query("SELECT SUM(CASE WHEN commissionAmount > 0 THEN commissionAmount ELSE (grossAmount * commissionPercent / 100) END) FROM arrivals WHERE date BETWEEN :todayStart AND :todayEnd AND isDeleted = 0")
+    fun getTodayArrivalsCommissionFlow(todayStart: Long, todayEnd: Long): Flow<Double?>
 
-    @Query("SELECT SUM(totalMargin) FROM sales WHERE date >= :todayStart AND isDeleted = 0")
-    fun getTodaySalesMarginFlow(todayStart: Long): Flow<Double?>
+    @Query("SELECT SUM(totalCommission) FROM sales WHERE date BETWEEN :todayStart AND :todayEnd AND isDeleted = 0")
+    fun getTodaySalesMarginFlow(todayStart: Long, todayEnd: Long): Flow<Double?>
 
     @Query("SELECT SUM(commissionAmount) FROM arrivals WHERE isDeleted = 0")
     fun getTotalArrivalsCommissionFlow(): Flow<Double?>
 
-    @Query("SELECT SUM(totalMargin) FROM sales WHERE isDeleted = 0")
+    @Query("SELECT SUM(totalCommission) FROM sales WHERE isDeleted = 0")
     fun getTotalSalesMarginFlow(): Flow<Double?>
 
     // Pending Calculation Components
-    @Query("SELECT SUM(totalAmount + transportCharges + otherCharges) FROM sales WHERE isDeleted = 0")
+    @Query("SELECT SUM(totalNetAmount) FROM sales WHERE isDeleted = 0")
     fun getTotalSalesNetFlow(): Flow<Double?>
 
     @Query("SELECT SUM(amount) FROM payments WHERE partyType = 'BUYER' AND isDeleted = 0")
@@ -51,13 +51,13 @@ interface DashboardDao {
     @Query("SELECT SUM(grossAmount) FROM arrivals WHERE date >= :todayStart AND isDeleted = 0")
     suspend fun calculateTodayArrivals(todayStart: Long): Double?
 
-    @Query("SELECT SUM(totalMargin) FROM sales WHERE date >= :todayStart AND isDeleted = 0")
+    @Query("SELECT SUM(totalCommission) FROM sales WHERE date >= :todayStart AND isDeleted = 0")
     suspend fun calculateTodaySalesMargin(todayStart: Long): Double?
 
     @Query("SELECT SUM(commissionAmount) FROM arrivals WHERE date >= :todayStart AND isDeleted = 0")
     suspend fun calculateTodayArrivalsCommission(todayStart: Long): Double?
 
-    @Query("SELECT SUM(totalMargin) FROM sales WHERE isDeleted = 0")
+    @Query("SELECT SUM(totalCommission) FROM sales WHERE isDeleted = 0")
     suspend fun calculateTotalSalesMargin(): Double?
 
     @Query("SELECT SUM(commissionAmount) FROM arrivals WHERE isDeleted = 0")

@@ -24,9 +24,10 @@ import com.dasariravi145.agrolynch.data.local.entity.*
         UserEntity::class,
         SubscriptionEntity::class,
         BackupEntity::class,
-        DashboardSummaryEntity::class
+        DashboardSummaryEntity::class,
+        CompanyProfileEntity::class
     ],
-    version = 26,
+    version = 31,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -46,4 +47,5 @@ abstract class AgroLynchDatabase : RoomDatabase() {
     abstract fun backupDao(): BackupDao
     abstract fun dashboardDao(): DashboardDao
     abstract fun reportDao(): ReportDao
+    abstract fun companyProfileDao(): CompanyProfileDao
 }

@@ -1,6 +1,8 @@
 package com.dasariravi145.agrolynch.ui.screens.arrival
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,69 +34,83 @@ fun NewArrivalScreen(
     ocrBillNo: String = "",
     ocrAmount: Double = 0.0,
     ocrDate: Long = 0L,
+    ocrFarmer: String = "",
+    ocrProduct: String = "",
+    ocrQty: Double = 0.0,
+    ocrRate: Double = 0.0,
     onBack: () -> Unit
 ) {
     val farmers by viewModel.farmers.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    
-    // Product states from ViewModel (Optimized & Debounced)
     val matchedProduct by viewModel.matchedProduct.collectAsStateWithLifecycle()
     val isNewProduct by viewModel.isNewProduct.collectAsStateWithLifecycle()
     val productSearchQuery by viewModel.productSearchQuery.collectAsStateWithLifecycle()
 
-    var farmerName by remember { mutableStateOf("") }
+    var farmerName by remember { mutableStateOf(ocrFarmer) }
     var farmerPhone by remember { mutableStateOf("") }
     var farmerVillage by remember { mutableStateOf("") }
     
-    // local screen-only state
     var selectedCategory by remember { mutableStateOf("Fruit") }
-    var selectedGrade by remember { mutableStateOf("A Grade") }
+    var selectedUnit by remember { mutableStateOf("KG") }
     
-    // OCR Auto-fill
-    var quantityInput by remember { mutableStateOf("") }
-    var rateInput by remember { mutableStateOf("") }
-    var billNo by remember { mutableStateOf(ocrBillNo) }
-
-    // Logic to handle OCR pre-fill (Amount from OCR is usually the Gross or Net)
-    // For Stock Entry, we can't easily map OCR total to Rate/Qty without one of them.
-    // So we'll just keep the OCR Amount in a temporary reference or pre-fill rate if possible.
-
-    // Auto-update category when product matches
-    LaunchedEffect(matchedProduct) {
-        matchedProduct?.let {
-            selectedCategory = it.category
-        }
+    // Multi-Grade Entry State
+    var gradeEntries by remember { 
+        mutableStateOf(listOf(ArrivalViewModel.GradeEntry("Grade A", ocrQty, 0.0, ocrRate))) 
     }
 
-    val categories = listOf("Fruit", "Vegetable")
-    val grades = listOf("A Grade", "B Grade", "C Grade", "Premium", "Local")
-    
-    var selectedUnit by remember { mutableStateOf("KG") }
-    val units = listOf("KG", "Ton", "Boxes", "Bags", "Crates")
-    
-    var commissionInput by remember { mutableStateOf("5") } // Default 5%
-
-    // Calculations optimized with derivedStateOf
-    val grossAmount by remember {
-        derivedStateOf { 
-            (quantityInput.toDoubleOrNull() ?: 0.0) * (rateInput.toDoubleOrNull() ?: 0.0) 
+    LaunchedEffect(ocrProduct) {
+        if (ocrProduct.isNotEmpty()) {
+            viewModel.onProductQueryChange(ocrProduct)
         }
+    }
+    
+    var commissionInput by remember { mutableStateOf("5") }
+    var laborInput by remember { mutableStateOf("0") }
+    var transportInput by remember { mutableStateOf("0") }
+    var packingInput by remember { mutableStateOf("0") }
+    var otherInput by remember { mutableStateOf("0") }
+
+    LaunchedEffect(matchedProduct) {
+        matchedProduct?.let { selectedCategory = it.category }
+    }
+
+    val totalNetQuantity by remember {
+        derivedStateOf { gradeEntries.sumOf { it.netQuantity } }
+    }
+    
+    val totalGrossAmount by remember {
+        derivedStateOf { gradeEntries.sumOf { it.grossAmount } }
     }
     
     val commissionAmount by remember {
-        derivedStateOf {
-            val commissionPercent = commissionInput.toDoubleOrNull() ?: 0.0
-            (grossAmount * commissionPercent) / 100
-        }
+        derivedStateOf { (totalGrossAmount * (commissionInput.toDoubleOrNull() ?: 0.0)) / 100 }
     }
     
     val netAmount by remember {
-        derivedStateOf { grossAmount - commissionAmount }
+        derivedStateOf { 
+            totalGrossAmount - commissionAmount -
+            (laborInput.toDoubleOrNull() ?: 0.0) - 
+            (transportInput.toDoubleOrNull() ?: 0.0) - 
+            (packingInput.toDoubleOrNull() ?: 0.0) - 
+            (otherInput.toDoubleOrNull() ?: 0.0)
+        }
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(Unit) {
         viewModel.saveSuccess.collect {
-            onBack()
+            if (viewModel.adMobManager.shouldShowAds()) {
+                val activity = context as? android.app.Activity
+                if (activity != null) {
+                    viewModel.adMobManager.showInterstitialAd(activity) {
+                        onBack()
+                    }
+                } else {
+                    onBack()
+                }
+            } else {
+                onBack()
+            }
         }
     }
 
@@ -118,21 +134,6 @@ fun NewArrivalScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // OCR Info Badge if available
-            if (ocrAmount > 0) {
-                Surface(
-                    color = Color(0xFFE8F5E9),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AutoFixHigh, null, tint = Color(0xFF2E7D32))
-                        Spacer(Modifier.width(12.dp))
-                        Text("OCR Auto-fill active (Amt: ₹$ocrAmount)", fontSize = 12.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
             // 1. Farmer Section
             SectionHeader(stringResource(R.string.farmer_details))
             FarmerSelectionField(
@@ -150,200 +151,298 @@ fun NewArrivalScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = farmerPhone,
-                        onValueChange = { farmerPhone = it },
-                        label = { Text(stringResource(R.string.phone)) },
+                        onValueChange = { 
+                            if (it.length <= 10 && it.all { char -> char.isDigit() }) {
+                                farmerPhone = it 
+                            }
+                        },
+                        label = { Text("Phone") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
                     )
                     OutlinedTextField(
                         value = farmerVillage,
                         onValueChange = { farmerVillage = it },
-                        label = { Text(stringResource(R.string.village)) },
+                        label = { Text("Village") },
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
 
             // 2. Product Section
-            SectionHeader(stringResource(R.string.product_grade))
-            
-            // Re-using ProductSelectionField but passing state to ViewModel for debounced search
+            SectionHeader(stringResource(R.string.product_category))
             OutlinedTextField(
                 value = productSearchQuery,
                 onValueChange = { viewModel.onProductQueryChange(it) },
                 label = { Text(stringResource(R.string.product_label)) },
                 modifier = Modifier.fillMaxWidth(),
-                trailingIcon = { Icon(Icons.Default.Inventory, null) },
-                singleLine = true,
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // Conditional Fields: Only show or enable if product is new
             if (isNewProduct) {
-                Text("Category Type / వర్గం", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    categories.forEach { category ->
+                    listOf("Fruit", "Vegetable").forEach { cat ->
                         FilterChip(
-                            selected = selectedCategory == category,
-                            onClick = { selectedCategory = category },
-                            label = { Text(category) },
-                            modifier = Modifier.weight(1f),
-                            leadingIcon = if (selectedCategory == category) {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                            } else null
+                            selected = selectedCategory == cat,
+                            onClick = { selectedCategory = cat },
+                            label = { Text(cat) },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
-            } else if (matchedProduct != null) {
-                // Show existing category as info
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Category: ${matchedProduct?.category ?: "General"}",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+            }
+
+            // 3. Unit Section
+            SectionHeader(stringResource(R.string.unit_type))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("KG", "Ton", "Boxes").forEach { unit ->
+                    FilterChip(
+                        selected = selectedUnit == unit,
+                        onClick = { selectedUnit = unit },
+                        label = { Text(unit) },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            GradeSelectionField(
-                value = selectedGrade,
-                onValueChange = { selectedGrade = it },
-                grades = if (matchedProduct != null && matchedProduct!!.availableGrades.isNotEmpty()) 
-                            matchedProduct!!.availableGrades 
-                         else grades
-            )
-
-            // 3. Unit Section
-            SectionHeader(stringResource(R.string.unit))
-            UnitSelector(
-                selectedUnit = selectedUnit,
-                onUnitSelected = { selectedUnit = it },
-                units = units
-            )
-
-            // 4. Quantity Section
-            SectionHeader(stringResource(R.string.quantity_rate))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuantityInputField(
-                    label = when(selectedUnit) {
-                        "KG" -> "Weight (KG)"
-                        "Ton" -> "Weight (Ton)"
-                        "Boxes" -> "Boxes"
-                        "Bags" -> "Bags"
-                        "Crates" -> "Crates"
-                        else -> "Quantity"
+            // 4. Grade Entries
+            SectionHeader(stringResource(R.string.stock_qty_per_grade))
+            gradeEntries.forEachIndexed { index, entry ->
+                GradeEntryRow(
+                    entry = entry,
+                    showBoxFields = selectedUnit == "Boxes",
+                    unit = selectedUnit,
+                    onEntryChange = { updated ->
+                        val newList = gradeEntries.toMutableList()
+                        newList[index] = updated
+                        gradeEntries = newList
                     },
-                    value = quantityInput,
-                    modifier = Modifier.weight(1.2f)
-                ) { quantityInput = it }
-                
-                QuantityInputField(
-                    label = stringResource(R.string.rate),
-                    value = rateInput,
-                    modifier = Modifier.weight(0.8f)
-                ) { rateInput = it }
+                    onRemove = if (gradeEntries.size > 1) { {
+                        val newList = gradeEntries.toMutableList()
+                        newList.removeAt(index)
+                        gradeEntries = newList
+                    } } else null
+                )
+            }
+            
+            TextButton(
+                onClick = { gradeEntries = gradeEntries + ArrivalViewModel.GradeEntry("Grade ${'A' + gradeEntries.size}", 0.0, 0.0, 0.0) },
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Icon(Icons.Default.Add, null)
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.add_another_grade))
             }
 
-            // Commission Section
-            SectionHeader(stringResource(R.string.commission))
-            QuantityInputField(stringResource(R.string.commission) + " (%)", commissionInput) { commissionInput = it }
+            // 5. Rate & Charges
+            SectionHeader(stringResource(R.string.deductions_commissions))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = commissionInput,
+                    onValueChange = { commissionInput = it },
+                    label = { Text(stringResource(R.string.comm_percent)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                OutlinedTextField(
+                    value = laborInput,
+                    onValueChange = { laborInput = it },
+                    label = { Text(stringResource(R.string.labor_charges)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+            }
 
-            // 5. Calculation Summary Card
-            CalculationSummaryCard(
-                grossAmount = grossAmount, 
-                commissionAmount = commissionAmount, 
-                netAmount = netAmount, 
-                percentage = commissionInput.toDoubleOrNull() ?: 0.0
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = transportInput,
+                    onValueChange = { transportInput = it },
+                    label = { Text(stringResource(R.string.transport)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                OutlinedTextField(
+                    value = packingInput,
+                    onValueChange = { packingInput = it },
+                    label = { Text(stringResource(R.string.packing)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+            }
+
+            OutlinedTextField(
+                value = otherInput,
+                onValueChange = { otherInput = it },
+                label = { Text(stringResource(R.string.other_deductions)) },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Summary Card
+            ArrivalSummaryCard(
+                totalQty = gradeEntries.sumOf { it.quantity },
+                spoilage = gradeEntries.sumOf { it.spoilage },
+                netQty = totalNetQuantity,
+                grossAmt = totalGrossAmount,
+                netAmt = netAmount,
+                unit = selectedUnit
+            )
 
             Button(
                 onClick = {
-                    val commissionPercent = commissionInput.toDoubleOrNull() ?: 0.0
-                    if (commissionPercent < 0 || commissionPercent > 100) {
-                        return@Button
-                    }
-                    viewModel.saveArrival(
+                    viewModel.saveArrivalBatch(
                         farmerName = farmerName,
                         farmerPhone = farmerPhone,
                         farmerVillage = farmerVillage,
                         productName = productSearchQuery,
                         productCategory = selectedCategory,
-                        grade = selectedGrade,
                         unit = selectedUnit,
-                        quantity = quantityInput.toDoubleOrNull() ?: 0.0,
-                        rate = rateInput.toDoubleOrNull() ?: 0.0,
-                        grossAmount = grossAmount,
-                        commissionPercent = commissionPercent,
-                        commissionAmount = commissionAmount,
-                        netAmount = netAmount
+                        commissionPercent = commissionInput.toDoubleOrNull() ?: 0.0,
+                        laborCharges = laborInput.toDoubleOrNull() ?: 0.0,
+                        transportCharges = transportInput.toDoubleOrNull() ?: 0.0,
+                        packingCharges = packingInput.toDoubleOrNull() ?: 0.0,
+                        otherDeductions = otherInput.toDoubleOrNull() ?: 0.0,
+                        gradeEntries = gradeEntries
                     )
                 },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
-                enabled = farmerName.isNotBlank() && productSearchQuery.isNotBlank() && grossAmount > 0 && !isLoading,
-                shape = MaterialTheme.shapes.medium,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                shape = RoundedCornerShape(12.dp),
+                enabled = farmerName.isNotBlank() && productSearchQuery.isNotBlank() && netAmount > 0 && !isLoading
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                } else {
-                    Text(stringResource(R.string.save_arrival), fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
+                if (isLoading) CircularProgressIndicator(color = Color.White)
+                else Text(stringResource(R.string.confirm_save_stock), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         }
     }
 }
 
 @Composable
-fun CalculationSummaryCard(grossAmount: Double, commissionAmount: Double, netAmount: Double, percentage: Double) {
+fun GradeEntryRow(
+    entry: ArrivalViewModel.GradeEntry,
+    showBoxFields: Boolean,
+    unit: String,
+    onEntryChange: (ArrivalViewModel.GradeEntry) -> Unit,
+    onRemove: (() -> Unit)?
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)) // Light green background
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(stringResource(R.string.gross_amount), color = Color.DarkGray, fontSize = 14.sp)
-                Text("₹${String.format(Locale.US, "%.2f", grossAmount)}", color = Color.Black, fontWeight = FontWeight.Medium)
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Grade, null, tint = Color(0xFFFBC02D), modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                var expanded by remember { mutableStateOf(false) }
+                Box(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = entry.grade,
+                        modifier = Modifier.fillMaxWidth().clickable { expanded = true }.padding(vertical = 4.dp),
+                        fontWeight = FontWeight.Bold
+                    )
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        listOf("Grade A", "Grade B", "Grade C", "Premium", "Local").forEach { g ->
+                            DropdownMenuItem(text = { Text(g) }, onClick = { onEntryChange(entry.copy(grade = g)); expanded = false })
+                        }
+                    }
+                }
+                onRemove?.let {
+                    IconButton(onClick = it) { Icon(Icons.Default.Delete, null, tint = Color.Red) }
+                }
             }
             
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(stringResource(R.string.commission) + " (${percentage}%)", color = Color(0xFFC62828), fontSize = 14.sp)
-                Text("- ₹${String.format(Locale.US, "%.2f", commissionAmount)}", color = Color(0xFFC62828), fontWeight = FontWeight.Medium)
-            }
-            
-            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
-            
-            Column(horizontalAlignment = Alignment.Start) {
-                Text(
-                    stringResource(R.string.farmer_amount), 
-                    color = Color(0xFF1B5E20), 
-                    fontSize = 12.sp, 
-                    fontWeight = FontWeight.Bold
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = if (entry.quantity == 0.0) "" else entry.quantity.toString(),
+                    onValueChange = { onEntryChange(entry.copy(quantity = it.toDoubleOrNull() ?: 0.0)) },
+                    label = { Text(stringResource(R.string.total_qty)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
+                OutlinedTextField(
+                    value = if (entry.spoilage == 0.0) "" else entry.spoilage.toString(),
+                    onValueChange = { onEntryChange(entry.copy(spoilage = it.toDoubleOrNull() ?: 0.0)) },
+                    label = { Text(stringResource(R.string.spoilage)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+            }
+            
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = if (entry.rate == 0.0) "" else entry.rate.toString(),
+                    onValueChange = { onEntryChange(entry.copy(rate = it.toDoubleOrNull() ?: 0.0)) },
+                    label = { Text(stringResource(R.string.rate_per_unit, unit.removeSuffix("es"))) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                Surface(
+                    color = Color(0xFFE8F5E9),
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier.weight(1f).align(Alignment.CenterVertically)
+                ) {
+                    Column(Modifier.padding(8.dp)) {
+                        Text(stringResource(R.string.gross_amount), fontSize = 10.sp, color = Color.Gray)
+                        Text("₹${String.format("%.2f", entry.grossAmount)}", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                    }
+                }
+            }
+            
+            if (showBoxFields) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = if (entry.boxCount == 0) "" else entry.boxCount.toString(),
+                        onValueChange = { onEntryChange(entry.copy(boxCount = it.toIntOrNull() ?: 0)) },
+                        label = { Text("Box Count") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    OutlinedTextField(
+                        value = if (entry.tareWeight == 0.0) "" else entry.tareWeight.toString(),
+                        onValueChange = { onEntryChange(entry.copy(tareWeight = it.toDoubleOrNull() ?: 0.0)) },
+                        label = { Text("Tare Wt.") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                }
+            }
+            
+            Surface(color = Color(0xFFF1F8E9), shape = RoundedCornerShape(4.dp)) {
                 Text(
-                    "₹${String.format(Locale.US, "%.2f", netAmount)}",
-                    color = Color(0xFF1B5E20),
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    "Net Available: ${entry.netQuantity} $unit",
+                    Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    fontSize = 12.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold
                 )
             }
         }
+    }
+}
+
+@Composable
+fun ArrivalSummaryCard(totalQty: Double, spoilage: Double, netQty: Double, grossAmt: Double, netAmt: Double, unit: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.summary), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
+            SummaryRow(stringResource(R.string.total_qty_with_unit, unit), totalQty.toString())
+            SummaryRow(stringResource(R.string.spoilage_deduction), "- $spoilage")
+            SummaryRow(stringResource(R.string.net_available), netQty.toString(), isBold = true)
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            SummaryRow(stringResource(R.string.gross_amount), "₹${String.format("%.2f", grossAmt)}")
+            SummaryRow(stringResource(R.string.net_farmer_payable), "₹${String.format("%.2f", netAmt)}", color = Color(0xFF1B5E20), isBold = true)
+        }
+    }
+}
+
+@Composable
+fun SummaryRow(label: String, value: String, isBold: Boolean = false, color: Color = Color.Black) {
+    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+        Text(label, fontSize = 14.sp, color = Color.Gray)
+        Text(value, fontSize = 14.sp, fontWeight = if (isBold) FontWeight.Bold else FontWeight.Medium, color = color)
     }
 }
 
@@ -356,38 +455,6 @@ fun SectionHeader(title: String) {
         modifier = Modifier.padding(top = 4.dp),
         fontWeight = FontWeight.Bold
     )
-}
-
-@Composable
-fun QuantityInputField(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    onValueChange: (String) -> Unit
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) onValueChange(it) },
-        label = { Text(label) },
-        modifier = modifier.fillMaxWidth(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        singleLine = true,
-        shape = RoundedCornerShape(12.dp)
-    )
-}
-
-@Composable
-fun UnitSelector(selectedUnit: String, onUnitSelected: (String) -> Unit, units: List<String>) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        units.forEach { unit ->
-            FilterChip(
-                selected = selectedUnit == unit,
-                onClick = { onUnitSelected(unit) },
-                label = { Text(unit, fontSize = 12.sp) },
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
 }
 
 @Composable
@@ -410,52 +477,6 @@ fun FarmerSelectionField(value: String, onValueChange: (String) -> Unit, farmers
                 filteredFarmers.take(5).forEach { farmer ->
                     DropdownMenuItem(text = { Text("${farmer.name} (${farmer.village})") }, onClick = { onFarmerSelected(farmer); expanded = false })
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun ProductSelectionField(value: String, onValueChange: (String) -> Unit, products: List<ProductEntity>) {
-    var expanded by remember { mutableStateOf(false) }
-    val filteredProducts = products.filter { it.name.contains(value, ignoreCase = true) }
-
-    Box {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { onValueChange(it); expanded = true },
-            label = { Text(stringResource(R.string.product_label)) },
-            modifier = Modifier.fillMaxWidth(),
-            trailingIcon = { Icon(Icons.Default.Inventory, null) },
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
-        if (expanded && filteredProducts.isNotEmpty() && value.isNotEmpty()) {
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.fillMaxWidth(0.9f)) {
-                filteredProducts.take(5).forEach { product ->
-                    DropdownMenuItem(text = { Text(product.name) }, onClick = { onValueChange(product.name); expanded = false })
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun GradeSelectionField(value: String, onValueChange: (String) -> Unit, grades: List<String>) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { onValueChange(it); expanded = true },
-            label = { Text(stringResource(R.string.grade_label)) },
-            modifier = Modifier.fillMaxWidth(),
-            trailingIcon = { IconButton(onClick = { expanded = !expanded }) { Icon(Icons.Default.ArrowDropDown, null) } },
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            grades.forEach { grade ->
-                DropdownMenuItem(text = { Text(grade) }, onClick = { onValueChange(grade); expanded = false })
             }
         }
     }

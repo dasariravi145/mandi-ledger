@@ -409,7 +409,7 @@ fun CommissionReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
         data = filtered
     ) { padding ->
         Column(Modifier.padding(padding)) {
-            val totalCommission = filtered.sumOf { it.commissionAmount + it.marginAmount }
+            val totalCommission = filtered.sumOf { it.commissionAmount }
             SummaryReportHeader("Total Earnings", totalCommission, "Records", filtered.size.toDouble())
             
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -419,7 +419,7 @@ fun CommissionReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                                 Column {
                                     Text("Commission Earned", fontSize = 12.sp, color = Color.Gray)
-                                    Text("₹${String.format("%.2f", item.commissionAmount + item.marginAmount)}", fontWeight = FontWeight.Black, color = Color(0xFFD97706), fontSize = 20.sp)
+                                    Text("₹${String.format("%.2f", item.commissionAmount)}", fontWeight = FontWeight.Black, color = Color(0xFFD97706), fontSize = 20.sp)
                                 }
                                 Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray)
                             }
@@ -428,12 +428,12 @@ fun CommissionReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                             
                             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                                 Column(Modifier.weight(1f)) {
-                                    LabelValueText("Buyer", item.buyerName)
+                                    LabelValueText("Buyer Name", item.buyerName)
                                     Spacer(Modifier.height(8.dp))
-                                    LabelValueText("Farmer", item.farmerName)
+                                    LabelValueText("Farmer Name", item.farmerName)
                                 }
                                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                                    LabelValueText("Product", "${item.productName} (${item.grade})", Alignment.End)
+                                    LabelValueText("Product / Grade", "${item.productName} (${item.grade})", Alignment.End)
                                     Spacer(Modifier.height(8.dp))
                                     LabelValueText("Qty", "${item.quantity} KG", Alignment.End)
                                 }
@@ -447,11 +447,21 @@ fun CommissionReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
-                                    Modifier.padding(8.dp).fillMaxWidth(),
+                                    Modifier.padding(12.dp).fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Sale Amt: ₹${String.format("%.0f", item.saleAmount)}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    Text("Comm: ${item.commissionPercent}% (₹${String.format("%.0f", item.commissionAmount)})", fontSize = 11.sp, color = Color(0xFF16A34A))
+                                    Column {
+                                        Text("Sale Amount", fontSize = 10.sp, color = Color.Gray)
+                                        Text("₹${String.format("%.2f", item.saleAmount)}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Comm. %", fontSize = 10.sp, color = Color.Gray)
+                                        Text("${String.format("%.1f", item.commissionPercent)}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("Comm. Earned", fontSize = 10.sp, color = Color.Gray)
+                                        Text("₹${String.format("%.2f", item.commissionAmount)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706))
+                                    }
                                 }
                             }
                         }

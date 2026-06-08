@@ -1,6 +1,7 @@
 package com.dasariravi145.agrolynch.ui.screens.scan
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -15,7 +16,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,7 +40,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.dasariravi145.agrolynch.ads.BannerAdView
-import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import com.dasariravi145.agrolynch.util.ExtractedData
 import java.text.SimpleDateFormat
 import java.util.*
@@ -51,15 +51,15 @@ fun BillScanScreen(
     viewModel: BillScanViewModel,
     isPremium: Boolean,
     onUpgradeClick: () -> Unit,
-    onNavigateToEntry: (ScanTarget, String, Double, Long) -> Unit, // target, billNo, amount, date
+    onNavigateToEntry: (ScanTarget, String, Double, Long, String, String, String, String, Double, Double, String) -> Unit,
     onBackClick: () -> Unit
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showTypeDialog by remember { mutableStateOf(true) }
     
     var hasCameraPermission by remember { 
-        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) 
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
     var showCamera by remember { mutableStateOf(false) }
 
@@ -91,11 +91,19 @@ fun BillScanScreen(
 
     if (state.isSuccess) {
         LaunchedEffect(Unit) {
+            val d = state.extractedData
             onNavigateToEntry(
                 state.target!!,
-                state.extractedData.billNumber,
-                state.extractedData.amount,
-                state.extractedData.date
+                d.billNumber,
+                if (d.amount > 0) d.amount else d.netAmount,
+                d.date,
+                d.farmerName,
+                d.buyerName,
+                d.partyName,
+                d.productName,
+                d.quantity,
+                d.rate,
+                d.paymentMode
             )
             viewModel.resetState()
         }
@@ -104,7 +112,7 @@ fun BillScanScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Smart OCR Scan") },
+                title = { Text("Smart OCR Selection") },
                 navigationIcon = {
                     IconButton(onClick = { 
                         if (showCamera) showCamera = false 
@@ -113,14 +121,21 @@ fun BillScanScreen(
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    if (state.ocrFinished) {
+                        IconButton(onClick = { viewModel.resetState() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Retake")
+                        }
+                    }
                 }
             )
         }
     ) { padding ->
         if (showCamera && hasCameraPermission) {
             CameraView(
-                onImageCaptured = { bitmap ->
-                    viewModel.processImage(bitmap)
+                onImageCaptured = { bitmap, rotation ->
+                    viewModel.processImage(bitmap, rotation)
                     showCamera = false
                 },
                 onError = { Log.e("BillScan", "Error: ${it.message}") }
@@ -135,23 +150,32 @@ fun BillScanScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (!isPremium) {
-                    BannerAdView()
+                if (!isPremium) { BannerAdView() }
+
+                state.error?.let {
+                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.width(8.dp))
+                            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                        }
+                    }
                 }
 
                 if (!state.ocrFinished && !state.isLoading) {
-                    // SCAN STEP
+                    GuidanceCard()
+                    
                     Icon(
                         Icons.Default.DocumentScanner,
                         contentDescription = null,
-                        modifier = Modifier.size(120.dp),
+                        modifier = Modifier.size(100.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                     )
                     
-                    Text("Capture ${state.target?.name?.replace("_", " ")} Bill", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Scan to auto-fill Bill #, Date and Amount", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Text(state.target?.label ?: "Scan Bill", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Capture bill to extract numbers and dates.", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
                         onClick = { 
@@ -162,8 +186,8 @@ fun BillScanScreen(
                         shape = MaterialTheme.shapes.large
                     ) {
                         Icon(Icons.Default.CameraAlt, null)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("Open Camera / కెమెరా", fontSize = 18.sp)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Capture Bill Photo", fontSize = 18.sp)
                     }
 
                     OutlinedButton(
@@ -172,15 +196,20 @@ fun BillScanScreen(
                         shape = MaterialTheme.shapes.large
                     ) {
                         Icon(Icons.Default.PhotoLibrary, null)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("Pick from Gallery / గ్యాలరీ", fontSize = 18.sp)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Choose from Gallery", fontSize = 18.sp)
                     }
                 } else if (state.isLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         CircularProgressIndicator(color = Color(0xFF16A34A))
+                        Spacer(Modifier.height(16.dp))
+                        Text("Extracting numbers from bill...", fontWeight = FontWeight.Medium)
                     }
                 } else if (state.ocrFinished) {
-                    // REVIEW STEP
                     OcrReviewContent(
                         bitmap = state.currentImageBitmap,
                         data = state.extractedData,
@@ -195,22 +224,27 @@ fun BillScanScreen(
 }
 
 @Composable
-fun ScanTypeSelectionDialog(
-    onTypeSelected: (ScanTarget) -> Unit,
-    onDismiss: () -> Unit
-) {
+fun ScanTypeSelectionDialog(onTypeSelected: (ScanTarget) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("What do you want to create?") },
+        title = { Text("What are you scanning?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ScanTypeOption("Add Stock Entry", Icons.Default.AddBusiness, ScanTarget.STOCK_ENTRY, onTypeSelected)
-                ScanTypeOption("Add Sale Entry", Icons.Default.ShoppingCart, ScanTarget.SALE_ENTRY, onTypeSelected)
-                ScanTypeOption("Add Payment", Icons.Default.Payments, ScanTarget.PAYMENT, onTypeSelected)
+                ScanTarget.entries.forEach { target ->
+                    ScanTypeOption(target.label, getIconForTarget(target), target, onTypeSelected)
+                }
             }
         },
         confirmButton = {}
     )
+}
+
+fun getIconForTarget(target: ScanTarget) = when(target) {
+    ScanTarget.STOCK_ENTRY -> Icons.Default.AddBusiness
+    ScanTarget.SALE_ENTRY -> Icons.Default.ShoppingCart
+    ScanTarget.PAYMENT -> Icons.Default.Payments
+    ScanTarget.CHEQUE -> Icons.Default.CreditCard
+    ScanTarget.EXPENSE -> Icons.Default.ReceiptLong
 }
 
 @Composable
@@ -229,6 +263,7 @@ fun ScanTypeOption(label: String, icon: androidx.compose.ui.graphics.vector.Imag
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OcrReviewContent(
     bitmap: Bitmap?,
@@ -237,86 +272,160 @@ fun OcrReviewContent(
     onConfirm: (ExtractedData) -> Unit,
     onRescan: () -> Unit
 ) {
-    var editAmount by remember { mutableStateOf(data.amount.toString()) }
-    var editBillNo by remember { mutableStateOf(data.billNumber) }
-    
     val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-    var editDate by remember { mutableStateOf(sdf.format(Date(data.date))) }
+    
+    var billNo by remember { mutableStateOf(data.billNumber) }
+    var dateStr by remember { mutableStateOf(sdf.format(Date(data.date))) }
+    var farmerName by remember { mutableStateOf(data.farmerName) }
+    var buyerName by remember { mutableStateOf(data.buyerName) }
+    var productName by remember { mutableStateOf(data.productName) }
+    var grade by remember { mutableStateOf(data.grade) }
+    var qty by remember { mutableStateOf(if(data.quantity > 0) data.quantity.toString() else "") }
+    var damage by remember { mutableStateOf(if(data.damageOrSoot > 0) data.damageOrSoot.toString() else "0") }
+    var rate by remember { mutableStateOf(if(data.rate > 0) data.rate.toString() else "") }
+    var amount by remember { mutableStateOf(if(data.amount > 0) data.amount.toString() else "") }
+    var comm by remember { mutableStateOf(if(data.commission > 0) data.commission.toString() else "0") }
+    var trans by remember { mutableStateOf(if(data.transport > 0) data.transport.toString() else "0") }
+    var netAmt by remember { mutableStateOf(if(data.netAmount > 0) data.netAmount.toString() else "") }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         bitmap?.let {
             Image(
                 bitmap = it.asImageBitmap(),
                 contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
+                modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)).border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
         }
 
-        Text("Preview Extracted Data", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = editBillNo,
-                    onValueChange = { editBillNo = it },
-                    label = { Text("Bill Number / బిల్ నంబర్") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = editAmount,
-                    onValueChange = { editAmount = it },
-                    label = { Text("Amount / నగదు") },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
-                )
-
-                OutlinedTextField(
-                    value = editDate,
-                    onValueChange = { editDate = it },
-                    label = { Text("Bill Date (dd/mm/yyyy)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+        Text("Detected Numbers & Dates:", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            data.detectedNumbers.forEach { valStr ->
+                SuggestionChip(onClick = { /* Could auto-assign logic here if needed */ }, label = { Text(valStr) })
             }
         }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onRescan, modifier = Modifier.weight(1f).height(56.dp)) {
-                Text("Rescan")
+        HorizontalDivider()
+
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                
+                OcrSelectionField("Bill Number", billNo, { billNo = it }, data.detectedNumbers)
+                OcrSelectionField("Date (dd/mm/yyyy)", dateStr, { dateStr = it }, data.detectedNumbers)
+
+                when(target) {
+                    ScanTarget.STOCK_ENTRY -> {
+                        OutlinedTextField(value = farmerName, onValueChange = { farmerName = it }, label = { Text("Farmer Name *") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = productName, onValueChange = { productName = it }, label = { Text("Product Name *") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = grade, onValueChange = { grade = it }, label = { Text("Grade") }, modifier = Modifier.fillMaxWidth())
+                        
+                        OcrSelectionField("Quantity (KG) *", qty, { qty = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        OcrSelectionField("Damage / Soot", damage, { damage = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        OcrSelectionField("Rate *", rate, { rate = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        OcrSelectionField("Commission", comm, { comm = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        OcrSelectionField("Transport", trans, { trans = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        OcrSelectionField("Net Amount", netAmt, { netAmt = it }, data.detectedNumbers, KeyboardType.Decimal)
+                    }
+                    ScanTarget.SALE_ENTRY -> {
+                        OutlinedTextField(value = buyerName, onValueChange = { buyerName = it }, label = { Text("Buyer Name *") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = productName, onValueChange = { productName = it }, label = { Text("Product Name *") }, modifier = Modifier.fillMaxWidth())
+                        OcrSelectionField("Quantity *", qty, { qty = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        OcrSelectionField("Sale Rate *", rate, { rate = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        OcrSelectionField("Total Amount", amount, { amount = it }, data.detectedNumbers, KeyboardType.Decimal)
+                    }
+                    else -> {
+                        OutlinedTextField(value = farmerName, onValueChange = { farmerName = it }, label = { Text("Party Name *") }, modifier = Modifier.fillMaxWidth())
+                        OcrSelectionField("Amount *", amount, { amount = it }, data.detectedNumbers, KeyboardType.Decimal)
+                    }
+                }
             }
+        }
+
+        val isReady = when(target) {
+            ScanTarget.STOCK_ENTRY -> farmerName.isNotEmpty() && productName.isNotEmpty() && qty.isNotEmpty() && rate.isNotEmpty()
+            ScanTarget.SALE_ENTRY -> buyerName.isNotEmpty() && productName.isNotEmpty() && qty.isNotEmpty() && rate.isNotEmpty()
+            else -> farmerName.isNotEmpty() && amount.isNotEmpty()
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = onRescan, modifier = Modifier.weight(1f).height(56.dp)) { Text("Rescan") }
             Button(
                 onClick = { 
-                    val finalDate = try { sdf.parse(editDate)?.time ?: data.date } catch(e: Exception) { data.date }
+                    val finalDate = try { sdf.parse(dateStr)?.time ?: data.date } catch(e: Exception) { data.date }
                     onConfirm(data.copy(
-                        amount = editAmount.toDoubleOrNull() ?: 0.0,
-                        billNumber = editBillNo,
-                        date = finalDate
+                        billNumber = billNo, date = finalDate,
+                        farmerName = farmerName, buyerName = buyerName, partyName = farmerName,
+                        productName = productName, grade = grade,
+                        quantity = qty.toDoubleOrNull() ?: 0.0, damageOrSoot = damage.toDoubleOrNull() ?: 0.0,
+                        rate = rate.toDoubleOrNull() ?: 0.0, amount = amount.toDoubleOrNull() ?: 0.0,
+                        commission = comm.toDoubleOrNull() ?: 0.0, transport = trans.toDoubleOrNull() ?: 0.0,
+                        netAmount = netAmt.toDoubleOrNull() ?: 0.0
                     ))
                 },
                 modifier = Modifier.weight(2f).height(56.dp),
+                enabled = isReady,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-            ) {
-                Text("Confirm & Continue", fontWeight = FontWeight.Bold)
+            ) { Text("Confirm & Save", fontWeight = FontWeight.Bold) }
+        }
+        Spacer(modifier = Modifier.height(40.dp))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun OcrSelectionField(label: String, value: String, onValueChange: (String) -> Unit, options: List<String>, keyboardType: KeyboardType = KeyboardType.Text) {
+    Column {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType)
+        )
+        FlowRow(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            options.take(8).forEach { opt ->
+                SuggestionChip(
+                    onClick = { onValueChange(opt) },
+                    label = { Text(opt, fontSize = 10.sp) },
+                    border = AssistChipDefaults.assistChipBorder(enabled = true, borderColor = if(value == opt) Color(0xFF16A34A) else Color.LightGray)
+                )
             }
         }
     }
 }
 
 @Composable
-fun CameraView(
-    onImageCaptured: (Bitmap) -> Unit,
-    onError: (ImageCaptureException) -> Unit
-) {
+fun GuidanceCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBBF7D0))
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text("OCR TIPS:", fontWeight = FontWeight.Bold, color = Color(0xFF166534), fontSize = 12.sp)
+            Spacer(Modifier.height(4.dp))
+            GuidanceRow("Handwriting is hard to read for names.")
+            GuidanceRow("Assign detected numbers to fields manually.")
+            GuidanceRow("Verify everything before saving.")
+        }
+    }
+}
+
+@Composable
+fun GuidanceRow(text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(text, fontSize = 11.sp, color = Color(0xFF166534))
+    }
+}
+
+@Composable
+fun CameraView(onImageCaptured: (Bitmap, Int) -> Unit, onError: (ImageCaptureException) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
-    val imageCapture = remember { ImageCapture.Builder().build() }
+    val imageCapture = remember { imageCaptureInstance() }
     val executor = remember { Executors.newSingleThreadExecutor() }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -325,9 +434,7 @@ fun CameraView(
                 val previewView = PreviewView(ctx)
                 cameraProviderFuture.addListener({
                     val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.surfaceProvider = previewView.surfaceProvider
-                    }
+                    val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
                     try {
                         cameraProvider.unbindAll()
                         cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture)
@@ -342,21 +449,26 @@ fun CameraView(
             onClick = {
                 imageCapture.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
                     override fun onCaptureSuccess(image: ImageProxy) {
+                        val rotation = image.imageInfo.rotationDegrees
                         val bitmap = image.toBitmap()
-                        onImageCaptured(bitmap)
+                        onImageCaptured(bitmap, rotation)
                         image.close()
                     }
                     override fun onError(exception: ImageCaptureException) { onError(exception) }
                 })
             },
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp).size(80.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp).size(70.dp),
             shape = androidx.compose.foundation.shape.CircleShape,
             colors = ButtonDefaults.buttonColors(containerColor = Color.White)
         ) {
-            Icon(Icons.Default.Camera, contentDescription = null, tint = Color.Black, modifier = Modifier.size(40.dp))
+            Icon(Icons.Default.Camera, contentDescription = null, tint = Color.Black, modifier = Modifier.size(32.dp))
         }
     }
 }
+
+private fun imageCaptureInstance() = ImageCapture.Builder()
+    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+    .build()
 
 fun ImageProxy.toBitmap(): Bitmap {
     val buffer = planes[0].buffer

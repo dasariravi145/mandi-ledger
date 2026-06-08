@@ -6,9 +6,7 @@ import com.dasariravi145.agrolynch.domain.repository.AuthRepository
 import com.dasariravi145.agrolynch.domain.repository.SettingsRepository
 import com.dasariravi145.agrolynch.util.PremiumStateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -29,6 +27,28 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
         
     val isPremium = premiumStateManager.isPremium
+
+    private val _isPremiumPopupEnabled = MutableStateFlow(true)
+    val isPremiumPopupEnabled = _isPremiumPopupEnabled.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            val userId = authRepository.getCurrentUserId()
+            if (userId != null) {
+                _isPremiumPopupEnabled.value = !premiumStateManager.isPopupDisabledForUser(userId)
+            }
+        }
+    }
+
+    fun togglePremiumPopup(enabled: Boolean) {
+        viewModelScope.launch {
+            val userId = authRepository.getCurrentUserId()
+            if (userId != null) {
+                premiumStateManager.setPopupDisabledForUser(userId, !enabled)
+                _isPremiumPopupEnabled.value = enabled
+            }
+        }
+    }
 
     fun updateLanguage(code: String) {
         viewModelScope.launch {

@@ -15,20 +15,27 @@ data class LedgerEntry(
 
 data class LedgerEntryDetails(
     val billNumber: String = "",
+    val farmerName: String = "",
     val productName: String = "",
     val category: String = "",
     val grade: String = "",
     val quantity: Double = 0.0,
+    val damageQuantity: Double = 0.0,
+    val netQuantity: Double = 0.0,
     val unit: String = "",
-    val rate: Double = 0.0,
+    val rate: Double = 0.0, // Sale Rate
+    val purchaseRate: Double = 0.0,
     val grossAmount: Double = 0.0,
     val commissionPercent: Double = 0.0,
     val commissionAmount: Double = 0.0,
     val laborCharges: Double = 0.0,
     val transportCharges: Double = 0.0,
+    val packingCharges: Double = 0.0,
     val otherDeductions: Double = 0.0,
     val netAmount: Double = 0.0,
-    val paymentMade: Double = 0.0
+    val paymentMade: Double = 0.0,
+    val pendingAmount: Double = 0.0,
+    val saleItems: List<com.dasariravi145.agrolynch.data.local.entity.SaleItemEntity> = emptyList()
 )
 
 enum class LedgerType {

@@ -1,29 +1,35 @@
 package com.dasariravi145.agrolynch.data.repository
 
+import android.content.Context
 import androidx.room.withTransaction
 import com.dasariravi145.agrolynch.data.local.AgroLynchDatabase
 import com.dasariravi145.agrolynch.data.local.dao.ArrivalDao
 import com.dasariravi145.agrolynch.data.local.dao.FarmerDao
 import com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity
+import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import com.dasariravi145.agrolynch.domain.repository.ArrivalRepository
+import com.dasariravi145.agrolynch.util.PdfGenerator
 import com.dasariravi145.agrolynch.util.Resource
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
+import java.io.File
 import javax.inject.Inject
 
 class ArrivalRepositoryImpl @Inject constructor(
     private val database: AgroLynchDatabase,
     private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    @ApplicationContext private val context: Context
 ) : ArrivalRepository {
 
     private val arrivalDao = database.arrivalDao()
     private val farmerDao = database.farmerDao()
+    private val profileDao = database.companyProfileDao()
 
     private val repositoryScope = CoroutineScope(Dispatchers.IO)
 
@@ -38,72 +44,100 @@ class ArrivalRepositoryImpl @Inject constructor(
     override fun getAvailableStockByProductAndGrade(productId: String, grade: String): Flow<List<ArrivalEntity>> =
         arrivalDao.getAvailableStockByProductAndGrade(productId, grade)
 
+    override fun getFarmersWithStock(): Flow<List<com.dasariravi145.agrolynch.data.local.dao.FarmerStockInfo>> =
+        arrivalDao.getFarmersWithStock()
+
+    override fun getAvailableStockByFarmer(farmerId: String): Flow<List<ArrivalEntity>> =
+        arrivalDao.getAvailableStockByFarmer(farmerId)
+
     override suspend fun getArrivalById(id: String): ArrivalEntity? = arrivalDao.getArrivalById(id)
 
     override suspend fun addArrival(arrival: ArrivalEntity): Resource<Unit> {
-        return try {
-            val (arrivalToInsert, updatedFarmer) = database.withTransaction {
-                // 1. Get Farmer
-                val farmer = farmerDao.getFarmerById(arrival.farmerId) ?: throw Exception("Farmer not found")
+        return addArrivalBatch(listOf(arrival))
+    }
+
+    override suspend fun addArrivalBatch(arrivals: List<ArrivalEntity>): Resource<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                if (arrivals.isEmpty()) return@withContext Resource.Error("No data to save")
                 
-                // 2. Calculate Balance Update
-                val amountChange = arrival.netAmount
-                val newTotalArrivals = farmer.totalArrivals + amountChange
-                var newPending = farmer.pendingAmount + amountChange
-                var newAdvance = farmer.advanceAmount
-                
-                // Adjust advance if exists
-                if (newAdvance > 0) {
-                    if (newAdvance >= newPending) {
-                        newAdvance -= newPending
-                        newPending = 0.0
-                    } else {
-                        newPending -= newAdvance
-                        newAdvance = 0.0
+                val startTime = System.currentTimeMillis()
+                val (updatedFarmer, profile) = database.withTransaction {
+                    val farmerId = arrivals.first().farmerId
+                    val farmer = farmerDao.getFarmerById(farmerId) ?: throw Exception("Farmer not found")
+                    val profile = profileDao.getProfile().first() ?: CompanyProfileEntity()
+                    
+                    var totalNetToPay = 0.0
+                    arrivals.forEach {
+                        arrivalDao.insertArrival(it)
+                        totalNetToPay += it.netAmount
                     }
+                    
+                    var newPending = farmer.pendingAmount + totalNetToPay
+                    var newAdvance = farmer.advanceAmount
+                    
+                    if (newAdvance > 0) {
+                        if (newAdvance >= newPending) {
+                            newAdvance -= newPending
+                            newPending = 0.0
+                        } else {
+                            newPending -= newAdvance
+                            newAdvance = 0.0
+                        }
+                    }
+                    
+                    val updated = farmer.copy(
+                        totalArrivals = farmer.totalArrivals + arrivals.sumOf { it.grossAmount },
+                        pendingAmount = newPending,
+                        advanceAmount = newAdvance,
+                        lastUpdated = System.currentTimeMillis(),
+                        isSynced = false
+                    )
+                    farmerDao.updateFarmer(updated)
+                    profileDao.incrementBillNumber()
+                    updated to profile
                 }
                 
-                val updatedFarmer = farmer.copy(
-                    totalArrivals = newTotalArrivals,
-                    pendingAmount = newPending,
-                    advanceAmount = newAdvance,
-                    lastUpdated = System.currentTimeMillis(),
-                    isSynced = false
-                )
+                val dbTime = System.currentTimeMillis() - startTime
+                timber.log.Timber.i("Arrival Save: DB transaction took %dms", dbTime)
 
-                // 3. Update both atomically
-                val toInsert = arrival.copy(
-                    remainingQuantity = arrival.quantity,
-                    farmerPendingAmount = newPending
-                )
-                
-                arrivalDao.insertArrival(toInsert)
-                farmerDao.updateFarmer(updatedFarmer)
-                
-                timber.log.Timber.i("Stock Entry Added: Farmer=%s, Product=%s, NetAmount=%f", 
-                    toInsert.farmerName, toInsert.productName, toInsert.netAmount)
-
-                toInsert to updatedFarmer
-            }
-            
-            userId?.let { uid ->
+                // Async Background Tasks
                 repositoryScope.launch {
+                    val backgroundStart = System.currentTimeMillis()
+                    
+                    // Generate PDF with Branding in background
                     try {
-                        val batch = firestore.batch()
-                        batch.set(firestore.collection("users").document(uid).collection("arrivals").document(arrival.id), arrivalToInsert)
-                        batch.set(firestore.collection("users").document(uid).collection("farmers").document(updatedFarmer.id), updatedFarmer)
-                        batch.commit().await()
-                        
-                        arrivalDao.markAsSynced(arrival.id)
-                        farmerDao.markAsSynced(updatedFarmer.id)
+                        PdfGenerator.generateFarmerArrivalPdf(context, profile, arrivals)
                     } catch (e: Exception) {
-                        // Synced later
+                        timber.log.Timber.e(e, "Error generating PDF in background")
                     }
+                    
+                    // Background sync
+                    userId?.let { uid ->
+                        try {
+                            val batch = firestore.batch()
+                            arrivals.forEach {
+                                batch.set(firestore.collection("users").document(uid).collection("arrivals").document(it.id), it)
+                            }
+                            batch.set(firestore.collection("users").document(uid).collection("farmers").document(updatedFarmer.id), updatedFarmer)
+                            batch.commit().await()
+                            
+                            arrivals.forEach { arrivalDao.markAsSynced(it.id) }
+                            farmerDao.markAsSynced(updatedFarmer.id)
+                        } catch (e: Exception) { 
+                            timber.log.Timber.e(e, "Firebase sync failed")
+                        }
+                    }
+                    
+                    val bgTime = System.currentTimeMillis() - backgroundStart
+                    timber.log.Timber.i("Arrival Save: Background tasks took %dms", bgTime)
                 }
+                
+                Resource.Success(Unit)
+            } catch (e: Exception) {
+                timber.log.Timber.e(e, "Add Arrival Batch Failed")
+                Resource.Error(e.message ?: "An unknown error occurred")
             }
-            Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error(e.message ?: "An unknown error occurred")
         }
     }
 
@@ -115,9 +149,7 @@ class ArrivalRepositoryImpl @Inject constructor(
                     try {
                         firestore.collection("users").document(uid).collection("arrivals").document(arrival.id).set(arrival).await()
                         arrivalDao.markAsSynced(arrival.id)
-                    } catch (e: Exception) {
-                        // Synced later
-                    }
+                    } catch (e: Exception) { }
                 }
             }
             Resource.Success(Unit)
@@ -131,7 +163,6 @@ class ArrivalRepositoryImpl @Inject constructor(
             val arrival = arrivalDao.getArrivalById(id) ?: return Resource.Error("Arrival not found")
             val farmer = farmerDao.getFarmerById(arrival.farmerId) ?: return Resource.Error("Farmer not found")
             
-            // Reverse balance
             val amountToReverse = arrival.netAmount
             var newPending = farmer.pendingAmount - amountToReverse
             var newAdvance = farmer.advanceAmount
@@ -142,7 +173,7 @@ class ArrivalRepositoryImpl @Inject constructor(
             }
             
             val updatedFarmer = farmer.copy(
-                totalArrivals = farmer.totalArrivals - amountToReverse,
+                totalArrivals = farmer.totalArrivals - arrival.grossAmount,
                 pendingAmount = newPending,
                 advanceAmount = newAdvance,
                 lastUpdated = System.currentTimeMillis(),
@@ -159,9 +190,7 @@ class ArrivalRepositoryImpl @Inject constructor(
                         batch.update(firestore.collection("users").document(uid).collection("arrivals").document(id), "isDeleted", true)
                         batch.set(firestore.collection("users").document(uid).collection("farmers").document(farmer.id), updatedFarmer)
                         batch.commit().await()
-                    } catch (e: Exception) {
-                        // Synced later
-                    }
+                    } catch (e: Exception) { }
                 }
             }
             Resource.Success(Unit)

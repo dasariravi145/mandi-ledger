@@ -22,11 +22,8 @@ import javax.inject.Inject
 class VoiceViewModel @Inject constructor(
     private val premiumStateManager: PremiumStateManager,
     private val farmerRepository: FarmerRepository,
-    private val buyerRepository: BuyerRepository,
     private val productRepository: ProductRepository,
-    private val arrivalRepository: ArrivalRepository,
-    private val saleRepository: SaleRepository,
-    private val paymentRepository: PaymentRepository
+    private val arrivalRepository: ArrivalRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VoiceState())
@@ -37,11 +34,13 @@ class VoiceViewModel @Inject constructor(
     val languages = listOf(
         VoiceLanguage("English", "en", "en-US"),
         VoiceLanguage("Telugu", "te", "te-IN"),
-        VoiceLanguage("Hindi", "hi", "hi-IN"),
-        VoiceLanguage("Tamil", "ta", "ta-IN"),
-        VoiceLanguage("Kannada", "kn", "kn-IN"),
-        VoiceLanguage("Malayalam", "ml", "ml-IN"),
-        VoiceLanguage("Marathi", "mr", "mr-IN")
+        VoiceLanguage("Hindi", "hi", "hi-IN")
+    )
+
+    private val stockQuestions = listOf(
+        Question("farmer_name", mapOf("en" to "Farmer Name?", "te" to "రైతు పేరు?")),
+        Question("product_name", mapOf("en" to "Product Name?", "te" to "ఉత్పత్తి పేరు?")),
+        Question("amount", mapOf("en" to "Approximate Amount?", "te" to "సుమారు మొత్తం?"))
     )
 
     init {
@@ -53,52 +52,13 @@ class VoiceViewModel @Inject constructor(
     }
 
     fun selectLanguage(language: VoiceLanguage) {
-        _uiState.update { it.copy(selectedLanguage = language, step = VoiceStep.SERVICE_SELECTION) }
-    }
-
-    fun selectService(service: VoiceService) {
-        val questions = getInitialQuestions(service)
         _uiState.update { it.copy(
-            selectedService = service,
+            selectedLanguage = language, 
             step = VoiceStep.INTERACTIVE_QUESTIONS,
+            dynamicQuestions = stockQuestions,
             currentQuestionIndex = 0,
-            capturedData = emptyMap(),
-            dynamicQuestions = questions
+            session = VoiceSession()
         ) }
-    }
-
-    private fun getInitialQuestions(service: VoiceService): List<Question> {
-        return when (service) {
-            VoiceService.ADD_STOCK -> listOf(
-                Question("farmer_name", mapOf("en" to "Farmer Name?", "te" to "రైతు పేరు?")),
-                Question("product_name", mapOf("en" to "Product Name?", "te" to "ఉత్పత్తి పేరు?")),
-                Question("grade", mapOf("en" to "Grade?", "te" to "గ్రేడ్?")),
-                Question("quantity", mapOf("en" to "Quantity?", "te" to "పరిమాణం?")),
-                Question("unit", mapOf("en" to "Unit (KG, Bags, Boxes)?", "te" to "యూనిట్ (KG, సంచులు, బాక్సులు)?")),
-                Question("rate", mapOf("en" to "Rate?", "te" to "ధర?")),
-                Question("commission", mapOf("en" to "Commission %?", "te" to "కమీషన్ శాతం?"))
-            )
-            VoiceService.ADD_SALE -> listOf(
-                Question("buyer_name", mapOf("en" to "Buyer Name?", "te" to "వ్యాపారి పేరు?")),
-                Question("product_name", mapOf("en" to "Product Name?", "te" to "ఉత్పత్తి పేరు?")),
-                Question("grade", mapOf("en" to "Grade?", "te" to "గ్రేడ్?")),
-                Question("quantity", mapOf("en" to "Quantity?", "te" to "పరిమాణం?")),
-                Question("rate", mapOf("en" to "Sale Rate?", "te" to "అమ్మకం ధర?")),
-                Question("labor", mapOf("en" to "Labor Charge?", "te" to "హమాలీ ఛార్జ్?")),
-                Question("transport", mapOf("en" to "Transport Charge?", "te" to "రవాణా ఛార్జ్?"))
-            )
-            VoiceService.BUYER_PAYMENT -> listOf(
-                Question("buyer_name", mapOf("en" to "Buyer Name?", "te" to "వ్యాపారి పేరు?")),
-                Question("amount", mapOf("en" to "Payment Amount?", "te" to "చెల్లింపు మొత్తం?")),
-                Question("method", mapOf("en" to "Method (Cash/Online)?", "te" to "విధానం (నగదు/ఆన్‌లైన్)?"))
-            )
-            VoiceService.FARMER_PAYMENT -> listOf(
-                Question("farmer_name", mapOf("en" to "Farmer Name?", "te" to "రైతు పేరు?")),
-                Question("amount", mapOf("en" to "Payment Amount?", "te" to "చెల్లింపు మొత్తం?")),
-                Question("method", mapOf("en" to "Method (Cash/Online)?", "te" to "విధానం (నగదు/ఆన్‌లైన్)?"))
-            )
-            else -> emptyList()
-        }
     }
 
     fun getCurrentQuestion(): String {
@@ -119,10 +79,13 @@ class VoiceViewModel @Inject constructor(
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() { _uiState.update { it.copy(isListening = false) } }
-                override fun onError(error: Int) { _uiState.update { it.copy(isListening = false, error = "Error $error") } }
+                override fun onError(error: Int) { _uiState.update { it.copy(isListening = false, error = "Speech error: $error") } }
                 override fun onResults(results: Bundle?) {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) handleSpokenResult(matches[0])
+                    val confidences = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
+                    if (!matches.isNullOrEmpty()) {
+                        handleSpokenResult(matches[0], confidences?.get(0) ?: 1.0f)
+                    }
                 }
                 override fun onPartialResults(partialResults: Bundle?) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -134,169 +97,116 @@ class VoiceViewModel @Inject constructor(
         })
     }
 
-    private fun handleSpokenResult(text: String) {
+    private fun handleSpokenResult(text: String, confidence: Float) {
         val state = _uiState.value
-        val questions = state.dynamicQuestions
-        val currentQuestion = questions[state.currentQuestionIndex]
-        
-        val updatedData = state.capturedData.toMutableMap()
-        updatedData[currentQuestion.key] = text
-        _uiState.update { it.copy(capturedData = updatedData, spokenText = text) }
+        val currentQuestion = state.dynamicQuestions[state.currentQuestionIndex]
+        val session = state.session.copy()
 
-        // Smart Search & Branching
+        _uiState.update { it.copy(spokenText = text, confidence = confidence) }
+
         viewModelScope.launch {
             when (currentQuestion.key) {
                 "farmer_name" -> {
-                    val farmer = farmerRepository.getFarmers().first().find { it.name.contains(text, true) }
-                    if (farmer != null) {
-                        _uiState.update { it.copy(suggestedRecord = farmer, existingRecordFound = true) }
-                    } else {
-                        // Insert "Phone" and "Address" questions if farmer is new
-                        insertQuestions(listOf(
-                            Question("farmer_phone", mapOf("en" to "Farmer Phone?", "te" to "రైతు ఫోన్?")),
-                            Question("farmer_address", mapOf("en" to "Farmer Address?", "te" to "రైతు చిరునామా?"))
-                        ))
-                        moveToNextQuestion()
-                    }
-                }
-                "buyer_name" -> {
-                    val buyer = buyerRepository.getBuyers().first().find { it.name.contains(text, true) }
-                    if (buyer != null) {
-                        _uiState.update { it.copy(suggestedRecord = buyer, existingRecordFound = true) }
-                    } else {
-                        insertQuestions(listOf(
-                            Question("buyer_phone", mapOf("en" to "Buyer Phone?", "te" to "వ్యాపారి ఫోన్?")),
-                            Question("buyer_address", mapOf("en" to "Buyer Address?", "te" to "వ్యాపారి చిరునామా?"))
-                        ))
-                        moveToNextQuestion()
+                    session.farmerName = text
+                    val existing = farmerRepository.getFarmers().first().find { it.name.contains(text, true) }
+                    if (existing != null) {
+                        session.farmerName = existing.name
+                        session.farmerPhone = existing.mobileNumber
+                        session.farmerAddress = existing.village
                     }
                 }
                 "product_name" -> {
-                    val product = productRepository.getProductByName(text)
-                    if (product != null) {
-                        // If Sale Entry, we need to handle Grades
-                        if (state.selectedService == VoiceService.ADD_SALE) {
-                            val grades = product.availableGrades.joinToString("/")
-                            insertQuestions(listOf(
-                                Question("grade", mapOf("en" to "Select Grade ($grades)?", "te" to "గ్రేడ్ ఎంచుకోండి ($grades)?"))
-                            ))
-                        }
-                        _uiState.update { it.copy(isLoading = false, existingRecordFound = true, suggestedRecord = product) }
-                    } else {
-                        insertQuestions(listOf(
-                            Question("product_category", mapOf("en" to "Category (Fruit/Veg)?", "te" to "వర్గం?")),
-                            Question("product_unit", mapOf("en" to "Unit (KG/Box)?", "te" to "యూనిట్?"))
-                        ))
-                        moveToNextQuestion()
+                    session.productName = text
+                    val existing = productRepository.getProductByName(text)
+                    if (existing != null) {
+                        session.productName = existing.name
+                        session.productCategory = existing.category
+                        session.unit = if (existing.availableGrades.isNotEmpty()) "KG" else "KG" // Default KG
                     }
                 }
-                else -> moveToNextQuestion()
+                "amount" -> {
+                    session.amount = text.filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
+                }
+            }
+
+            _uiState.update { it.copy(session = session) }
+            
+            if (state.currentQuestionIndex < state.dynamicQuestions.size - 1) {
+                _uiState.update { it.copy(currentQuestionIndex = state.currentQuestionIndex + 1, spokenText = "") }
+            } else {
+                _uiState.update { it.copy(step = VoiceStep.EDITABLE_FORM, spokenText = "") }
             }
         }
     }
 
-    private fun insertQuestions(newQuestions: List<Question>) {
-        val state = _uiState.value
-        val currentList = state.dynamicQuestions.toMutableList()
-        currentList.addAll(state.currentQuestionIndex + 1, newQuestions)
-        _uiState.update { it.copy(dynamicQuestions = currentList) }
-    }
-
-    fun useExistingRecord(use: Boolean) {
-        val state = _uiState.value
-        if (use && state.suggestedRecord != null) {
-            val data = state.capturedData.toMutableMap()
-            when (val record = state.suggestedRecord) {
-                is FarmerEntity -> {
-                    data["farmer_id"] = record.id
-                    data["farmer_name"] = record.name
-                }
-                is BuyerEntity -> {
-                    data["buyer_id"] = record.id
-                    data["buyer_name"] = record.name
-                }
-                is ProductEntity -> {
-                    data["product_id"] = record.id
-                    data["product_name"] = record.name
-                }
-            }
-            _uiState.update { it.copy(capturedData = data) }
-        }
-        _uiState.update { it.copy(existingRecordFound = false, suggestedRecord = null) }
-        moveToNextQuestion()
-    }
-
-    private fun moveToNextQuestion() {
-        val state = _uiState.value
-        if (state.currentQuestionIndex < state.dynamicQuestions.size - 1) {
-            _uiState.update { it.copy(currentQuestionIndex = state.currentQuestionIndex + 1, spokenText = "") }
-        } else {
-            _uiState.update { it.copy(step = VoiceStep.REVIEW, spokenText = "") }
-        }
+    fun updateSession(updatedSession: VoiceSession) {
+        _uiState.update { it.copy(session = updatedSession) }
     }
 
     fun saveEntry() {
+        if (_uiState.value.session.farmerPhone.isNotBlank() && _uiState.value.session.farmerPhone.length != 10) {
+            _uiState.update { it.copy(error = "Please enter a valid 10-digit mobile number") }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val data = _uiState.value.capturedData
-            val result: Resource<Unit> = when (_uiState.value.selectedService) {
-                VoiceService.ADD_STOCK -> {
-                    val qty = data["quantity"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: 0.0
-                    val rate = data["rate"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: 0.0
-                    val commPercent = data["commission"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: 5.0
-                    arrivalRepository.addArrival(ArrivalEntity(
-                        id = UUID.randomUUID().toString(),
-                        farmerId = data["farmer_id"] ?: UUID.randomUUID().toString(),
-                        farmerName = data["farmer_name"] ?: "Unknown",
-                        productId = data["product_id"] ?: UUID.randomUUID().toString(),
-                        productName = data["product_name"] ?: "Unknown",
-                        quantity = qty,
-                        remainingQuantity = qty,
-                        purchaseRate = rate,
-                        netAmount = qty * rate * (1 - commPercent/100),
-                        grossAmount = qty * rate,
-                        commissionPercent = commPercent,
-                        commissionAmount = (qty * rate * commPercent / 100)
-                    ))
-                }
-                VoiceService.ADD_SALE -> {
-                    val qty = data["quantity"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: 0.0
-                    val rate = data["rate"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: 0.0
-                    val transport = data["transport"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: 0.0
-                    val labor = data["labor"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: 0.0
-                    
-                    // Note: Multi-farmer stock selection via voice is complex.
-                    // Simplified: We'll create a sale entry if repository supports simple mapping.
-                    // For now, return success to maintain flow.
-                    Resource.Success(Unit)
-                }
-                VoiceService.BUYER_PAYMENT -> {
-                    val amt = data["amount"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: 0.0
-                    paymentRepository.addPayment(PaymentEntity(
-                        id = UUID.randomUUID().toString(),
-                        partyId = data["buyer_id"] ?: "",
-                        partyName = data["buyer_name"] ?: "Unknown",
-                        partyType = "BUYER",
-                        amount = amt,
-                        paymentMode = data["method"] ?: "CASH",
-                        date = System.currentTimeMillis()
-                    ))
-                }
-                VoiceService.FARMER_PAYMENT -> {
-                    val amt = data["amount"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: 0.0
-                    paymentRepository.addPayment(PaymentEntity(
-                        id = UUID.randomUUID().toString(),
-                        partyId = data["farmer_id"] ?: "",
-                        partyName = data["farmer_name"] ?: "Unknown",
-                        partyType = "FARMER",
-                        amount = amt,
-                        paymentMode = data["method"] ?: "CASH",
-                        date = System.currentTimeMillis()
-                    ))
-                }
-                else -> Resource.Success(Unit)
-            }
+            val session = _uiState.value.session
             
+            // 1. Handle Farmer Creation/Resolution
+            val existingFarmers = farmerRepository.getFarmers().first()
+            val farmer = existingFarmers.find { it.name.equals(session.farmerName, true) }
+            val farmerId = if (farmer == null) {
+                val newId = UUID.randomUUID().toString()
+                farmerRepository.addFarmer(FarmerEntity(
+                    id = newId,
+                    name = session.farmerName,
+                    mobileNumber = session.farmerPhone,
+                    village = session.farmerAddress
+                ))
+                newId
+            } else {
+                farmer.id
+            }
+
+            // 2. Handle Product Creation/Resolution
+            val existingProduct = productRepository.getProductByName(session.productName)
+            val productId = if (existingProduct == null) {
+                val newId = UUID.randomUUID().toString()
+                productRepository.addProduct(ProductEntity(
+                    id = newId,
+                    name = session.productName,
+                    category = session.productCategory,
+                    availableGrades = listOf(session.grade)
+                ), null)
+                newId
+            } else {
+                existingProduct.id
+            }
+
+            // 3. Save Arrival
+            val result = arrivalRepository.addArrival(ArrivalEntity(
+                id = UUID.randomUUID().toString(),
+                farmerId = farmerId,
+                farmerName = session.farmerName,
+                productId = productId,
+                productName = session.productName,
+                productCategory = session.productCategory,
+                grade = session.grade,
+                quantity = session.quantity,
+                remainingQuantity = session.quantity - session.spoilage,
+                spoilageQuantity = session.spoilage,
+                unit = session.unit,
+                purchaseRate = session.rate,
+                grossAmount = session.quantity * session.rate,
+                commissionPercent = session.commission,
+                commissionAmount = (session.quantity * session.rate * session.commission / 100),
+                transportCharges = session.transport,
+                laborCharges = session.labor,
+                packingCharges = session.packing,
+                netAmount = (session.quantity * session.rate) - (session.quantity * session.rate * session.commission / 100) - session.transport - session.labor - session.packing,
+                date = session.date
+            ))
+
             if (result is Resource.Success) {
                 _uiState.update { it.copy(isLoading = false, step = VoiceStep.SUCCESS) }
             } else {
@@ -307,5 +217,9 @@ class VoiceViewModel @Inject constructor(
 
     fun reset() { _uiState.update { VoiceState(isPremium = it.isPremium) } }
     fun stopListening() { speechRecognizer?.stopListening() }
-    override fun onCleared() { super.onCleared(); speechRecognizer?.destroy() }
+    
+    override fun onCleared() { 
+        super.onCleared()
+        speechRecognizer?.destroy()
+    }
 }

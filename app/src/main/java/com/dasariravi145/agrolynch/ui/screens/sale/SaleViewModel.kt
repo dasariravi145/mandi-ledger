@@ -3,28 +3,52 @@ package com.dasariravi145.agrolynch.ui.screens.sale
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.data.local.entity.*
+import com.dasariravi145.agrolynch.data.local.dao.FarmerStockInfo
 import com.dasariravi145.agrolynch.domain.repository.*
 import com.dasariravi145.agrolynch.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.util.*
 import javax.inject.Inject
 
 data class SaleItemDraft(
+    val id: String = UUID.randomUUID().toString(),
     val arrival: ArrivalEntity,
-    val quantitySold: Double,
-    val purchaseRate: Double
+    val quantity: Double,
+    val saleRate: Double,
+    val commissionPercent: Double = 0.0,
+    val laborCharges: Double = 0.0,
+    val transportCharges: Double = 0.0,
+    val otherCharges: Double = 0.0
 ) {
-    val purchaseAmount = quantitySold * purchaseRate
+    val purchaseAmount: Double get() = quantity * arrival.purchaseRate
+    val saleAmount: Double get() = quantity * saleRate
+    val commissionAmount: Double get() = (saleAmount * commissionPercent) / 100
+    val netAmount: Double get() = saleAmount - laborCharges - transportCharges - otherCharges
 }
+
+data class TransactionTotal(
+    val totalQuantity: Double = 0.0,
+    val totalPurchaseAmount: Double = 0.0,
+    val totalSaleAmount: Double = 0.0,
+    val totalCommission: Double = 0.0,
+    val totalLabor: Double = 0.0,
+    val totalTransport: Double = 0.0,
+    val totalOther: Double = 0.0,
+    val totalNetAmount: Double = 0.0
+)
 
 @HiltViewModel
 class SaleViewModel @Inject constructor(
     private val saleRepository: SaleRepository,
     private val buyerRepository: BuyerRepository,
+    private val farmerRepository: FarmerRepository,
     private val productRepository: ProductRepository,
-    private val arrivalRepository: ArrivalRepository
+    private val arrivalRepository: ArrivalRepository,
+    private val companyRepository: CompanyRepository,
+    val adMobManager: com.dasariravi145.agrolynch.ads.AdMobManager
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(false)
@@ -33,83 +57,152 @@ class SaleViewModel @Inject constructor(
     private val _error = MutableSharedFlow<String>()
     val error = _error.asSharedFlow()
 
-    val buyers = buyerRepository.getBuyers()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val products = productRepository.getProducts()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val _selectedProduct = MutableStateFlow<ProductEntity?>(null)
-    val selectedProduct: StateFlow<ProductEntity?> = _selectedProduct.asStateFlow()
-
-    private val _selectedGrade = MutableStateFlow<String?>(null)
-    val selectedGrade: StateFlow<String?> = _selectedGrade.asStateFlow()
-
-    val availableGrades: StateFlow<List<String>> = _selectedProduct.map { product ->
-        product?.availableGrades ?: emptyList()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val availableStocks = combine(_selectedProduct, _selectedGrade) { product, grade ->
-        if (product != null && grade != null) {
-            arrivalRepository.getAvailableStockByProductAndGrade(product.id, grade)
-        } else {
-            flowOf(emptyList())
-        }
-    }.flatMapLatest { it }
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // Map of Arrival ID to Quantity
-    private val _selectedQuantities = MutableStateFlow<Map<String, Double>>(emptyMap())
-    val selectedQuantities: StateFlow<Map<String, Double>> = _selectedQuantities.asStateFlow()
-
     private val _saveSuccess = MutableSharedFlow<Unit>()
     val saveSuccess = _saveSuccess.asSharedFlow()
 
-    fun selectProduct(product: ProductEntity) {
-        _selectedProduct.value = product
-        _selectedGrade.value = null
-        _selectedQuantities.value = emptyMap()
+    // --- Buyer Section ---
+    val buyers = buyerRepository.getBuyers()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // --- Sale Items Section ---
+    private val _saleItems = MutableStateFlow<List<SaleItemDraft>>(emptyList())
+    val saleItems = _saleItems.asStateFlow()
+
+    private val defaultCommission = companyRepository.getProfile()
+        .map { 5.0 } // Default to 5.0% if profile doesn't have a specific field
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 5.0)
+
+    val transactionTotal = _saleItems.map { items ->
+        TransactionTotal(
+            totalQuantity = items.sumOf { it.quantity },
+            totalPurchaseAmount = items.sumOf { it.purchaseAmount },
+            totalSaleAmount = items.sumOf { it.saleAmount },
+            totalCommission = items.sumOf { it.commissionAmount },
+            totalLabor = items.sumOf { it.laborCharges },
+            totalTransport = items.sumOf { it.transportCharges },
+            totalOther = items.sumOf { it.otherCharges },
+            totalNetAmount = items.sumOf { it.netAmount }
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TransactionTotal())
+
+    fun addSaleItem(item: SaleItemDraft) {
+        _saleItems.value = _saleItems.value + item
     }
 
-    fun selectGrade(grade: String) {
-        _selectedGrade.value = grade
-        _selectedQuantities.value = emptyMap()
+    fun removeSaleItem(id: String) {
+        _saleItems.value = _saleItems.value.filter { it.id != id }
     }
 
-    fun updateQuantity(arrivalId: String, quantity: Double) {
-        val current = _selectedQuantities.value.toMutableMap()
-        val arrival = availableStocks.value.find { it.id == arrivalId }
-        
-        if (arrival == null) return
-        
-        val validatedQty = if (quantity > arrival.remainingQuantity) {
-            arrival.remainingQuantity
-        } else if (quantity <= 0) {
-            0.0
-        } else {
-            quantity
+    // --- Farmer Stock Selection Logic ---
+    val farmersWithStock = arrivalRepository.getFarmersWithStock()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun getAvailableStockByFarmer(farmerId: String): Flow<List<ArrivalEntity>> = 
+        arrivalRepository.getAvailableStockByFarmer(farmerId)
+
+    fun createSale(
+        buyer: BuyerEntity,
+        // The following parameters are kept for compatibility with the existing createSale call in SaleScreen, 
+        // but the actual items are now managed in _saleItems
+        unusedSaleRate: Double = 0.0,
+        unusedTransport: Double = 0.0,
+        unusedOther: Double = 0.0,
+        unusedLabor: Double = 0.0,
+        unusedPacking: Double = 0.0
+    ) {
+        val items = _saleItems.value
+        if (items.isEmpty()) return
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            val saleId = UUID.randomUUID().toString()
+            val totals = transactionTotal.value
+            
+            val saleItemEntities = items.map { draft ->
+                val calcComm = (draft.saleAmount * draft.commissionPercent) / 100
+                Timber.d("COMMISSION_DEBUG: SaleAmt: ${draft.saleAmount}, CommPercent: ${draft.commissionPercent}%, CalcComm: $calcComm")
+                
+                SaleItemEntity(
+                    id = UUID.randomUUID().toString(),
+                    saleId = saleId,
+                    arrivalId = draft.arrival.id,
+                    farmerId = draft.arrival.farmerId,
+                    farmerName = draft.arrival.farmerName,
+                    productId = draft.arrival.productId,
+                    productName = draft.arrival.productName,
+                    productCategory = draft.arrival.productCategory,
+                    grade = draft.arrival.grade,
+                    quantitySold = draft.quantity,
+                    unit = draft.arrival.unit,
+                    purchaseRate = draft.arrival.purchaseRate,
+                    saleRate = draft.saleRate,
+                    purchaseAmount = draft.purchaseAmount,
+                    saleAmount = draft.saleAmount,
+                    marginAmount = draft.saleAmount - draft.purchaseAmount,
+                    commissionPercent = draft.commissionPercent,
+                    commissionAmount = draft.commissionAmount,
+                    laborCharges = draft.laborCharges,
+                    transportCharges = draft.transportCharges,
+                    otherCharges = draft.otherCharges,
+                    netAmount = draft.netAmount,
+                    date = System.currentTimeMillis()
+                )
+            }
+
+            Timber.d("COMMISSION_DEBUG: Total Earnings for Sale: ${totals.totalCommission}")
+
+            val saleEntity = SaleEntity(
+                id = saleId,
+                buyerId = buyer.id,
+                buyerName = buyer.name,
+                farmerName = items.map { it.arrival.farmerName }.distinct().joinToString(", "),
+                productId = if (items.distinctBy { it.arrival.productId }.size > 1) "Multiple" else items.first().arrival.productId,
+                productName = if (items.distinctBy { it.arrival.productId }.size > 1) "Multiple Products" else items.first().arrival.productName,
+                grade = if (items.distinctBy { it.arrival.grade }.size > 1) "Multiple" else items.first().arrival.grade,
+                totalQuantity = totals.totalQuantity,
+                totalPurchaseAmount = totals.totalPurchaseAmount,
+                totalAmount = totals.totalSaleAmount, // Sub-total
+                totalCommission = totals.totalCommission,
+                laborCharges = totals.totalLabor,
+                transportCharges = totals.totalTransport,
+                packingCharges = 0.0,
+                otherCharges = totals.totalOther,
+                totalNetAmount = totals.totalNetAmount, // Final Collection
+                totalMargin = totals.totalSaleAmount - totals.totalPurchaseAmount,
+                pendingAmount = totals.totalNetAmount,
+                date = System.currentTimeMillis()
+            )
+
+            when (val result = saleRepository.createSale(saleEntity, saleItemEntities)) {
+                is Resource.Success -> {
+                    _saveSuccess.emit(Unit)
+                    _saleItems.value = emptyList()
+                }
+                is Resource.Error -> _error.emit(result.message ?: "Failed to save sale")
+                else -> {}
+            }
+            _isLoading.value = false
         }
-
-        if (validatedQty <= 0) {
-            current.remove(arrivalId)
-        } else {
-            current[arrivalId] = validatedQty
-        }
-        _selectedQuantities.value = current
     }
-
-    private val _buyerSaveSuccess = MutableSharedFlow<BuyerEntity>()
-    val buyerSaveSuccess = _buyerSaveSuccess.asSharedFlow()
 
     fun registerBuyerAndCreateSale(
         name: String,
         mobile: String,
         address: String,
         gst: String,
-        saleRate: Double,
-        transportCharges: Double = 0.0,
-        otherCharges: Double = 0.0
+        unusedSaleRate: Double = 0.0,
+        unusedTransport: Double = 0.0,
+        unusedOther: Double = 0.0,
+        unusedLabor: Double = 0.0,
+        unusedPacking: Double = 0.0
     ) {
+        if (mobile.length != 10 || !mobile.all { it.isDigit() }) {
+            viewModelScope.launch {
+                _error.emit("Please enter a valid 10-digit mobile number")
+            }
+            return
+        }
         viewModelScope.launch {
             _isLoading.value = true
             val newBuyer = BuyerEntity(
@@ -125,93 +218,8 @@ class SaleViewModel @Inject constructor(
                 _error.emit(result.message ?: "Failed to add buyer")
                 _isLoading.value = false
             } else {
-                createSale(
-                    buyer = newBuyer, 
-                    saleRate = saleRate,
-                    transportCharges = transportCharges,
-                    otherCharges = otherCharges
-                )
+                createSale(buyer = newBuyer)
             }
-        }
-    }
-
-    fun createSale(
-        buyer: BuyerEntity,
-        saleRate: Double,
-        transportCharges: Double = 0.0,
-        otherCharges: Double = 0.0
-    ) {
-        val selections = _selectedQuantities.value
-        if (selections.isEmpty()) return
-
-        viewModelScope.launch {
-            _isLoading.value = true
-            
-            val saleId = UUID.randomUUID().toString()
-            val stocks = availableStocks.value
-            
-            var totalPurchaseAmt = 0.0
-            var totalQty = 0.0
-            
-            val saleItems = selections.map { (arrivalId, qty) ->
-                val arrival = stocks.find { it.id == arrivalId } ?: throw Exception("Stock not found")
-                
-                val itemPurchaseAmt = qty * arrival.purchaseRate
-                val itemSaleAmt = qty * saleRate
-                val itemMargin = itemSaleAmt - itemPurchaseAmt
-                
-                totalPurchaseAmt += itemPurchaseAmt
-                totalQty += qty
-                
-                SaleItemEntity(
-                    id = UUID.randomUUID().toString(),
-                    saleId = saleId,
-                    arrivalId = arrivalId,
-                    farmerId = arrival.farmerId,
-                    farmerName = arrival.farmerName,
-                    productId = arrival.productId,
-                    productName = arrival.productName,
-                    quantitySold = qty,
-                    unit = arrival.unit,
-                    purchaseRate = arrival.purchaseRate,
-                    saleRate = saleRate,
-                    purchaseAmount = itemPurchaseAmt,
-                    saleAmount = itemSaleAmt,
-                    marginAmount = itemMargin,
-                    date = System.currentTimeMillis()
-                )
-            }
-
-            val totalSaleAmt = totalQty * saleRate
-            val totalMargin = totalSaleAmt - totalPurchaseAmt
-
-            val sale = SaleEntity(
-                id = saleId,
-                buyerId = buyer.id,
-                buyerName = buyer.name,
-                productId = _selectedProduct.value?.id ?: "",
-                productName = _selectedProduct.value?.name ?: "",
-                grade = _selectedGrade.value ?: "General",
-                totalQuantity = totalQty,
-                totalPurchaseAmount = totalPurchaseAmt,
-                totalAmount = totalSaleAmt,
-                totalMargin = totalMargin,
-                transportCharges = transportCharges,
-                otherCharges = otherCharges,
-                pendingAmount = totalSaleAmt + transportCharges + otherCharges,
-                date = System.currentTimeMillis()
-            )
-            
-            val result = saleRepository.createSale(sale, saleItems)
-            if (result is Resource.Error) {
-                _error.emit(result.message ?: "Failed to save sale")
-            } else {
-                _saveSuccess.emit(Unit)
-                _selectedQuantities.value = emptyMap()
-                _selectedProduct.value = null
-                _selectedGrade.value = null
-            }
-            _isLoading.value = false
         }
     }
 }

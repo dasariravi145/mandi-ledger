@@ -8,9 +8,11 @@ import com.dasariravi145.agrolynch.util.Resource
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import android.net.Uri
 import java.io.File
@@ -37,11 +39,12 @@ class SyncRepositoryImpl @Inject constructor(
     private val userId: String?
         get() = auth.currentUser?.uid
 
-    override suspend fun syncAllData(): Resource<Unit> {
-        val uid = userId ?: return Resource.Error("User not logged in")
-        if (!premiumStateManager.isPremium.first()) return Resource.Error("Premium subscription required for sync")
+    override suspend fun syncAllData(): Resource<Unit> = withContext(Dispatchers.IO) {
+        val uid = userId ?: return@withContext Resource.Error("User not logged in")
+        if (!premiumStateManager.isPremium.first()) return@withContext Resource.Error("Premium subscription required for sync")
 
-        return try {
+        return@withContext try {
+            val startTime = System.currentTimeMillis()
             syncFarmers(uid)
             syncBuyers(uid)
             syncProducts(uid)
@@ -49,6 +52,7 @@ class SyncRepositoryImpl @Inject constructor(
             syncSales(uid)
             syncPayments(uid)
             syncOcrScans(uid)
+            timber.log.Timber.i("Full Sync: Completed in %dms", System.currentTimeMillis() - startTime)
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error("Sync failed: ${e.message}")
@@ -139,10 +143,10 @@ class SyncRepositoryImpl @Inject constructor(
                 quantity = sale.totalQuantity,
                 rate = 0.0, // Should be calculated or in Entity
                 grossAmount = sale.totalAmount,
-                commissionAmount = 0.0,
-                laborCharges = sale.otherCharges,
+                commissionAmount = sale.totalCommission,
+                laborCharges = sale.laborCharges,
                 transportCharges = sale.transportCharges,
-                netAmount = sale.totalAmount + sale.transportCharges + sale.otherCharges,
+                netAmount = sale.totalNetAmount,
                 createdAt = sale.date
             )
             firestore.collection("sales").document(sale.id).set(firestoreSale).await()
@@ -184,10 +188,11 @@ class SyncRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun restoreAllData(): Resource<Unit> {
-        val uid = userId ?: return Resource.Error("User not logged in")
+    override suspend fun restoreAllData(): Resource<Unit> = withContext(Dispatchers.IO) {
+        val uid = userId ?: return@withContext Resource.Error("User not logged in")
         
-        return try {
+        return@withContext try {
+            val startTime = System.currentTimeMillis()
             // Restore Farmers
             val farmerDocs = firestore.collection("farmers").whereEqualTo("ownerUserId", uid).get().await()
             farmerDocs.documents.forEach { doc ->
@@ -267,12 +272,15 @@ class SyncRepositoryImpl @Inject constructor(
                     saleDao.insertSale(com.dasariravi145.agrolynch.data.local.entity.SaleEntity(
                         id = it.saleId,
                         buyerId = it.buyerId,
-                        productId = it.productId,
-                        grade = it.grade,
+                        productId = it.productId ?: "",
+                        productName = "Restored Sale",
+                        grade = it.grade ?: "",
                         totalQuantity = it.quantity,
                         totalAmount = it.grossAmount,
                         transportCharges = it.transportCharges,
-                        otherCharges = it.laborCharges,
+                        laborCharges = it.laborCharges,
+                        totalCommission = it.commissionAmount,
+                        totalNetAmount = it.netAmount,
                         pendingAmount = it.netAmount,
                         date = it.createdAt,
                         isSynced = true
@@ -298,6 +306,7 @@ class SyncRepositoryImpl @Inject constructor(
                 }
             }
             
+            timber.log.Timber.i("Restore All Data: Completed in %dms", System.currentTimeMillis() - startTime)
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error("Restore failed: ${e.message}")

@@ -4,6 +4,7 @@ import com.dasariravi145.agrolynch.data.local.dao.*
 import com.dasariravi145.agrolynch.data.local.entity.*
 import com.dasariravi145.agrolynch.domain.model.*
 import com.dasariravi145.agrolynch.domain.repository.LedgerRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
@@ -20,13 +21,13 @@ class LedgerRepositoryImpl @Inject constructor(
 
     override fun getFarmerLedger(farmerId: String): Flow<LedgerSummary> {
         return combine(
-            arrivalDao.getAllArrivals(),
-            paymentDao.getAllPayments(),
-            farmerDao.getAllFarmers()
+            arrivalDao.getAllArrivals().distinctUntilChanged(),
+            paymentDao.getAllPayments().distinctUntilChanged(),
+            farmerDao.getAllFarmers().distinctUntilChanged()
         ) { arrivals, payments, farmers ->
             val farmer = farmers.find { it.id == farmerId } ?: return@combine LedgerSummary("", "Unknown", 0.0, 0.0, 0.0)
             calculateFarmerSummary(farmer, arrivals, payments)
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     private fun calculateFarmerSummary(
@@ -44,14 +45,19 @@ class LedgerRepositoryImpl @Inject constructor(
                 category = arrival.productCategory,
                 grade = arrival.grade,
                 quantity = arrival.quantity,
+                damageQuantity = arrival.spoilageQuantity,
+                netQuantity = arrival.netQuantity,
                 unit = arrival.unit,
-                rate = arrival.purchaseRate,
+                rate = arrival.purchaseRate, // Rate for farmer is purchase rate
+                purchaseRate = arrival.purchaseRate,
                 grossAmount = arrival.grossAmount,
                 commissionPercent = arrival.commissionPercent,
                 commissionAmount = arrival.commissionAmount,
                 netAmount = arrival.netAmount,
-                laborCharges = 0.0, // Farmer side charges not in current arrival entity
-                transportCharges = 0.0
+                laborCharges = arrival.laborCharges,
+                transportCharges = arrival.transportCharges,
+                packingCharges = arrival.packingCharges,
+                otherDeductions = arrival.otherDeductions
             )
             LedgerEntry(
                 id = arrival.id,
@@ -102,19 +108,21 @@ class LedgerRepositoryImpl @Inject constructor(
 
     override fun getBuyerLedger(buyerId: String): Flow<LedgerSummary> {
         return combine(
-            saleDao.getAllSales(),
-            paymentDao.getAllPayments(),
-            buyerDao.getAllBuyers(),
-            productDao.getAllProducts()
-        ) { sales, payments, buyers, products ->
+            saleDao.getAllSales().distinctUntilChanged(),
+            saleDao.getAllSaleItems().distinctUntilChanged(),
+            paymentDao.getAllPayments().distinctUntilChanged(),
+            buyerDao.getAllBuyers().distinctUntilChanged(),
+            productDao.getAllProducts().distinctUntilChanged()
+        ) { sales, saleItems, payments, buyers, products ->
             val buyer = buyers.find { it.id == buyerId } ?: return@combine LedgerSummary("", "Unknown", 0.0, 0.0, 0.0)
-            calculateBuyerSummary(buyer, sales, payments, products)
-        }
+            calculateBuyerSummary(buyer, sales, saleItems, payments, products)
+        }.flowOn(Dispatchers.Default)
     }
 
     private fun calculateBuyerSummary(
         buyer: BuyerEntity,
         allSales: List<SaleEntity>,
+        allSaleItems: List<SaleItemEntity>,
         allPayments: List<PaymentEntity>,
         allProducts: List<ProductEntity> = emptyList()
     ): LedgerSummary {
@@ -122,25 +130,32 @@ class LedgerRepositoryImpl @Inject constructor(
         val buyerPayments = allPayments.filter { it.partyId == buyer.id && it.partyType == "BUYER" && !it.isDeleted }
 
         val entries = (buyerSales.map { sale ->
-            val product = allProducts.find { it.id == sale.productId }
+            val saleItems = allSaleItems.filter { it.saleId == sale.id }
             val details = LedgerEntryDetails(
                 billNumber = sale.id.takeLast(6).uppercase(),
+                farmerName = sale.farmerName,
                 productName = sale.productName,
-                category = product?.category ?: "General",
+                category = "General",
                 grade = sale.grade,
                 quantity = sale.totalQuantity,
                 unit = "KG", 
-                rate = if (sale.totalQuantity > 0) sale.totalAmount / sale.totalQuantity else 0.0,
+                rate = if (sale.totalQuantity > 0) sale.totalAmount / sale.totalQuantity else 0.0, // Sale Rate
+                purchaseRate = if (sale.totalQuantity > 0) sale.totalPurchaseAmount / sale.totalQuantity else 0.0,
                 grossAmount = sale.totalAmount,
-                commissionAmount = sale.totalMargin, // Margin is treated as commission in buyer side display
+                commissionAmount = sale.totalCommission, 
                 transportCharges = sale.transportCharges,
-                laborCharges = sale.otherCharges,
-                netAmount = sale.totalAmount + sale.transportCharges + sale.otherCharges
+                laborCharges = sale.laborCharges,
+                packingCharges = sale.packingCharges,
+                otherDeductions = sale.otherCharges,
+                netAmount = sale.totalNetAmount,
+                paymentMade = sale.paidAmount,
+                pendingAmount = sale.pendingAmount,
+                saleItems = saleItems
             )
             LedgerEntry(
                 id = sale.id,
                 title = "Purchase: ${sale.productName}",
-                amount = details.netAmount,
+                amount = sale.totalNetAmount,
                 type = LedgerType.DEBIT,
                 transactionType = TransactionType.SALE,
                 date = sale.date,
@@ -174,7 +189,7 @@ class LedgerRepositoryImpl @Inject constructor(
         return LedgerSummary(
             partyId = buyer.id,
             partyName = buyer.name,
-            totalDebit = buyerSales.sumOf { it.totalAmount + it.transportCharges + it.otherCharges },
+            totalDebit = buyerSales.sumOf { it.totalNetAmount },
             totalCredit = buyerPayments.sumOf { it.amount },
             balance = buyer.pendingAmount,
             advanceAmount = 0.0,
@@ -186,26 +201,27 @@ class LedgerRepositoryImpl @Inject constructor(
 
     override fun getAllFarmerSummaries(): Flow<List<LedgerSummary>> {
         return combine(
-            arrivalDao.getAllArrivals(),
-            paymentDao.getAllPayments(),
-            farmerDao.getAllFarmers()
+            arrivalDao.getAllArrivals().distinctUntilChanged(),
+            paymentDao.getAllPayments().distinctUntilChanged(),
+            farmerDao.getAllFarmers().distinctUntilChanged()
         ) { arrivals, payments, farmers ->
             farmers.map { farmer ->
                 calculateFarmerSummary(farmer, arrivals, payments)
             }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun getAllBuyerSummaries(): Flow<List<LedgerSummary>> {
         return combine(
-            saleDao.getAllSales(),
-            paymentDao.getAllPayments(),
-            buyerDao.getAllBuyers(),
-            productDao.getAllProducts()
-        ) { sales, payments, buyers, products ->
+            saleDao.getAllSales().distinctUntilChanged(),
+            saleDao.getAllSaleItems().distinctUntilChanged(),
+            paymentDao.getAllPayments().distinctUntilChanged(),
+            buyerDao.getAllBuyers().distinctUntilChanged(),
+            productDao.getAllProducts().distinctUntilChanged()
+        ) { sales, saleItems, payments, buyers, products ->
             buyers.map { buyer ->
-                calculateBuyerSummary(buyer, sales, payments, products)
+                calculateBuyerSummary(buyer, sales, saleItems, payments, products)
             }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 }

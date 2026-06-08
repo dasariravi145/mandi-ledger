@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.domain.model.LedgerSummary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,10 +33,10 @@ fun LedgerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ledger / ఖాతా పుస్తకం") },
+                title = { Text(stringResource(R.string.ledger_book)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 }
             )
@@ -45,12 +47,12 @@ fun LedgerScreen(
                 Tab(
                     selected = tabIndex == 0,
                     onClick = { viewModel.setTab(0) },
-                    text = { Text("Farmers / రైతులు") }
+                    text = { Text(stringResource(R.string.farmers)) }
                 )
                 Tab(
                     selected = tabIndex == 1,
                     onClick = { viewModel.setTab(1) },
-                    text = { Text("Buyers / వ్యాపారులు") }
+                    text = { Text(stringResource(R.string.traders)) }
                 )
             }
 
@@ -59,7 +61,7 @@ fun LedgerScreen(
 
             if (summaries.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No accounts found / ఖాతాలు లేవు")
+                    Text(stringResource(R.string.no_accounts_found))
                 }
             } else {
                 LazyColumn(
@@ -97,12 +99,12 @@ fun LedgerSummaryItem(summary: LedgerSummary, onClick: () -> Unit) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Row {
                     Column {
-                        Text(text = "Arrivals", fontSize = 10.sp, color = Color.Gray)
+                        Text(text = stringResource(R.string.stock), fontSize = 10.sp, color = Color.Gray)
                         Text(text = "₹${String.format("%.0f", summary.totalDebit)}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                     Spacer(modifier = Modifier.width(20.dp))
                     Column {
-                        Text(text = "Paid", fontSize = 10.sp, color = Color.Gray)
+                        Text(text = stringResource(R.string.paid), fontSize = 10.sp, color = Color.Gray)
                         Text(text = "₹${String.format("%.0f", summary.totalCredit)}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                 }
@@ -112,7 +114,7 @@ fun LedgerSummaryItem(summary: LedgerSummary, onClick: () -> Unit) {
                 val isAdvance = summary.advanceAmount > 0
                 val amount = if (isAdvance) summary.advanceAmount else summary.balance
                 val color = if (isAdvance) Color(0xFF1565C0) else if (amount > 0) Color(0xFFC62828) else Color(0xFF2E7D32)
-                val label = if (isAdvance) "Advance / అడ్వాన్స్" else if (amount > 0) "Pending / బాకీ" else "Settled / చెల్లించబడింది"
+                val label = if (isAdvance) stringResource(R.string.advance) else if (amount > 0) stringResource(R.string.pending) else stringResource(R.string.settled)
 
                 Text(
                     text = "₹${String.format("%.2f", amount)}",

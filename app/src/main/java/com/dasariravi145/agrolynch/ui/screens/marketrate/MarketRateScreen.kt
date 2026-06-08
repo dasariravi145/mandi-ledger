@@ -16,6 +16,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.MarketRateEntity
 import com.dasariravi145.agrolynch.data.local.entity.ProductEntity
 import java.text.SimpleDateFormat
@@ -39,17 +41,17 @@ fun MarketRateScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Daily Rates / రోజువారీ ధరలు") },
+                title = { Text(stringResource(R.string.daily_rates)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Rate")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_rate))
             }
         }
     ) { padding ->
@@ -71,7 +73,7 @@ fun MarketRateScreen(
                     Icon(Icons.Default.DateRange, contentDescription = null)
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Date: ${dateFormat.format(Date(selectedDate))}",
+                        text = stringResource(R.string.date_label, dateFormat.format(Date(selectedDate))),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -84,7 +86,7 @@ fun MarketRateScreen(
                 }
             } else if (rates.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No rates set for today / ఈరోజు ధరలు నిర్ణయించబడలేదు")
+                    Text(stringResource(R.string.no_rates_today))
                 }
             } else {
                 LazyColumn(
@@ -145,7 +147,7 @@ fun MarketRateItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = rate.productName, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Grade: ${rate.grade}", fontSize = 14.sp, color = MaterialTheme.colorScheme.secondary)
+                Text(text = stringResource(R.string.grade_label) + ": ${rate.grade}", fontSize = 14.sp, color = MaterialTheme.colorScheme.secondary)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
@@ -174,22 +176,22 @@ fun EditRateDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Market Rate / ధరను సవరించండి") },
+        title = { Text(stringResource(R.string.edit_market_rate)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Product: ${rate.productName} (${rate.grade})")
+                Text(stringResource(R.string.product_label) + ": ${rate.productName} (${rate.grade})")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = minRate,
                         onValueChange = { minRate = it },
-                        label = { Text("Min Rate") },
+                        label = { Text(stringResource(R.string.min_rate)) },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
                     OutlinedTextField(
                         value = maxRate,
                         onValueChange = { maxRate = it },
-                        label = { Text("Max Rate") },
+                        label = { Text(stringResource(R.string.max_rate)) },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
@@ -206,12 +208,12 @@ fun EditRateDialog(
                 },
                 enabled = minRate.isNotEmpty() && maxRate.isNotEmpty()
             ) {
-                Text("Update / అప్‌డేట్")
+                Text(stringResource(R.string.update))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel / రద్దు")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
@@ -233,7 +235,7 @@ fun AddRateDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Set Market Rate / ధరను నిర్ణయించండి") },
+        title = { Text(stringResource(R.string.set_market_rate)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 ExposedDropdownMenuBox(
@@ -241,7 +243,7 @@ fun AddRateDialog(
                     onExpandedChange = { expandedProduct = !expandedProduct }
                 ) {
                     OutlinedTextField(
-                        value = selectedProduct?.name ?: "Select Product",
+                        value = selectedProduct?.name ?: stringResource(R.string.select_product),
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedProduct) },
@@ -270,7 +272,7 @@ fun AddRateDialog(
                         onExpandedChange = { expandedGrade = !expandedGrade }
                     ) {
                         OutlinedTextField(
-                            value = if (selectedGrade.isEmpty()) "Select Grade" else selectedGrade,
+                            value = if (selectedGrade.isEmpty()) stringResource(R.string.select_grade) else selectedGrade,
                             onValueChange = {},
                             readOnly = true,
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedGrade) },
@@ -297,14 +299,14 @@ fun AddRateDialog(
                     OutlinedTextField(
                         value = minRate,
                         onValueChange = { minRate = it },
-                        label = { Text("Min Rate") },
+                        label = { Text(stringResource(R.string.min_rate)) },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
                     OutlinedTextField(
                         value = maxRate,
                         onValueChange = { maxRate = it },
-                        label = { Text("Max Rate") },
+                        label = { Text(stringResource(R.string.max_rate)) },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
@@ -322,12 +324,12 @@ fun AddRateDialog(
                 },
                 enabled = selectedProduct != null && selectedGrade.isNotEmpty() && minRate.isNotEmpty() && maxRate.isNotEmpty()
             ) {
-                Text("Save / సేవ్")
+                Text(stringResource(R.string.save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel / రద్దు")
+                Text(stringResource(R.string.cancel))
             }
         }
     )

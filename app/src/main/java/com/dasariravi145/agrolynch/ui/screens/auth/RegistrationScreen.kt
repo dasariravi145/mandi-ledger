@@ -1,5 +1,7 @@
 package com.dasariravi145.agrolynch.ui.screens.auth
 
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -38,15 +40,14 @@ fun RegistrationScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(48.dp))
-        Text("Create Your Profile", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("మీ ప్రొఫైల్‌ను సృష్టించండి", color = Color.Gray)
+        Text(stringResource(R.string.create_your_profile), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         
         Spacer(modifier = Modifier.height(32.dp))
         
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
-            label = { Text("Full Name / పూర్తి పేరు") },
+            label = { Text(stringResource(R.string.full_name)) },
             modifier = Modifier.fillMaxWidth()
         )
         
@@ -55,13 +56,13 @@ fun RegistrationScreen(
         OutlinedTextField(
             value = location,
             onValueChange = { location = it },
-            label = { Text("Location (Market Name) / ప్రదేశం") },
+            label = { Text(stringResource(R.string.location_market_name)) },
             modifier = Modifier.fillMaxWidth()
         )
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        Text("Set 4-Digit PIN / పిన్ సెట్ చేయండి", fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.set_4digit_pin), fontWeight = FontWeight.Bold)
         
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             OutlinedTextField(
@@ -75,7 +76,7 @@ fun RegistrationScreen(
             OutlinedTextField(
                 value = confirmPin,
                 onValueChange = { if (it.length <= 4) confirmPin = it },
-                label = { Text("Confirm PIN") },
+                label = { Text(stringResource(R.string.confirm_pin)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 visualTransformation = PasswordVisualTransformation()
@@ -98,7 +99,7 @@ fun RegistrationScreen(
             enabled = name.isNotBlank() && pin.length == 4 && pin == confirmPin && !state.isLoading,
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
         ) {
-            Text("Save & Continue / కొనసాగండి", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(stringResource(R.string.save_continue), fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
     }
 }

@@ -46,7 +46,12 @@ object AppModule {
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_22_23,
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_23_24,
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_24_25,
-            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_25_26
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_25_26,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_26_27,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_27_28,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_28_29,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_29_30,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_30_31
         )
         .build()
     }
@@ -139,6 +144,12 @@ object AppModule {
     @Singleton
     fun provideReportDao(db: AgroLynchDatabase): com.dasariravi145.agrolynch.data.local.dao.ReportDao {
         return db.reportDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideCompanyProfileDao(db: AgroLynchDatabase): com.dasariravi145.agrolynch.data.local.dao.CompanyProfileDao {
+        return db.companyProfileDao()
     }
 
     @Provides

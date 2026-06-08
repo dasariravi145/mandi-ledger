@@ -107,14 +107,15 @@ interface ReportDao {
     fun getStockReport(): Flow<List<StockReportModel>>
 
     @Query("""
-        SELECT id, buyerName, date, productName, grade, totalQuantity as quantity, 
-               'KG' as unit, (totalAmount / totalQuantity) as rate, totalAmount as saleAmount,
-               transportCharges, otherCharges as laborCharges, 0.0 as otherCharges,
-               (totalAmount + transportCharges + otherCharges) as totalAmount,
-               paidAmount, pendingAmount
-        FROM sales 
-        WHERE date BETWEEN :startDate AND :endDate AND isDeleted = 0
-        ORDER BY date DESC
+        SELECT si.id, s.buyerName, s.date, si.productName, si.grade, si.quantitySold as quantity, 
+               si.unit, si.saleRate as rate, si.saleAmount,
+               si.transportCharges, si.laborCharges, si.otherCharges,
+               si.netAmount as totalAmount,
+               0.0 as paidAmount, 0.0 as pendingAmount
+        FROM sale_items si
+        JOIN sales s ON si.saleId = s.id
+        WHERE s.date BETWEEN :startDate AND :endDate AND s.isDeleted = 0
+        ORDER BY s.date DESC
     """)
     fun getBuyerDetailedReport(startDate: Long, endDate: Long): Flow<List<DetailedSaleReportModel>>
 
@@ -129,16 +130,16 @@ interface ReportDao {
     fun getFarmerDetailedReport(startDate: Long, endDate: Long): Flow<List<DetailedArrivalReportModel>>
 
     @Query("""
-        SELECT productName, 'General' as category, grade, 
-               SUM(quantity) as totalArrivals,
-               COALESCE((SELECT SUM(totalQuantity) FROM sales s WHERE s.productName = a.productName AND s.grade = a.grade AND s.isDeleted = 0), 0.0) as totalSold,
-               SUM(remainingQuantity) as currentStock,
-               AVG(purchaseRate) as avgPurchaseRate,
-               COALESCE((SELECT AVG(totalAmount / totalQuantity) FROM sales s WHERE s.productName = a.productName AND s.grade = a.grade AND s.isDeleted = 0), 0.0) as avgSaleRate,
+        SELECT a.productName, a.productCategory as category, a.grade, 
+               SUM(a.quantity) as totalArrivals,
+               COALESCE((SELECT SUM(si.quantitySold) FROM sale_items si WHERE si.productName = a.productName AND si.grade = a.grade), 0.0) as totalSold,
+               SUM(a.remainingQuantity) as currentStock,
+               AVG(a.purchaseRate) as avgPurchaseRate,
+               COALESCE((SELECT AVG(si.saleRate) FROM sale_items si WHERE si.productName = a.productName AND si.grade = a.grade), 0.0) as avgSaleRate,
                0.0 as totalProfit
         FROM arrivals a
-        WHERE isDeleted = 0
-        GROUP BY productName, grade
+        WHERE a.isDeleted = 0
+        GROUP BY a.productName, a.grade
     """)
     fun getProductPerformanceReport(): Flow<List<ProductPerformanceModel>>
 
@@ -171,23 +172,22 @@ interface ReportDao {
             s.buyerName, 
             si.farmerName, 
             si.productName, 
-            a.grade,
+            si.grade,
             si.quantitySold as quantity, 
             si.saleAmount, 
-            a.commissionPercent,
-            ((si.quantitySold * a.purchaseRate) * a.commissionPercent / 100) as commissionAmount,
+            si.commissionPercent,
+            si.commissionAmount,
             si.marginAmount,
             si.date
         FROM sale_items si
         JOIN sales s ON si.saleId = s.id
-        JOIN arrivals a ON si.arrivalId = a.id
         WHERE si.date BETWEEN :startDate AND :endDate
         ORDER BY si.date DESC
     """)
     fun getCommissionReport(startDate: Long, endDate: Long): Flow<List<CommissionReportModel>>
 
     @Query("""
-        SELECT strftime('%d/%m', datetime(date/1000, 'unixepoch')) as label, SUM(totalAmount) as value
+        SELECT strftime('%d/%m', datetime(date/1000, 'unixepoch')) as label, SUM(totalNetAmount) as value
         FROM sales
         WHERE date > :sinceDate AND isDeleted = 0
         GROUP BY label
@@ -195,13 +195,13 @@ interface ReportDao {
     """)
     fun getSalesTrend(sinceDate: Long): Flow<List<ChartDataModel>>
 
-    @Query("SELECT SUM(totalAmount) FROM sales WHERE date BETWEEN :start AND :end AND isDeleted = 0")
+    @Query("SELECT SUM(totalNetAmount) FROM sales WHERE date BETWEEN :start AND :end AND isDeleted = 0")
     fun getTotalSales(start: Long, end: Long): Flow<Double?>
 
     @Query("SELECT SUM(grossAmount) FROM arrivals WHERE date BETWEEN :start AND :end AND isDeleted = 0")
     fun getTotalPurchases(start: Long, end: Long): Flow<Double?>
 
-    @Query("SELECT SUM(commissionAmount) FROM arrivals WHERE date BETWEEN :start AND :end AND isDeleted = 0")
+    @Query("SELECT SUM(commissionAmount) FROM sale_items WHERE date BETWEEN :start AND :end")
     fun getTotalCommission(start: Long, end: Long): Flow<Double?>
 
     @Query("SELECT SUM(pendingAmount) FROM buyers WHERE isDeleted = 0")
@@ -209,4 +209,7 @@ interface ReportDao {
 
     @Query("SELECT SUM(pendingAmount) FROM farmers WHERE isDeleted = 0")
     fun getFarmerPendingTotal(): Flow<Double?>
+
+    @Query("UPDATE sale_items SET commissionAmount = (saleAmount * commissionPercent / 100) WHERE (commissionAmount = 0 OR commissionAmount IS NULL) AND saleAmount > 0 AND commissionPercent > 0")
+    suspend fun recalculateCommissions()
 }

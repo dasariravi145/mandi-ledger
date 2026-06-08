@@ -65,6 +65,7 @@ import com.dasariravi145.agrolynch.ui.screens.backup.BackupScreen
 import com.dasariravi145.agrolynch.ui.screens.backup.BackupViewModel
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumScreen
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumViewModel
+import com.dasariravi145.agrolynch.ui.screens.premium.PremiumUpgradePopup
 import com.dasariravi145.agrolynch.ui.screens.settings.*
 import com.dasariravi145.agrolynch.ui.screens.report.*
 import com.dasariravi145.agrolynch.domain.model.ReceiptData
@@ -185,6 +186,15 @@ fun SetupNavGraph(navController: NavHostController) {
         composable(route = Screen.Dashboard.route) {
             Timber.d("NavGraph: Screen.Dashboard")
             val dashboardViewModel: DashboardViewModel = hiltViewModel()
+            
+            // Show popup immediately after registration if required
+            LaunchedEffect(Unit) {
+                if (dashboardViewModel.shouldShowPopupAfterRegistration()) {
+                    dashboardViewModel.markPopupSeenAfterRegistration()
+                    // The dashboardViewModel.checkPremiumPopup() in init will handle setting _showPremiumPopup to true
+                }
+            }
+
             DashboardScreen(
                 viewModel = dashboardViewModel,
                 isPremium = isPremium,
@@ -276,18 +286,31 @@ fun SetupNavGraph(navController: NavHostController) {
             arguments = listOf(
                 navArgument("billNo") { defaultValue = ""; type = NavType.StringType },
                 navArgument("amount") { defaultValue = 0f; type = NavType.FloatType },
-                navArgument("date") { defaultValue = 0L; type = NavType.LongType }
+                navArgument("date") { defaultValue = 0L; type = NavType.LongType },
+                navArgument("farmer") { defaultValue = ""; type = NavType.StringType },
+                navArgument("product") { defaultValue = ""; type = NavType.StringType },
+                navArgument("qty") { defaultValue = 0f; type = NavType.FloatType },
+                navArgument("rate") { defaultValue = 0f; type = NavType.FloatType }
             )
         ) { backStackEntry ->
             val arrivalViewModel: ArrivalViewModel = hiltViewModel()
             val billNo = backStackEntry.arguments?.getString("billNo") ?: ""
             val amount = backStackEntry.arguments?.getFloat("amount")?.toDouble() ?: 0.0
             val date = backStackEntry.arguments?.getLong("date") ?: 0L
+            val farmer = backStackEntry.arguments?.getString("farmer") ?: ""
+            val product = backStackEntry.arguments?.getString("product") ?: ""
+            val qty = backStackEntry.arguments?.getFloat("qty")?.toDouble() ?: 0.0
+            val rate = backStackEntry.arguments?.getFloat("rate")?.toDouble() ?: 0.0
+
             NewArrivalScreen(
                 viewModel = arrivalViewModel,
                 ocrBillNo = billNo,
                 ocrAmount = amount,
                 ocrDate = date,
+                ocrFarmer = farmer,
+                ocrProduct = product,
+                ocrQty = qty,
+                ocrRate = rate,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -379,7 +402,11 @@ fun SetupNavGraph(navController: NavHostController) {
             arguments = listOf(
                 navArgument("billNo") { defaultValue = ""; type = NavType.StringType },
                 navArgument("amount") { defaultValue = 0f; type = NavType.FloatType },
-                navArgument("date") { defaultValue = 0L; type = NavType.LongType }
+                navArgument("date") { defaultValue = 0L; type = NavType.LongType },
+                navArgument("buyer") { defaultValue = ""; type = NavType.StringType },
+                navArgument("product") { defaultValue = ""; type = NavType.StringType },
+                navArgument("qty") { defaultValue = 0f; type = NavType.FloatType },
+                navArgument("rate") { defaultValue = 0f; type = NavType.FloatType }
             )
         ) { backStackEntry ->
             Timber.i("NavGraph: Navigating to Sale")
@@ -387,11 +414,20 @@ fun SetupNavGraph(navController: NavHostController) {
             val billNo = backStackEntry.arguments?.getString("billNo") ?: ""
             val amount = backStackEntry.arguments?.getFloat("amount")?.toDouble() ?: 0.0
             val date = backStackEntry.arguments?.getLong("date") ?: 0L
+            val buyer = backStackEntry.arguments?.getString("buyer") ?: ""
+            val product = backStackEntry.arguments?.getString("product") ?: ""
+            val qty = backStackEntry.arguments?.getFloat("qty")?.toDouble() ?: 0.0
+            val rate = backStackEntry.arguments?.getFloat("rate")?.toDouble() ?: 0.0
+
             SaleScreen(
                 viewModel = saleViewModel,
                 ocrBillNo = billNo,
                 ocrAmount = amount,
                 ocrDate = date,
+                ocrBuyer = buyer,
+                ocrProduct = product,
+                ocrQty = qty,
+                ocrRate = rate,
                 onBackClick = { navController.popBackStack() }
             )
         }
@@ -400,7 +436,9 @@ fun SetupNavGraph(navController: NavHostController) {
             arguments = listOf(
                 navArgument("billNo") { defaultValue = ""; type = NavType.StringType },
                 navArgument("amount") { defaultValue = 0f; type = NavType.FloatType },
-                navArgument("date") { defaultValue = 0L; type = NavType.LongType }
+                navArgument("date") { defaultValue = 0L; type = NavType.LongType },
+                navArgument("party") { defaultValue = ""; type = NavType.StringType },
+                navArgument("mode") { defaultValue = ""; type = NavType.StringType }
             )
         ) { backStackEntry ->
             Timber.i("NavGraph: Navigating to Payment")
@@ -408,11 +446,16 @@ fun SetupNavGraph(navController: NavHostController) {
             val billNo = backStackEntry.arguments?.getString("billNo") ?: ""
             val amount = backStackEntry.arguments?.getFloat("amount")?.toDouble() ?: 0.0
             val date = backStackEntry.arguments?.getLong("date") ?: 0L
+            val party = backStackEntry.arguments?.getString("party") ?: ""
+            val mode = backStackEntry.arguments?.getString("mode") ?: ""
+
             PaymentScreen(
                 viewModel = paymentViewModel,
                 ocrBillNo = billNo,
                 ocrAmount = amount,
                 ocrDate = date,
+                ocrPartyName = party,
+                ocrMode = mode,
                 onBackClick = { navController.popBackStack() }
             )
         }
@@ -484,11 +527,12 @@ fun SetupNavGraph(navController: NavHostController) {
                 viewModel = billScanViewModel,
                 isPremium = isPremium,
                 onUpgradeClick = { navController.navigate(Screen.Premium.route) },
-                onNavigateToEntry = { target, billNo, amount, date ->
+                onNavigateToEntry = { target, billNo, amount, date, farmer, buyer, party, product, qty, rate, mode ->
                     val route = when(target) {
-                        ScanTarget.STOCK_ENTRY -> Screen.NewArrival.passOcr(billNo, amount, date)
-                        ScanTarget.SALE_ENTRY -> Screen.Sale.passOcr(billNo, amount, date)
-                        ScanTarget.PAYMENT -> Screen.Payment.passOcr(billNo, amount, date)
+                        ScanTarget.STOCK_ENTRY -> Screen.NewArrival.passOcr(billNo, amount, date, farmer, product, qty, rate)
+                        ScanTarget.SALE_ENTRY -> Screen.Sale.passOcr(billNo, amount, date, buyer, product, qty, rate)
+                        ScanTarget.PAYMENT, ScanTarget.CHEQUE -> Screen.Payment.passOcr(billNo, amount, date, party, mode)
+                        ScanTarget.EXPENSE -> Screen.Expense.route
                     }
                     navController.navigate(route) {
                         popUpTo(Screen.BillScan.route) { inclusive = true }
@@ -529,6 +573,7 @@ fun SetupNavGraph(navController: NavHostController) {
                 viewModel = settingsViewModel,
                 onBackClick = { navController.popBackStack() },
                 onViewProfile = { navController.navigate(Screen.Profile.route) },
+                onViewCompanyProfile = { navController.navigate(Screen.CompanyProfile.route) },
                 onViewBackup = { navController.navigate(Screen.Backup.route) },
                 onViewSubscription = { navController.navigate(Screen.Premium.route) },
                 onLanguageChanged = {
@@ -542,6 +587,14 @@ fun SetupNavGraph(navController: NavHostController) {
                         popUpTo(Screen.Dashboard.route) { inclusive = true }
                     }
                 }
+            )
+        }
+
+        composable(route = Screen.CompanyProfile.route) {
+            val companyViewModel: CompanyViewModel = hiltViewModel()
+            CompanyProfileScreen(
+                viewModel = companyViewModel,
+                onBack = { navController.popBackStack() }
             )
         }
 

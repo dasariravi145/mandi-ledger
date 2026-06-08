@@ -18,4 +18,5 @@ interface ReportRepository {
     fun getTotalCommission(start: Long, end: Long): Flow<Double?>
     fun getBuyerPendingTotal(): Flow<Double?>
     fun getFarmerPendingTotal(): Flow<Double?>
+    suspend fun recalculateCommissions()
 }

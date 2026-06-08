@@ -1,35 +1,42 @@
 package com.dasariravi145.agrolynch.data.repository
 
+import android.content.Context
 import androidx.room.withTransaction
 import com.dasariravi145.agrolynch.data.local.AgroLynchDatabase
 import com.dasariravi145.agrolynch.data.local.dao.ArrivalDao
 import com.dasariravi145.agrolynch.data.local.dao.BuyerDao
 import com.dasariravi145.agrolynch.data.local.dao.PaymentDao
 import com.dasariravi145.agrolynch.data.local.dao.SaleDao
+import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import com.dasariravi145.agrolynch.data.local.entity.PaymentEntity
 import com.dasariravi145.agrolynch.data.local.entity.SaleEntity
 import com.dasariravi145.agrolynch.data.local.entity.SaleItemEntity
 import com.dasariravi145.agrolynch.domain.repository.SaleRepository
+import com.dasariravi145.agrolynch.util.PdfGenerator
 import com.dasariravi145.agrolynch.util.Resource
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.io.File
 import javax.inject.Inject
 
 class SaleRepositoryImpl @Inject constructor(
     private val database: AgroLynchDatabase,
     private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    @ApplicationContext private val context: Context
 ) : SaleRepository {
 
     private val saleDao = database.saleDao()
     private val arrivalDao = database.arrivalDao()
     private val buyerDao = database.buyerDao()
     private val paymentDao = database.paymentDao()
+    private val profileDao = database.companyProfileDao()
 
     private val repositoryScope = CoroutineScope(Dispatchers.IO)
 
@@ -39,66 +46,71 @@ class SaleRepositoryImpl @Inject constructor(
     override fun getSales(): Flow<List<SaleEntity>> = saleDao.getAllSales()
 
     override suspend fun createSale(sale: SaleEntity, items: List<SaleItemEntity>): Resource<Unit> {
-        return try {
-            val updatedBuyer = database.withTransaction {
-                // 1. Get Buyer
-                val buyer = buyerDao.getBuyerById(sale.buyerId) ?: throw Exception("Buyer not found")
+        return withContext(Dispatchers.IO) {
+            try {
+                val startTime = System.currentTimeMillis()
+                val (updatedBuyer, profile) = database.withTransaction {
+                    val buyer = buyerDao.getBuyerById(sale.buyerId) ?: throw Exception("Buyer not found")
+                    val profile = profileDao.getProfile().first() ?: CompanyProfileEntity()
 
-                // 2. Save Sale and SaleItems to Local DB
-                saleDao.insertSale(sale)
-                saleDao.insertSaleItems(items)
+                    saleDao.insertSale(sale)
+                    saleDao.insertSaleItems(items)
 
-                // 3. Update Stocks
-                for (item in items) {
-                    arrivalDao.reduceStock(item.arrivalId, item.quantitySold)
-                }
-
-                // 4. Update Buyer Khata
-                val updatedBuyer = buyer.copy(
-                    totalPurchase = buyer.totalPurchase + sale.totalAmount,
-                    pendingAmount = buyer.pendingAmount + sale.pendingAmount,
-                    lastUpdated = System.currentTimeMillis(),
-                    isSynced = false
-                )
-                buyerDao.updateBuyer(updatedBuyer)
-                
-                timber.log.Timber.i("Sale Entry Added: Buyer=%s, Amount=%f, TotalMargin=%f", 
-                    sale.buyerName, sale.totalAmount, sale.totalMargin)
-
-                updatedBuyer
-            }
-
-            // 5. Sync to Firebase
-            userId?.let { uid ->
-                repositoryScope.launch {
-                    try {
-                        val batch = firestore.batch()
-                        val saleRef = firestore.collection("users").document(uid).collection("sales").document(sale.id)
-                        batch.set(saleRef, sale)
-
-                        batch.set(firestore.collection("users").document(uid).collection("buyers").document(updatedBuyer.id), updatedBuyer)
-
-                        for (item in items) {
-                            val itemRef = firestore.collection("users").document(uid).collection("sales").document(sale.id)
-                                .collection("items").document(item.id)
-                            batch.set(itemRef, item)
-                            
-                            val arrival = arrivalDao.getArrivalById(item.arrivalId)
-                            if (arrival != null) {
-                                val arrivalRef = firestore.collection("users").document(uid).collection("arrivals").document(arrival.id)
-                                batch.set(arrivalRef, arrival)
-                            }
-                        }
-                        batch.commit().await()
-                        saleDao.markAsSynced(sale.id)
-                    } catch (e: Exception) {
-                        // Will be synced later
+                    for (item in items) {
+                        arrivalDao.reduceStock(item.arrivalId, item.quantitySold)
                     }
+
+                    val totalNetReceivable = sale.totalNetAmount
+                    val updatedBuyer = buyer.copy(
+                        totalPurchase = buyer.totalPurchase + totalNetReceivable,
+                        pendingAmount = buyer.pendingAmount + totalNetReceivable,
+                        lastUpdated = System.currentTimeMillis(),
+                        isSynced = false
+                    )
+                    buyerDao.updateBuyer(updatedBuyer)
+                    profileDao.incrementInvoiceNumber()
+                    updatedBuyer to profile
                 }
+                
+                val dbTime = System.currentTimeMillis() - startTime
+                timber.log.Timber.i("Sale Save: DB transaction took %dms", dbTime)
+
+                // Async Background Tasks
+                repositoryScope.launch {
+                    val backgroundStart = System.currentTimeMillis()
+                    
+                    // Generate Invoice PDF with Branding in background
+                    try {
+                        PdfGenerator.generateBuyerSalePdf(context, profile, sale, items)
+                    } catch (e: Exception) {
+                        timber.log.Timber.e(e, "Error generating Sale PDF in background")
+                    }
+
+                    // Background sync
+                    userId?.let { uid ->
+                        try {
+                            val batch = firestore.batch()
+                            batch.set(firestore.collection("users").document(uid).collection("sales").document(sale.id), sale)
+                            batch.set(firestore.collection("users").document(uid).collection("buyers").document(updatedBuyer.id), updatedBuyer)
+                            for (item in items) {
+                                batch.set(firestore.collection("users").document(uid).collection("sales").document(sale.id).collection("items").document(item.id), item)
+                            }
+                            batch.commit().await()
+                            saleDao.markAsSynced(sale.id)
+                        } catch (e: Exception) { 
+                            timber.log.Timber.e(e, "Firebase sync failed for Sale")
+                        }
+                    }
+                    
+                    val bgTime = System.currentTimeMillis() - backgroundStart
+                    timber.log.Timber.i("Sale Save: Background tasks took %dms", bgTime)
+                }
+
+                Resource.Success(Unit)
+            } catch (e: Exception) {
+                timber.log.Timber.e(e, "Create Sale Failed")
+                Resource.Error(e.message ?: "An unknown error occurred")
             }
-            Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error(e.message ?: "An unknown error occurred")
         }
     }
 
@@ -107,7 +119,7 @@ class SaleRepositoryImpl @Inject constructor(
             saleDao.updateSale(sale.copy(isSynced = false))
             Resource.Success(Unit)
         } catch (e: Exception) {
-            Resource.Error(e.message ?: "Update failed")
+            Resource.Error("Update failed")
         }
     }
 
@@ -116,7 +128,7 @@ class SaleRepositoryImpl @Inject constructor(
             saleDao.softDeleteSale(id)
             Resource.Success(Unit)
         } catch (e: Exception) {
-            Resource.Error(e.message ?: "Delete failed")
+            Resource.Error("Delete failed")
         }
     }
 
@@ -126,7 +138,6 @@ class SaleRepositoryImpl @Inject constructor(
                 val sale = saleDao.getSaleById(saleId) ?: throw Exception("Sale not found")
                 val buyer = buyerDao.getBuyerById(sale.buyerId) ?: throw Exception("Buyer not found")
 
-                // 1. Update Sale
                 val updatedSale = sale.copy(
                     paidAmount = sale.paidAmount + payment.amount,
                     pendingAmount = sale.pendingAmount - payment.amount,
@@ -134,21 +145,17 @@ class SaleRepositoryImpl @Inject constructor(
                 )
                 saleDao.updateSale(updatedSale)
 
-                // 2. Update Buyer
                 val updatedBuyer = buyer.copy(
                     pendingAmount = buyer.pendingAmount - payment.amount,
                     lastUpdated = System.currentTimeMillis(),
                     isSynced = false
                 )
                 buyerDao.updateBuyer(updatedBuyer)
-
-                // 3. Save Payment
                 paymentDao.insertPayment(payment.copy(remainingBalance = updatedBuyer.pendingAmount))
                 
                 updatedSale to updatedBuyer
             }
 
-            // 4. Sync to Firebase
             userId?.let { uid ->
                 repositoryScope.launch {
                     try {
@@ -161,9 +168,7 @@ class SaleRepositoryImpl @Inject constructor(
                         saleDao.markAsSynced(updatedSale.id)
                         buyerDao.markAsSynced(updatedBuyer.id)
                         paymentDao.markAsSynced(payment.id)
-                    } catch (e: Exception) {
-                        // Will be synced later
-                    }
+                    } catch (e: Exception) { }
                 }
             }
             Resource.Success(Unit)
@@ -181,10 +186,7 @@ class SaleRepositoryImpl @Inject constructor(
                 firestore.runTransaction { transaction ->
                     val saleRef = firestore.collection("users").document(uid).collection("sales").document(sale.id)
                     transaction.set(saleRef, sale)
-                    for (item in items) {
-                        val itemRef = saleRef.collection("items").document(item.id)
-                        transaction.set(itemRef, item)
-                    }
+                    for (item in items) { transaction.set(saleRef.collection("items").document(item.id), item) }
                 }.await()
                 saleDao.markAsSynced(sale.id)
             }

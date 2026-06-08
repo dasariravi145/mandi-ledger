@@ -4,6 +4,16 @@ import androidx.room.*
 import com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity
 import kotlinx.coroutines.flow.Flow
 
+data class FarmerStockInfo(
+    val farmerId: String,
+    val farmerName: String
+)
+
+data class ProductStockInfo(
+    val productId: String,
+    val productName: String
+)
+
 @Dao
 interface ArrivalDao {
     @Query("SELECT * FROM arrivals WHERE isDeleted = 0 ORDER BY date DESC")
@@ -14,6 +24,12 @@ interface ArrivalDao {
 
     @Query("SELECT * FROM arrivals WHERE productId = :productId AND grade = :grade AND remainingQuantity > 0 AND isDeleted = 0 ORDER BY date ASC")
     fun getAvailableStockByProductAndGrade(productId: String, grade: String): Flow<List<ArrivalEntity>>
+
+    @Query("SELECT DISTINCT farmerId, farmerName FROM arrivals WHERE remainingQuantity > 0 AND isDeleted = 0")
+    fun getFarmersWithStock(): Flow<List<FarmerStockInfo>>
+
+    @Query("SELECT * FROM arrivals WHERE farmerId = :farmerId AND remainingQuantity > 0 AND isDeleted = 0 ORDER BY date ASC")
+    fun getAvailableStockByFarmer(farmerId: String): Flow<List<ArrivalEntity>>
 
     @Query("SELECT * FROM arrivals WHERE id = :id")
     suspend fun getArrivalById(id: String): ArrivalEntity?

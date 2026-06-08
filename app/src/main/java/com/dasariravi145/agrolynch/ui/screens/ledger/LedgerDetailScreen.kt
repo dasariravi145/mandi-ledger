@@ -18,6 +18,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.domain.model.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -72,13 +74,13 @@ fun LedgerDetailScreen(
             TopAppBar(
                 title = { 
                     Column {
-                        Text(summary?.partyName ?: "Ledger Details", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text(if (partyType == "FARMER") "Farmer / రైతు" else "Buyer / వ్యాపారి", fontSize = 11.sp, color = Color.Gray)
+                        Text(summary?.partyName ?: stringResource(R.string.ledger_details), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text(if (partyType == "FARMER") stringResource(R.string.farmer) else stringResource(R.string.buyer), fontSize = 11.sp, color = Color.Gray)
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
@@ -118,7 +120,7 @@ fun LedgerDetailScreen(
 
                 if (s.entries.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No transactions found matching filters.", color = Color.Gray)
+                        Text(stringResource(R.string.no_transactions_found), color = Color.Gray)
                     }
                 } else {
                     LazyColumn(
@@ -161,11 +163,11 @@ fun LedgerStatsHeader(summary: LedgerSummary) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
-                    Text("Total Transactions", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                    Text(stringResource(R.string.total_transactions), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
                     Text(summary.totalTransactions.toString(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("Pending Balance / బాకీ", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                    Text(stringResource(R.string.pending), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
                     Text("₹${String.format(Locale.US, "%.2f", summary.balance)}", color = Color(0xFFFFEB3B), fontSize = 24.sp, fontWeight = FontWeight.Black)
                 }
             }
@@ -175,10 +177,10 @@ fun LedgerStatsHeader(summary: LedgerSummary) {
             Spacer(modifier = Modifier.height(16.dp))
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                SummaryStatItem("Total Amount", summary.totalDebit)
-                SummaryStatItem("Payments", summary.totalCredit)
+                SummaryStatItem(stringResource(R.string.total_amount), summary.totalDebit)
+                SummaryStatItem(stringResource(R.string.payments), summary.totalCredit)
                 if (summary.advanceAmount > 0) {
-                    SummaryStatItem("Advance", summary.advanceAmount, Color(0xFF4FC3F7))
+                    SummaryStatItem(stringResource(R.string.advance), summary.advanceAmount, Color(0xFF4FC3F7))
                 }
             }
         }
@@ -201,7 +203,7 @@ fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        placeholder = { Text("Search product, bill # or type...") },
+        placeholder = { Text(stringResource(R.string.search_ledger_hint)) },
         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray) },
         trailingIcon = { if(query.isNotEmpty()) IconButton(onClick = { onQueryChange("") }) { Icon(Icons.Default.Clear, null) } },
         shape = RoundedCornerShape(12.dp),
@@ -294,40 +296,40 @@ fun EnhancedLedgerEntryItem(entry: LedgerEntry, partyType: String) {
                     HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    Text("Calculation Details / వివరాలు", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                    Text(stringResource(R.string.calculation_details), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     entry.details?.let { details ->
                         if (details.productName.isNotEmpty()) {
                             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
-                                Text("Category / Grade", fontSize = 13.sp, color = Color.Gray)
+                                Text(stringResource(R.string.category_grade), fontSize = 13.sp, color = Color.Gray)
                                 Text("${details.category} / ${details.grade}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
-                                Text("Quantity / Unit", fontSize = 13.sp, color = Color.Gray)
+                                Text(stringResource(R.string.quantity_unit), fontSize = 13.sp, color = Color.Gray)
                                 Text("${details.quantity} ${details.unit}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
-                            DetailRow("Rate", details.rate)
+                            DetailRow(stringResource(R.string.rate), details.rate)
                             Spacer(Modifier.height(4.dp))
                         }
 
                         if (entry.transactionType == TransactionType.ARRIVAL) {
-                            DetailRow("Gross Amount / మొత్తం", details.grossAmount)
-                            DetailRow("Commission (${details.commissionPercent}%)", -details.commissionAmount, Color.Red)
-                            if (details.laborCharges > 0) DetailRow("Labor / హమాలీ", -details.laborCharges, Color.Red)
-                            if (details.transportCharges > 0) DetailRow("Transport / రవాణా", -details.transportCharges, Color.Red)
-                            DetailRow("Net Payable / నికర మొత్తం", details.netAmount, fontWeight = FontWeight.ExtraBold)
+                            DetailRow(stringResource(R.string.gross_amount), details.grossAmount)
+                            DetailRow("${stringResource(R.string.commission)} (${details.commissionPercent}%)", -details.commissionAmount, Color.Red)
+                            if (details.laborCharges > 0) DetailRow(stringResource(R.string.labor_charges), -details.laborCharges, Color.Red)
+                            if (details.transportCharges > 0) DetailRow(stringResource(R.string.transport), -details.transportCharges, Color.Red)
+                            DetailRow(stringResource(R.string.net_payable), details.netAmount, fontWeight = FontWeight.ExtraBold)
                         } else if (entry.transactionType == TransactionType.SALE) {
-                            DetailRow("Gross Amount / మొత్తం", details.grossAmount)
-                            if (details.commissionAmount > 0) DetailRow("Commission / Margin", details.commissionAmount, Color(0xFF2E7D32))
-                            if (details.laborCharges > 0) DetailRow("Labor / హమాలీ", details.laborCharges)
-                            if (details.transportCharges > 0) DetailRow("Transport / రవాణా", details.transportCharges)
-                            DetailRow("Total Collection / మొత్తం", details.netAmount, fontWeight = FontWeight.ExtraBold)
+                            DetailRow(stringResource(R.string.gross_amount), details.grossAmount)
+                            if (details.commissionAmount > 0) DetailRow(stringResource(R.string.commission_margin), details.commissionAmount, Color(0xFF2E7D32))
+                            if (details.laborCharges > 0) DetailRow(stringResource(R.string.labor_charges), details.laborCharges)
+                            if (details.transportCharges > 0) DetailRow(stringResource(R.string.transport), details.transportCharges)
+                            DetailRow(stringResource(R.string.total_collection), details.netAmount, fontWeight = FontWeight.ExtraBold)
                         } else {
-                            if (details.paymentMade > 0) DetailRow("Payment Amount", details.paymentMade, Color(0xFF2E7D32))
+                            if (details.paymentMade > 0) DetailRow(stringResource(R.string.payment_amount), details.paymentMade, Color(0xFF2E7D32))
                             if (entry.reference.isNotBlank()) {
                                 Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                                    Text("Reference", fontSize = 13.sp, color = Color.Gray)
+                                    Text(stringResource(R.string.reference), fontSize = 13.sp, color = Color.Gray)
                                     Text(entry.reference, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
                             }

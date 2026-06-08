@@ -3,7 +3,15 @@ package com.dasariravi145.agrolynch.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "payments")
+@Entity(
+    tableName = "payments",
+    indices = [
+        androidx.room.Index(value = ["partyId"]),
+        androidx.room.Index(value = ["partyType"]),
+        androidx.room.Index(value = ["date"]),
+        androidx.room.Index(value = ["isDeleted"])
+    ]
+)
 data class PaymentEntity(
     @PrimaryKey val id: String = "",
     val partyId: String = "",

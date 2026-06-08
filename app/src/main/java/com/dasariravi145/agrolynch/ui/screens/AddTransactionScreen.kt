@@ -22,6 +22,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.TransactionEntity
 import com.dasariravi145.agrolynch.data.local.entity.FarmerEntity
 import com.dasariravi145.agrolynch.ui.components.AgroButton
@@ -99,16 +101,16 @@ fun AddTransactionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (transactionId == null) "New Arrival / కొత్త రాక" else "Edit Arrival / సవరించండి") },
+                title = { Text(if (transactionId == null) stringResource(R.string.new_arrival) else stringResource(R.string.edit_arrival)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
                     if (transactionId != null) {
                         IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -123,7 +125,7 @@ fun AddTransactionScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("General Details", fontWeight = FontWeight.Bold, color = Color.Gray, fontSize = 12.sp)
+            Text(stringResource(R.string.general_details), fontWeight = FontWeight.Bold, color = Color.Gray, fontSize = 12.sp)
             
             FarmerSearchableDropdown(
                 value = farmerSearchText,
@@ -142,7 +144,7 @@ fun AddTransactionScreen(
                 OutlinedTextField(
                     value = category,
                     onValueChange = {},
-                    label = { Text("Category / వర్గం") },
+                    label = { Text(stringResource(R.string.category)) },
                     readOnly = true,
                     modifier = Modifier.fillMaxWidth().clickable { showCategoryMenu = true },
                     trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
@@ -156,8 +158,8 @@ fun AddTransactionScreen(
                 Box(modifier = Modifier.matchParentSize().clickable { showCategoryMenu = true })
                 
                 DropdownMenu(expanded = showCategoryMenu, onDismissRequest = { showCategoryMenu = false }) {
-                    DropdownMenuItem(text = { Text("Fruits") }, onClick = { category = "Fruit"; showCategoryMenu = false })
-                    DropdownMenuItem(text = { Text("Vegetables") }, onClick = { category = "Vegetable"; showCategoryMenu = false })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.fruits)) }, onClick = { category = "Fruit"; showCategoryMenu = false })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.vegetables)) }, onClick = { category = "Vegetable"; showCategoryMenu = false })
                 }
             }
 
@@ -171,30 +173,30 @@ fun AddTransactionScreen(
                         gradesInput = existing.availableGrades.joinToString(", ")
                     }
                 },
-                label = "Product Name / వస్తువు పేరు"
+                label = stringResource(R.string.product_name)
             )
 
             AgroTextField(
                 value = gradesInput,
                 onValueChange = { gradesInput = it },
-                label = "Available Grades"
+                label = stringResource(R.string.available_grades)
             )
 
             Divider()
-            Text("Weight & Price", fontWeight = FontWeight.Bold, color = Color.Gray, fontSize = 12.sp)
+            Text(stringResource(R.string.weight_price), fontWeight = FontWeight.Bold, color = Color.Gray, fontSize = 12.sp)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AgroTextField(
                     value = grossWeight,
                     onValueChange = { grossWeight = it },
-                    label = "Gross Wt",
+                    label = stringResource(R.string.gross_wt),
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
                 AgroTextField(
                     value = emptyBoxWeight,
                     onValueChange = { emptyBoxWeight = it },
-                    label = "Box Wt",
+                    label = stringResource(R.string.box_wt),
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
@@ -204,7 +206,7 @@ fun AddTransactionScreen(
                 OutlinedTextField(
                     value = String.format(Locale.US, "%.2f", netWeight),
                     onValueChange = {},
-                    label = { Text("Net Weight") },
+                    label = { Text(stringResource(R.string.net_wt)) },
                     modifier = Modifier.weight(1f),
                     readOnly = true,
                     enabled = false
@@ -212,7 +214,7 @@ fun AddTransactionScreen(
                 AgroTextField(
                     value = boxCount,
                     onValueChange = { boxCount = it },
-                    label = "Boxes",
+                    label = stringResource(R.string.boxes),
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
@@ -221,7 +223,7 @@ fun AddTransactionScreen(
             AgroTextField(
                 value = pricePerUnit,
                 onValueChange = { pricePerUnit = it },
-                label = "Price Per Unit ₹",
+                label = stringResource(R.string.price_per_unit),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
 
@@ -235,7 +237,7 @@ fun AddTransactionScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Total Amount", fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.total_amt), fontWeight = FontWeight.Medium)
                     Text(
                         "₹${String.format(Locale.US, "%.2f", totalAmount)}",
                         style = MaterialTheme.typography.titleLarge,
@@ -247,13 +249,13 @@ fun AddTransactionScreen(
             AgroTextField(
                 value = notes,
                 onValueChange = { notes = it },
-                label = "Notes / గమనికలు"
+                label = stringResource(R.string.notes)
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             AgroButton(
-                text = "Save Stock Entry / సేవ్ చేయండి",
+                text = stringResource(R.string.save_stock_entry),
                 onClick = {
                     if (farmerSearchText.isNotBlank() && productName.isNotBlank() && netWeight > 0) {
                         val transaction = TransactionEntity(
@@ -289,18 +291,18 @@ fun AddTransactionScreen(
         if (showDeleteDialog) {
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
-                title = { Text("Delete Entry?") },
-                text = { Text("Are you sure you want to delete this stock entry?") },
+                title = { Text(stringResource(R.string.delete_entry_q)) },
+                text = { Text(stringResource(R.string.delete_stock_confirm)) },
                 confirmButton = {
                     TextButton(onClick = {
                         transactionId?.let { viewModel.deleteTransaction(it) }
                         showDeleteDialog = false
                     }) {
-                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+                    TextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.cancel)) }
                 }
             )
         }
@@ -318,13 +320,13 @@ fun FarmerSearchableDropdown(
     val filtered = farmers.filter { it.name.contains(value, ignoreCase = true) }
 
     Column {
-        Text("Farmer / రైతు", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color.Gray)
+        Text(stringResource(R.string.farmer_label), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color.Gray)
         Spacer(Modifier.height(4.dp))
         Box {
             OutlinedTextField(
                 value = value,
                 onValueChange = { onValueChange(it); expanded = true },
-                placeholder = { Text("Search or Enter Farmer...") },
+                placeholder = { Text(stringResource(R.string.search_enter_farmer)) },
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = { Icon(Icons.Default.Person, null) },
                 shape = RoundedCornerShape(12.dp)

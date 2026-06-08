@@ -24,6 +24,8 @@ mlkit-text-recognition = "16.0.1"
 biometric = "1.2.0-alpha05"
 security-crypto = "1.1.0-alpha06"
 timber = "5.0.1"
+firebaseDatabase = "22.0.1"
+generativeai = "0.9.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -81,6 +83,8 @@ mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition"
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "security-crypto" }
 timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
+firebase-database = { group = "com.google.firebase", name = "firebase-database", version.ref = "firebaseDatabase" }
+generativeai = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "generativeai" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

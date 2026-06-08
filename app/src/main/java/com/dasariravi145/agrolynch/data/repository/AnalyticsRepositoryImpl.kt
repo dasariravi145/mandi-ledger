@@ -35,11 +35,12 @@ class AnalyticsRepositoryImpl @Inject constructor(
             // Today's Sales
             val todaySales = sales.filter { it.date in startOfToday..endOfToday }.sumOf { it.totalAmount }
             
-            // Commission Earned = Sale Margins + Arrival Commissions
-            val totalCommission = sales.sumOf { it.totalMargin } + arrivals.sumOf { it.commissionAmount }
+            // Commission Earned = Sale Commissions + Arrival Commissions
+            val totalCommission = sales.sumOf { it.totalCommission } + arrivals.sumOf { it.commissionAmount }
 
             // Buyer Pending = Total Sales - Payments from Buyers
-            val totalSalesAmount = sales.sumOf { it.totalAmount }
+            // Note: totalNetAmount is the final collected amount
+            val totalSalesAmount = sales.sumOf { it.totalNetAmount }
             val buyerPayments = payments.filter { it.partyType == "BUYER" }.sumOf { it.amount }
             val buyerPending = totalSalesAmount - buyerPayments
 
@@ -85,14 +86,12 @@ class AnalyticsRepositoryImpl @Inject constructor(
                 .sortedByDescending { it.totalValue }
                 .take(5)
 
-            // 4. Product Distribution
-            val colors = listOf(0xFF6200EE, 0xFF03DAC5, 0xFFBB86FC, 0xFF3700B3, 0xFF018786)
+            // 4. Product Distribution (Needs item-level data for accurate multi-product sales)
+            val chartColors = listOf(0xFF6200EE, 0xFF03DAC5, 0xFFBB86FC, 0xFF3700B3, 0xFF018786)
             val productDistribution = sales.groupBy { it.productName }
                 .toList()
-                .mapIndexed { index, pair ->
-                    val name = pair.first
-                    val list = pair.second
-                    PieChartData(name, list.sumOf { it.totalQuantity }.toFloat(), colors[index % colors.size])
+                .mapIndexed { index, (name, list) ->
+                    PieChartData(name, list.sumOf { it.totalQuantity }.toFloat(), chartColors[index % chartColors.size])
                 }
                 .sortedByDescending { it.value }
                 .take(5)

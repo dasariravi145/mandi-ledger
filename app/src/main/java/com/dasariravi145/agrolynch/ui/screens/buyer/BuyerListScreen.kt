@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.BuyerEntity
 import timber.log.Timber
 
@@ -33,17 +35,17 @@ fun BuyerListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Buyers & Traders / కొనుగోలుదారులు") },
+                title = { Text(stringResource(R.string.buyers_traders)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddClick) {
-                Icon(Icons.Default.Add, contentDescription = "Add Buyer")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_buyer))
             }
         }
     ) { padding ->
@@ -61,7 +63,7 @@ fun BuyerListScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                placeholder = { Text("Search by name, address, GST or mobile") },
+                placeholder = { Text(stringResource(R.string.search_buyers_hint)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true,
                 shape = MaterialTheme.shapes.medium
@@ -73,7 +75,7 @@ fun BuyerListScreen(
                 }
             } else if (buyers.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No buyers found / కొనుగోలుదారులు కనుగొనబడలేదు")
+                    Text(stringResource(R.string.no_buyers_found))
                 }
             } else {
                 LazyColumn(

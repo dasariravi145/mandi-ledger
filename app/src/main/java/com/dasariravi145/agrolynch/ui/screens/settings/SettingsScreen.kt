@@ -1,5 +1,7 @@
 package com.dasariravi145.agrolynch.ui.screens.settings
 
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +29,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel,
     onBackClick: () -> Unit,
     onViewProfile: () -> Unit,
+    onViewCompanyProfile: () -> Unit,
     onViewBackup: () -> Unit,
     onViewSubscription: () -> Unit,
     onLanguageChanged: () -> Unit,
@@ -35,6 +38,7 @@ fun SettingsScreen(
     val languageCode by viewModel.languageCode.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
     val isAutoBackupEnabled by viewModel.isAutoBackupEnabled.collectAsState()
+    val isPremiumPopupEnabled by viewModel.isPremiumPopupEnabled.collectAsState()
     val isPremium by viewModel.isPremium.collectAsState()
 
     var showLanguageDialog by remember { mutableStateOf(false) }
@@ -43,10 +47,10 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings / సెట్టింగులు") },
+                title = { Text(stringResource(R.string.settings)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 }
             )
@@ -60,71 +64,87 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Account Section
-            SettingsSectionTitle("Account / ఖాతా")
+            // Business Section
+            SettingsSectionTitle(stringResource(R.string.business))
             SettingsItem(
-                title = "User Profile",
-                subtitle = "View and edit profile details",
+                title = stringResource(R.string.company_profile_branding),
+                subtitle = stringResource(R.string.company_profile_branding_sub),
+                icon = Icons.Default.Business,
+                onClick = onViewCompanyProfile
+            )
+
+            // Account Section
+            SettingsSectionTitle(stringResource(R.string.account))
+            SettingsItem(
+                title = stringResource(R.string.user_profile),
+                subtitle = stringResource(R.string.user_profile_sub),
                 icon = Icons.Default.Person,
                 onClick = onViewProfile
             )
             SettingsItem(
-                title = "Subscription",
-                subtitle = if (isPremium) "Premium Member" else "Upgrade for more features",
+                title = stringResource(R.string.subscription),
+                subtitle = if (isPremium) stringResource(R.string.premium_member) else stringResource(R.string.upgrade_sub),
                 icon = Icons.Default.Star,
                 iconColor = if (isPremium) Color(0xFFFFD700) else Color.Gray,
                 onClick = onViewSubscription
             )
 
             // Preferences Section
-            SettingsSectionTitle("Preferences / ప్రాధాన్యతలు")
+            SettingsSectionTitle(stringResource(R.string.preferences))
             SettingsItem(
-                title = "Language / భాష",
+                title = stringResource(R.string.language),
                 subtitle = getLanguageName(languageCode),
                 icon = Icons.Default.Language,
                 onClick = { showLanguageDialog = true }
             )
             SettingsToggleItem(
-                title = "Dark Mode / డార్క్ మోడ్",
-                subtitle = "Toggle app theme",
+                title = stringResource(R.string.dark_mode),
+                subtitle = stringResource(R.string.toggle_theme),
                 icon = Icons.Default.BrightnessMedium,
                 checked = isDarkMode,
                 onCheckedChange = { viewModel.toggleTheme(it) }
             )
+            SettingsToggleItem(
+                title = stringResource(R.string.show_premium_offers),
+                subtitle = stringResource(R.string.show_premium_offers_sub),
+                icon = Icons.Default.NotificationsActive,
+                checked = isPremiumPopupEnabled,
+                onCheckedChange = { viewModel.togglePremiumPopup(it) }
+            )
 
             // Data Section
-            SettingsSectionTitle("Data & Security / డేటా మరియు భద్రత")
+            SettingsSectionTitle(stringResource(R.string.data_security))
             SettingsItem(
-                title = "Change PIN / పిన్ మార్చు",
-                subtitle = "Security PIN for app access",
+                title = stringResource(R.string.change_pin),
+                subtitle = stringResource(R.string.change_pin_sub),
                 icon = Icons.Default.Lock,
                 onClick = { showChangePinDialog = true }
             )
             SettingsItem(
-                title = "Backup & Reports",
-                subtitle = "Manage local and cloud backups",
+                title = stringResource(R.string.backup_reports),
+                subtitle = stringResource(R.string.backup_reports_sub),
                 icon = Icons.Default.Backup,
                 onClick = onViewBackup
             )
             SettingsToggleItem(
-                title = "Auto Backup",
-                subtitle = "Automatic weekly PDF reports",
+                title = stringResource(R.string.auto_backup),
+                subtitle = stringResource(R.string.auto_backup_sub),
                 icon = Icons.Default.CloudSync,
                 checked = isAutoBackupEnabled,
                 onCheckedChange = { viewModel.toggleAutoBackup(it) }
             )
 
             // System Section
-            SettingsSectionTitle("System / సిస్టమ్")
+            SettingsSectionTitle(stringResource(R.string.system))
             SettingsItem(
-                title = "About App",
+                title = stringResource(R.string.about_app),
                 subtitle = "Version 1.0.0",
                 icon = Icons.Default.Info,
                 onClick = { }
             )
             SettingsItem(
-                title = "Logout / లాగ్అవుట్",
-                subtitle = "Sign out from your account",
+                title = stringResource(R.string.logout),
+                subtitle = stringResource(R.string.sign_out_sub),
                 icon = Icons.Default.Logout,
                 iconColor = MaterialTheme.colorScheme.error,
                 onClick = {
@@ -166,15 +186,18 @@ fun ChangePinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var confirmPin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
+    val pinErrorDigits = stringResource(R.string.pin_error_digits)
+    val pinErrorMatch = stringResource(R.string.pin_error_match)
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Change Security PIN") },
+        title = { Text(stringResource(R.string.change_pin)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = pin,
                     onValueChange = { if (it.length <= 4) pin = it },
-                    label = { Text("New 4-Digit PIN") },
+                    label = { Text(stringResource(R.string.new_pin_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth()
@@ -182,7 +205,7 @@ fun ChangePinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
                 OutlinedTextField(
                     value = confirmPin,
                     onValueChange = { if (it.length <= 4) confirmPin = it },
-                    label = { Text("Confirm New PIN") },
+                    label = { Text(stringResource(R.string.confirm_pin_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth()
@@ -196,19 +219,19 @@ fun ChangePinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
             Button(
                 onClick = {
                     if (pin.length < 4) {
-                        error = "PIN must be 4 digits"
+                        error = pinErrorDigits
                     } else if (pin != confirmPin) {
-                        error = "PINs do not match"
+                        error = pinErrorMatch
                     } else {
                         onConfirm(pin)
                     }
                 }
             ) {
-                Text("Update")
+                Text(stringResource(R.string.update))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }
@@ -288,7 +311,7 @@ fun LanguageSelectionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select Language") },
+        title = { Text(stringResource(R.string.select_language)) },
         text = {
             Column {
                 LanguageOption("English", "en", currentCode == "en") { onSelect("en") }
@@ -299,7 +322,7 @@ fun LanguageSelectionDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }

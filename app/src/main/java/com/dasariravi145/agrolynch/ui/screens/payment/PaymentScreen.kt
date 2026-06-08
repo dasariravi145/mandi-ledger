@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.BuyerEntity
 import com.dasariravi145.agrolynch.data.local.entity.FarmerEntity
 import com.dasariravi145.agrolynch.data.local.entity.PaymentEntity
@@ -34,6 +36,8 @@ fun PaymentScreen(
     ocrBillNo: String = "",
     ocrAmount: Double = 0.0,
     ocrDate: Long = 0L,
+    ocrPartyName: String = "",
+    ocrMode: String = "",
     onBackClick: () -> Unit
 ) {
     val payments by viewModel.payments.collectAsState()
@@ -46,14 +50,24 @@ fun PaymentScreen(
     var showAddDialog by remember { mutableStateOf(ocrAmount > 0) }
     var selectedPaymentToEdit by remember { mutableStateOf<PaymentEntity?>(null) }
 
+    LaunchedEffect(ocrPartyName) {
+        if (ocrPartyName.isNotEmpty()) {
+            // Find if party is buyer or farmer to set tab
+            val isBuyer = buyers.any { it.name.contains(ocrPartyName, true) }
+            val isFarmer = farmers.any { it.name.contains(ocrPartyName, true) }
+            if (isFarmer && !isBuyer) viewModel.onTabSelected(1)
+            else if (isBuyer) viewModel.onTabSelected(0)
+        }
+    }
+
     Scaffold(
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text(if (selectedTab == 0) "Buyer Payments / వ్యాపారి చెల్లింపులు" else "Farmer Payments / రైతు చెల్లింపులు") },
+                    title = { Text(if (selectedTab == 0) stringResource(R.string.buyer_payments) else stringResource(R.string.farmer_payments)) },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                         }
                     }
                 )
@@ -61,19 +75,19 @@ fun PaymentScreen(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { viewModel.onTabSelected(0) },
-                        text = { Text("Buyers / వ్యాపారులు") }
+                        text = { Text(stringResource(R.string.traders)) }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { viewModel.onTabSelected(1) },
-                        text = { Text("Farmers / రైతులు") }
+                        text = { Text(stringResource(R.string.farmers)) }
                     )
                 }
             }
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Payment")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_payment))
             }
         }
     ) { padding ->
@@ -84,7 +98,7 @@ fun PaymentScreen(
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AutoFixHigh, null, tint = Color(0xFF2E7D32))
                         Spacer(Modifier.width(12.dp))
-                        Text("Auto-filling payment from bill (Amt: ₹$ocrAmount)", fontSize = 12.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.auto_fill_payment_bill, ocrAmount), fontSize = 12.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -117,6 +131,7 @@ fun PaymentScreen(
                 selectedTab = selectedTab,
                 initialAmount = if (ocrAmount > 0) ocrAmount.toString() else "",
                 initialRef = ocrBillNo,
+                initialPartyName = ocrPartyName,
                 onPartySelected = viewModel::onPartySelected,
                 onDismiss = { showAddDialog = false },
                 onSave = { partyId, partyName, partyType, amount, mode, ref, notes ->
@@ -196,13 +211,34 @@ fun AddPaymentDialog(
     selectedTab: Int,
     initialAmount: String = "",
     initialRef: String = "",
+    initialPartyName: String = "",
     onPartySelected: (String) -> Unit,
     onDismiss: () -> Unit,
     onSave: (String, String, String, Double, String, String, String) -> Unit
 ) {
     val partyType = if (selectedTab == 0) "BUYER" else "FARMER"
+    
     var selectedPartyId by remember { mutableStateOf("") }
     var selectedPartyName by remember { mutableStateOf("") }
+
+    LaunchedEffect(initialPartyName, selectedTab) {
+        if (initialPartyName.isNotEmpty()) {
+            if (selectedTab == 0) {
+                buyers.find { it.name.contains(initialPartyName, true) }?.let {
+                    selectedPartyId = it.id
+                    selectedPartyName = it.name
+                    onPartySelected(it.id)
+                }
+            } else {
+                farmers.find { it.name.contains(initialPartyName, true) }?.let {
+                    selectedPartyId = it.id
+                    selectedPartyName = it.name
+                    onPartySelected(it.id)
+                }
+            }
+        }
+    }
+
     var amount by remember { mutableStateOf(initialAmount) }
     var paymentMode by remember { mutableStateOf(if (initialRef.isNotEmpty()) "UPI" else "CASH") }
     var reference by remember { mutableStateOf(initialRef) }
@@ -223,7 +259,7 @@ fun AddPaymentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (selectedTab == 0) "Buyer Payment / వ్యాపారి చెల్లింపు" else "Farmer Payment / రైతుకు చెల్లింపు") },
+        title = { Text(if (selectedTab == 0) stringResource(R.string.buyer_payments) else stringResource(R.string.farmer_payments)) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -232,7 +268,7 @@ fun AddPaymentDialog(
                 // Party Dropdown
                 ExposedDropdownMenuBox(expanded = partyExpanded, onExpandedChange = { partyExpanded = it }) {
                     OutlinedTextField(
-                        value = selectedPartyName.ifEmpty { if (selectedTab == 0) "Select Buyer" else "Select Farmer" },
+                        value = selectedPartyName.ifEmpty { if (selectedTab == 0) stringResource(R.string.select_buyer) else stringResource(R.string.select_farmer) },
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = partyExpanded) },
@@ -276,7 +312,7 @@ fun AddPaymentDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                text = if (selectedTab == 0) "Amount to Receive / వ్యాపారి బాకీ" else "Amount to Pay / రైతుకు ఇవ్వాల్సిన బాకీ",
+                                text = if (selectedTab == 0) stringResource(R.string.amount_to_receive) else stringResource(R.string.amount_to_pay),
                                 fontSize = 12.sp
                             )
                             Text(
@@ -296,7 +332,7 @@ fun AddPaymentDialog(
                         FilterChip(
                             selected = settlementType == "PARTIAL",
                             onClick = { settlementType = "PARTIAL" },
-                            label = { Text("Partial / కొంత మొత్తం") },
+                            label = { Text(stringResource(R.string.partial_payment)) },
                             modifier = Modifier.weight(1f)
                         )
                         FilterChip(
@@ -305,7 +341,7 @@ fun AddPaymentDialog(
                                 settlementType = "FULL"
                                 amount = String.format(Locale.US, "%.2f", Math.abs(pendingAmount))
                             },
-                            label = { Text("Full / పూర్తి సెటిల్మెంట్") },
+                            label = { Text(stringResource(R.string.full_settlement)) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -317,7 +353,7 @@ fun AddPaymentDialog(
                         amount = it
                         if (settlementType == "FULL") settlementType = "PARTIAL"
                     },
-                    label = { Text("Payment Amount / చెల్లింపు మొత్తం") },
+                    label = { Text(stringResource(R.string.payment_amount)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     prefix = { Text("₹") },
@@ -329,7 +365,7 @@ fun AddPaymentDialog(
                         value = paymentMode,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Mode / పద్ధతి") },
+                        label = { Text(stringResource(R.string.payment_mode)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
@@ -344,7 +380,7 @@ fun AddPaymentDialog(
                     OutlinedTextField(
                         value = reference,
                         onValueChange = { reference = it },
-                        label = { Text("Ref No / ట్రాన్సాక్షన్ నంబర్") },
+                        label = { Text(stringResource(R.string.ref_no)) },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -352,7 +388,7 @@ fun AddPaymentDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Notes / గమనికలు") },
+                    label = { Text(stringResource(R.string.notes)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -368,11 +404,11 @@ fun AddPaymentDialog(
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 enabled = selectedPartyId.isNotEmpty() && amount.isNotEmpty()
             ) {
-                Text("Confirm Payment / చెల్లింపును ధృవీకరించు")
+                Text(stringResource(R.string.confirm_payment))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel / రద్దు") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }
@@ -392,36 +428,36 @@ fun EditPaymentDialog(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Payment?") },
-            text = { Text("Are you sure you want to delete this payment record?") },
+            title = { Text(stringResource(R.string.delete_payment_q)) },
+            text = { Text(stringResource(R.string.delete_payment_confirm)) },
             confirmButton = {
                 TextButton(onClick = { onDelete(payment.id) }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Payment / సవరించండి") },
+        title = { Text(stringResource(R.string.edit_payment)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Party: ${payment.partyName} (${payment.partyType})")
+                Text(stringResource(R.string.party) + ": ${payment.partyName} (${payment.partyType})")
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it },
-                    label = { Text("Amount") },
+                    label = { Text(stringResource(R.string.amount)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Notes") },
+                    label = { Text(stringResource(R.string.notes)) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 TextButton(
@@ -430,7 +466,7 @@ fun EditPaymentDialog(
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Delete Record", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete_record), color = MaterialTheme.colorScheme.error)
                 }
             }
         },
@@ -443,11 +479,11 @@ fun EditPaymentDialog(
                     ))
                 }
             ) {
-                Text("Update")
+                Text(stringResource(R.string.update))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }

@@ -21,6 +21,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.ads.BannerAdView
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
+import com.dasariravi145.agrolynch.ui.screens.premium.PremiumUpgradePopup
+import com.dasariravi145.agrolynch.util.PdfGenerator
 import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,8 +52,34 @@ fun DashboardScreen(
 ) {
     Timber.d("DashboardScreen: Initializing...")
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val exportStatus by viewModel.exportStatus.collectAsState(initial = "")
+    val showPremiumPopup by viewModel.showPremiumPopup.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    
     var showMoreMenu by remember { mutableStateOf(false) }
     var showPremiumLockedDialog by remember { mutableStateOf(false) }
+
+    if (showPremiumPopup) {
+        PremiumUpgradePopup(
+            onUpgradeClick = {
+                viewModel.onPremiumUpgradeClick()
+                onUpgradeClick()
+            },
+            onSkipClick = { doNotShowAgain -> viewModel.onPremiumPopupDismiss(doNotShowAgain) }
+        )
+    }
+
+    LaunchedEffect(exportStatus) {
+        if (exportStatus == "PREMIUM_REQUIRED") {
+            showPremiumLockedDialog = true
+        } else if (exportStatus.startsWith("SUCCESS:")) {
+            val file = java.io.File(exportStatus.removePrefix("SUCCESS:"))
+            PdfGenerator.sharePdf(context, file)
+        } else if (exportStatus.startsWith("FAILED:")) {
+            snackbarHostState.showSnackbar(exportStatus.removePrefix("FAILED:"))
+        }
+    }
 
     // Optimization: remember expensive string formatting
     val todaySalesStr = remember(state.summary.todaySales) { 
@@ -102,6 +130,9 @@ fun DashboardScreen(
                         IconButton(onClick = onUpgradeClick) {
                             Icon(Icons.Default.Star, contentDescription = "Upgrade", tint = Color(0xFFFFD700))
                         }
+                    }
+                    IconButton(onClick = { viewModel.exportSummary(context) }) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Export Summary", tint = if(isPremium) MaterialTheme.colorScheme.primary else Color.Gray)
                     }
                     IconButton(onClick = onViewSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -194,7 +225,7 @@ fun DashboardScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            "Account Summary / ఖాతా సారాంశం",
+                            stringResource(R.string.account_summary),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.Gray

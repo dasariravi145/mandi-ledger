@@ -16,6 +16,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.ExpenseEntity
 import java.text.SimpleDateFormat
 import java.util.*
@@ -36,17 +38,17 @@ fun ExpenseScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Expenses / ఖర్చులు") },
+                title = { Text(stringResource(R.string.expenses)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Expense")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_expense))
             }
         }
     ) { padding ->
@@ -64,7 +66,7 @@ fun ExpenseScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
-                        Text(text = "Recent Expenses", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(text = stringResource(R.string.recent_expenses), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     }
                     items(expenses) { expense ->
                         ExpenseItem(
@@ -112,7 +114,7 @@ fun ExpenseSummaryCard(total: Double) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "Today's Total Expenses", fontSize = 14.sp)
+            Text(text = stringResource(R.string.today_total_expenses), fontSize = 14.sp)
             Text(text = "₹$total", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
         }
     }
@@ -160,7 +162,7 @@ fun AddExpenseDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Expense / ఖర్చును జోడించండి") },
+        title = { Text(stringResource(R.string.add_expense)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
@@ -168,7 +170,7 @@ fun AddExpenseDialog(
                         value = selectedType,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Type / రకం") },
+                        label = { Text(stringResource(R.string.type)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
@@ -182,7 +184,7 @@ fun AddExpenseDialog(
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it },
-                    label = { Text("Amount / మొత్తం") },
+                    label = { Text(stringResource(R.string.amount)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     prefix = { Text("₹") }
@@ -191,7 +193,7 @@ fun AddExpenseDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Description / వివరణ") },
+                    label = { Text(stringResource(R.string.description)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -204,11 +206,11 @@ fun AddExpenseDialog(
                 },
                 enabled = amount.isNotEmpty()
             ) {
-                Text("Save / సేవ్")
+                Text(stringResource(R.string.save))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel / రద్దు") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }
@@ -228,36 +230,36 @@ fun EditExpenseDialog(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Expense?") },
-            text = { Text("Are you sure you want to delete this expense record?") },
+            title = { Text(stringResource(R.string.delete_expense_q)) },
+            text = { Text(stringResource(R.string.delete_expense_confirm)) },
             confirmButton = {
                 TextButton(onClick = { onDelete(expense.id) }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Expense / సవరించండి") },
+        title = { Text(stringResource(R.string.edit_expense)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Type: ${expense.type}")
+                Text(stringResource(R.string.type) + ": ${expense.type}")
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it },
-                    label = { Text("Amount") },
+                    label = { Text(stringResource(R.string.amount)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Description") },
+                    label = { Text(stringResource(R.string.description)) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 TextButton(
@@ -266,7 +268,7 @@ fun EditExpenseDialog(
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Delete Record", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete_record), color = MaterialTheme.colorScheme.error)
                 }
             }
         },
@@ -279,11 +281,11 @@ fun EditExpenseDialog(
                     ))
                 }
             ) {
-                Text("Update")
+                Text(stringResource(R.string.update))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }

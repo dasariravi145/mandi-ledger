@@ -1,18 +1,23 @@
 package com.dasariravi145.agrolynch.data.repository
 
+import android.content.Context
 import androidx.room.withTransaction
 import com.dasariravi145.agrolynch.data.local.AgroLynchDatabase
 import com.dasariravi145.agrolynch.data.local.dao.BuyerDao
 import com.dasariravi145.agrolynch.data.local.dao.FarmerDao
 import com.dasariravi145.agrolynch.data.local.dao.PaymentDao
+import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import com.dasariravi145.agrolynch.data.local.entity.PaymentEntity
 import com.dasariravi145.agrolynch.domain.repository.PaymentRepository
+import com.dasariravi145.agrolynch.util.PdfGenerator
 import com.dasariravi145.agrolynch.util.Resource
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -20,12 +25,14 @@ import javax.inject.Inject
 class PaymentRepositoryImpl @Inject constructor(
     private val database: AgroLynchDatabase,
     private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    @ApplicationContext private val context: Context
 ) : PaymentRepository {
 
     private val paymentDao = database.paymentDao()
     private val farmerDao = database.farmerDao()
     private val buyerDao = database.buyerDao()
+    private val profileDao = database.companyProfileDao()
 
     private val repositoryScope = CoroutineScope(Dispatchers.IO)
 
@@ -36,12 +43,12 @@ class PaymentRepositoryImpl @Inject constructor(
 
     override suspend fun addPayment(payment: PaymentEntity): Resource<Unit> {
         return try {
-            if (payment.partyType == "FARMER") {
-                val (updatedFarmer, updatedPayment) = database.withTransaction {
+            val (finalPayment, profile) = if (payment.partyType == "FARMER") {
+                val (updatedFarmer, updatedPayment, profile) = database.withTransaction {
                     val farmer = farmerDao.getFarmerById(payment.partyId) ?: throw Exception("Farmer not found")
+                    val profile = profileDao.getProfile().first() ?: CompanyProfileEntity()
                     
-                    val paymentAmount = payment.amount
-                    var newPending = farmer.pendingAmount - paymentAmount
+                    var newPending = farmer.pendingAmount - payment.amount
                     var newAdvance = farmer.advanceAmount
                     
                     if (newPending < 0) {
@@ -50,7 +57,7 @@ class PaymentRepositoryImpl @Inject constructor(
                     }
                     
                     val updatedFarmer = farmer.copy(
-                        totalPayments = farmer.totalPayments + paymentAmount,
+                        totalPayments = farmer.totalPayments + payment.amount,
                         pendingAmount = newPending,
                         advanceAmount = newAdvance,
                         lastUpdated = System.currentTimeMillis(),
@@ -64,11 +71,8 @@ class PaymentRepositoryImpl @Inject constructor(
                     
                     paymentDao.insertPayment(updatedPayment)
                     farmerDao.updateFarmer(updatedFarmer)
-
-                    timber.log.Timber.i("Farmer Payment Added: Farmer=%s, Amount=%f", 
-                        payment.partyName, payment.amount)
-
-                    updatedFarmer to updatedPayment
+                    profileDao.incrementReceiptNumber()
+                    Triple(updatedFarmer, updatedPayment, profile)
                 }
                 
                 userId?.let { uid ->
@@ -78,45 +82,47 @@ class PaymentRepositoryImpl @Inject constructor(
                             batch.set(firestore.collection("users").document(uid).collection("payments").document(updatedPayment.id), updatedPayment)
                             batch.set(firestore.collection("users").document(uid).collection("farmers").document(updatedFarmer.id), updatedFarmer)
                             batch.commit().await()
-                            
                             paymentDao.markAsSynced(updatedPayment.id)
                             farmerDao.markAsSynced(updatedFarmer.id)
-                        } catch (e: Exception) {
-                            // Synced later
-                        }
+                        } catch (e: Exception) { }
                     }
                 }
+                updatedPayment to profile
             } else {
-                val updatedBuyer = database.withTransaction {
+                val (updatedBuyer, updatedPayment, profile) = database.withTransaction {
                     val buyer = buyerDao.getBuyerById(payment.partyId) ?: throw Exception("Buyer not found")
+                    val profile = profileDao.getProfile().first() ?: CompanyProfileEntity()
                     val updatedBuyer = buyer.copy(
                         totalPaid = buyer.totalPaid + payment.amount,
                         pendingAmount = buyer.pendingAmount - payment.amount,
                         lastUpdated = System.currentTimeMillis(),
                         isSynced = false
                     )
-                    paymentDao.insertPayment(payment)
+                    val updatedPayment = payment.copy(remainingBalance = updatedBuyer.pendingAmount)
+                    paymentDao.insertPayment(updatedPayment)
                     buyerDao.updateBuyer(updatedBuyer)
-
-                    timber.log.Timber.i("Buyer Collection Added: Buyer=%s, Amount=%f", 
-                        payment.partyName, payment.amount)
-
-                    updatedBuyer
+                    profileDao.incrementReceiptNumber()
+                    Triple(updatedBuyer, updatedPayment, profile)
                 }
 
                 userId?.let { uid ->
                     repositoryScope.launch {
                         try {
                             val batch = firestore.batch()
-                            batch.set(firestore.collection("users").document(uid).collection("payments").document(payment.id), payment)
+                            batch.set(firestore.collection("users").document(uid).collection("payments").document(updatedPayment.id), updatedPayment)
                             batch.set(firestore.collection("users").document(uid).collection("buyers").document(updatedBuyer.id), updatedBuyer)
                             batch.commit().await()
-                            paymentDao.markAsSynced(payment.id)
+                            paymentDao.markAsSynced(updatedPayment.id)
                             buyerDao.markAsSynced(updatedBuyer.id)
                         } catch (e: Exception) {}
                     }
                 }
+                updatedPayment to profile
             }
+
+            // Generate Payment PDF with Branding
+            PdfGenerator.generatePaymentReceiptPdf(context, profile, finalPayment)
+
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error(e.message ?: "An unknown error occurred")
@@ -132,14 +138,12 @@ class PaymentRepositoryImpl @Inject constructor(
                     try {
                         firestore.collection("users").document(uid).collection("payments").document(payment.id).set(updated).await()
                         paymentDao.markAsSynced(payment.id)
-                    } catch (e: Exception) {
-                        // Will be synced later
-                    }
+                    } catch (e: Exception) { }
                 }
             }
             Resource.Success(Unit)
         } catch (e: Exception) {
-            Resource.Error(e.message ?: "Update failed")
+            Resource.Error("Update failed")
         }
     }
 
@@ -150,14 +154,12 @@ class PaymentRepositoryImpl @Inject constructor(
                 repositoryScope.launch {
                     try {
                         firestore.collection("users").document(uid).collection("payments").document(id).update("isDeleted", true).await()
-                    } catch (e: Exception) {
-                        // Will be synced later
-                    }
+                    } catch (e: Exception) { }
                 }
             }
             Resource.Success(Unit)
         } catch (e: Exception) {
-            Resource.Error(e.message ?: "Delete failed")
+            Resource.Error("Delete failed")
         }
     }
 

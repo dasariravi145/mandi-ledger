@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "farmers",
     indices = [
+        androidx.room.Index(value = ["name"]),
         androidx.room.Index(value = ["mobileNumber"]),
         androidx.room.Index(value = ["village"]),
         androidx.room.Index(value = ["isDeleted"])

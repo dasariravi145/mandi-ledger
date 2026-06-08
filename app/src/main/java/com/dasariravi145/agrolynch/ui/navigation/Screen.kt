@@ -1,5 +1,8 @@
 package com.dasariravi145.agrolynch.ui.navigation
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object LanguageSelection : Screen("language_selection")
@@ -13,9 +16,9 @@ sealed class Screen(val route: String) {
         fun passId(id: String? = null) = if (id != null) "add_transaction/$id" else "add_transaction/new"
     }
     object NewArrival : Screen("new_arrival") {
-        const val routeTemplate = "new_arrival?billNo={billNo}&amount={amount}&date={date}"
-        fun passOcr(billNo: String = "", amount: Double = 0.0, date: Long = 0L) = 
-            "new_arrival?billNo=$billNo&amount=$amount&date=$date"
+        const val routeTemplate = "new_arrival?billNo={billNo}&amount={amount}&date={date}&farmer={farmer}&product={product}&qty={qty}&rate={rate}"
+        fun passOcr(billNo: String = "", amount: Double = 0.0, date: Long = 0L, farmer: String = "", product: String = "", qty: Double = 0.0, rate: Double = 0.0) = 
+            "new_arrival?billNo=${enc(billNo)}&amount=$amount&date=$date&farmer=${enc(farmer)}&product=${enc(product)}&qty=$qty&rate=$rate"
     }
     object FarmerList : Screen("farmer_list")
     object AddEditFarmer : Screen("add_edit_farmer/{farmerId}") {
@@ -31,14 +34,14 @@ sealed class Screen(val route: String) {
     }
     object MarketRate : Screen("market_rate")
     object Sale : Screen("sale") {
-        const val routeTemplate = "sale?billNo={billNo}&amount={amount}&date={date}"
-        fun passOcr(billNo: String = "", amount: Double = 0.0, date: Long = 0L) = 
-            "sale?billNo=$billNo&amount=$amount&date=$date"
+        const val routeTemplate = "sale?billNo={billNo}&amount={amount}&date={date}&buyer={buyer}&product={product}&qty={qty}&rate={rate}"
+        fun passOcr(billNo: String = "", amount: Double = 0.0, date: Long = 0L, buyer: String = "", product: String = "", qty: Double = 0.0, rate: Double = 0.0) = 
+            "sale?billNo=${enc(billNo)}&amount=$amount&date=$date&buyer=${enc(buyer)}&product=${enc(product)}&qty=$qty&rate=$rate"
     }
     object Payment : Screen("payment") {
-        const val routeTemplate = "payment?billNo={billNo}&amount={amount}&date={date}"
-        fun passOcr(billNo: String = "", amount: Double = 0.0, date: Long = 0L) = 
-            "payment?billNo=$billNo&amount=$amount&date=$date"
+        const val routeTemplate = "payment?billNo={billNo}&amount={amount}&date={date}&party={party}&mode={mode}"
+        fun passOcr(billNo: String = "", amount: Double = 0.0, date: Long = 0L, party: String = "", mode: String = "") = 
+            "payment?billNo=${enc(billNo)}&amount=$amount&date=$date&party=${enc(party)}&mode=${enc(mode)}"
     }
     object Ledger : Screen("ledger")
     object LedgerDetail : Screen("ledger_detail/{partyId}/{partyType}") {
@@ -54,6 +57,7 @@ sealed class Screen(val route: String) {
     object Premium : Screen("premium")
     object Settings : Screen("settings")
     object Profile : Screen("profile")
+    object CompanyProfile : Screen("company_profile")
     object ReportsDashboard : Screen("reports_dashboard")
     object StockReport : Screen("stock_report")
     object DailySalesReport : Screen("daily_sales_report")
@@ -65,4 +69,6 @@ sealed class Screen(val route: String) {
     object OutstandingReport : Screen("outstanding_report")
     object ProductPerformance : Screen("product_performance")
     object AgingReport : Screen("aging_report")
+
+    protected fun enc(s: String): String = URLEncoder.encode(s, StandardCharsets.UTF_8.toString())
 }

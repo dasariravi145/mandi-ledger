@@ -62,6 +62,10 @@ class FarmerViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun addFarmer(name: String, mobile: String, village: String, notes: String) {
+        if (mobile.length != 10) {
+            updateState { it.copy(error = "Please enter a valid 10-digit mobile number") }
+            return
+        }
         launchSafe {
             updateState { it.copy(isLoading = true) }
             val farmer = FarmerEntity(
@@ -84,6 +88,10 @@ class FarmerViewModel @Inject constructor(
     }
 
     fun updateFarmer(farmer: FarmerEntity) {
+        if (farmer.mobileNumber.length != 10) {
+            updateState { it.copy(error = "Please enter a valid 10-digit mobile number") }
+            return
+        }
         launchSafe {
             updateState { it.copy(isLoading = true) }
             val result = repository.updateFarmer(farmer)

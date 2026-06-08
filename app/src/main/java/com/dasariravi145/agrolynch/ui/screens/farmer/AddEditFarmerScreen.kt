@@ -91,7 +91,11 @@ fun AddEditFarmerScreen(
 
             OutlinedTextField(
                 value = mobile,
-                onValueChange = { if (it.length <= 10) mobile = it },
+                onValueChange = { 
+                    if (it.length <= 10 && it.all { char -> char.isDigit() }) {
+                        mobile = it 
+                    }
+                },
                 label = { Text("Mobile Number / మొబైల్ సంఖ్య") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)

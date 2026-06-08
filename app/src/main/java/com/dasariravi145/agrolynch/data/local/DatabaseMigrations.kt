@@ -295,4 +295,111 @@ object DatabaseMigrations {
             db.execSQL("ALTER TABLE `users` ADD COLUMN `pdfCloudStorageEnabled` INTEGER NOT NULL DEFAULT 0")
         }
     }
+
+    val MIGRATION_26_27 = object : Migration(26, 27) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Arrivals table enhancements
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `boxCount` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `tareWeight` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `spoilageQuantity` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `netQuantity` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `laborCharges` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `transportCharges` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `packingCharges` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `otherDeductions` REAL NOT NULL DEFAULT 0.0")
+
+            // Sales table enhancements
+            db.execSQL("ALTER TABLE `sales` ADD COLUMN `laborCharges` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `sales` ADD COLUMN `packingCharges` REAL NOT NULL DEFAULT 0.0")
+        }
+    }
+
+    val MIGRATION_27_28 = object : Migration(27, 28) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `company_profile` (
+                    `id` INTEGER NOT NULL, 
+                    `companyName` TEXT NOT NULL, 
+                    `proprietorName` TEXT NOT NULL, 
+                    `mobile1` TEXT NOT NULL, 
+                    `mobile2` TEXT NOT NULL, 
+                    `address` TEXT NOT NULL, 
+                    `village` TEXT NOT NULL, 
+                    `district` TEXT NOT NULL, 
+                    `state` TEXT NOT NULL, 
+                    `gstNumber` TEXT NOT NULL, 
+                    `licenseNumber` TEXT NOT NULL, 
+                    `logoPath` TEXT, 
+                    `godImagePath` TEXT, 
+                    `signaturePath` TEXT, 
+                    `stampPath` TEXT, 
+                    `billPrefix` TEXT NOT NULL, 
+                    `startingBillNumber` INTEGER NOT NULL, 
+                    `nextBillNumber` INTEGER NOT NULL, 
+                    `nextInvoiceNumber` INTEGER NOT NULL DEFAULT 1, 
+                    `nextReceiptNumber` INTEGER NOT NULL DEFAULT 1, 
+                    `billLanguage` TEXT NOT NULL, 
+                    `lastUpdated` INTEGER NOT NULL, 
+                    PRIMARY KEY(`id`)
+                )
+            """.trimIndent())
+            db.execSQL("INSERT OR IGNORE INTO `company_profile` (id, companyName, proprietorName, mobile1, mobile2, address, village, district, state, gstNumber, licenseNumber, billPrefix, startingBillNumber, nextBillNumber, nextInvoiceNumber, nextReceiptNumber, billLanguage, lastUpdated) VALUES (1, '', '', '', '', '', '', '', '', '', '', 'BILL', 1, 1, 1, 1, 'English + Telugu', 0)")
+        }
+    }
+
+    val MIGRATION_28_29 = object : Migration(28, 29) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 1. Sales Table updates
+            db.execSQL("ALTER TABLE `sales` ADD COLUMN `totalCommission` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `sales` ADD COLUMN `totalNetAmount` REAL NOT NULL DEFAULT 0.0")
+
+            // 2. Sale Items Table updates
+            db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `productCategory` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `grade` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `commissionAmount` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `laborCharges` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `transportCharges` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `otherCharges` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `netAmount` REAL NOT NULL DEFAULT 0.0")
+
+            // 3. New Performance Indexes
+            // Arrivals
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_farmerId` ON `arrivals` (`farmerId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_productId` ON `arrivals` (`productId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_date` ON `arrivals` (`date`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_isDeleted` ON `arrivals` (`isDeleted`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_remainingQuantity` ON `arrivals` (`remainingQuantity`)")
+            
+            // Farmers
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_farmers_name` ON `farmers` (`name`)")
+            
+            // Buyers
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_buyers_name` ON `buyers` (`name`)")
+            
+            // Payments
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_payments_partyId` ON `payments` (`partyId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_payments_partyType` ON `payments` (`partyType`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_payments_date` ON `payments` (`date`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_payments_isDeleted` ON `payments` (`isDeleted`)")
+            
+            // Sale Items
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sale_items_saleId` ON `sale_items` (`saleId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sale_items_arrivalId` ON `sale_items` (`arrivalId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sale_items_farmerId` ON `sale_items` (`farmerId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sale_items_productId` ON `sale_items` (`productId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sale_items_date` ON `sale_items` (`date`)")
+        }
+    }
+
+    val MIGRATION_29_30 = object : Migration(29, 30) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `sales` ADD COLUMN `farmerName` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
+    val MIGRATION_30_31 = object : Migration(30, 31) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `commissionPercent` REAL NOT NULL DEFAULT 0.0")
+        }
+    }
 }

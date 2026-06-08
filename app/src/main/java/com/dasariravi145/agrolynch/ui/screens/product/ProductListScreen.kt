@@ -17,6 +17,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import coil.compose.AsyncImage
 import com.dasariravi145.agrolynch.data.local.entity.ProductEntity
 import timber.log.Timber
@@ -36,17 +38,17 @@ fun ProductListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Products / ఉత్పత్తులు") },
+                title = { Text(stringResource(R.string.products)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddClick) {
-                Icon(Icons.Default.Add, contentDescription = "Add Product")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_product))
             }
         }
     ) { padding ->
@@ -64,7 +66,7 @@ fun ProductListScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                placeholder = { Text("Search products...") },
+                placeholder = { Text(stringResource(R.string.search_products_hint)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true,
                 shape = MaterialTheme.shapes.medium
@@ -76,7 +78,7 @@ fun ProductListScreen(
                 }
             } else if (products.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No products found / ఉత్పత్తులు కనుగొనబడలేదు")
+                    Text(stringResource(R.string.no_products_found))
                 }
             } else {
                 LazyVerticalGrid(

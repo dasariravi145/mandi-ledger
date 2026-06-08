@@ -19,7 +19,8 @@ import javax.inject.Inject
 class ArrivalViewModel @Inject constructor(
     private val arrivalRepository: ArrivalRepository,
     private val farmerRepository: FarmerRepository,
-    private val productRepository: ProductRepository
+    private val productRepository: ProductRepository,
+    val adMobManager: com.dasariravi145.agrolynch.ads.AdMobManager
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(false)
@@ -99,25 +100,52 @@ class ArrivalViewModel @Inject constructor(
         _productSearchQuery.value = query
     }
 
-    fun saveArrival(
+    fun saveArrivalBatch(
         farmerName: String,
         farmerPhone: String,
         farmerVillage: String,
         productName: String,
         productCategory: String,
-        grade: String,
         unit: String,
-        quantity: Double,
-        rate: Double,
-        grossAmount: Double,
         commissionPercent: Double,
-        commissionAmount: Double,
-        netAmount: Double
+        laborCharges: Double,
+        transportCharges: Double,
+        packingCharges: Double,
+        otherDeductions: Double,
+        gradeEntries: List<GradeEntry>
     ) {
+        // Validations
+        if (gradeEntries.any { it.quantity <= 0 }) {
+            viewModelScope.launch { _error.emit("Quantity must be greater than 0") }
+            return
+        }
+        if (gradeEntries.any { it.spoilage < 0 }) {
+            viewModelScope.launch { _error.emit("Spoilage cannot be negative") }
+            return
+        }
+        if (gradeEntries.any { it.rate <= 0 }) {
+            viewModelScope.launch { _error.emit("Rate must be greater than 0") }
+            return
+        }
+        if (gradeEntries.any { it.spoilage >= it.quantity }) {
+            viewModelScope.launch { _error.emit("Spoilage cannot be greater than or equal to total quantity") }
+            return
+        }
+
+        // Phone validation for new farmer
+        val existingFarmer = farmers.value.find { 
+            it.name.equals(farmerName, ignoreCase = true) && 
+            (farmerPhone.isEmpty() || it.mobileNumber == farmerPhone)
+        }
+        if (existingFarmer == null && farmerPhone.isNotBlank() && farmerPhone.length != 10) {
+            viewModelScope.launch { _error.emit("Please enter a valid 10-digit mobile number") }
+            return
+        }
+
         viewModelScope.launch {
             _isLoading.value = true
             
-            // 1. Handle Farmer (Find existing or create new)
+            // 1. Handle Farmer
             val selectedFarmer = farmers.value.find { 
                 it.name.equals(farmerName, ignoreCase = true) && 
                 (farmerPhone.isEmpty() || it.mobileNumber == farmerPhone)
@@ -147,45 +175,89 @@ class ArrivalViewModel @Inject constructor(
                     id = newId,
                     name = productName,
                     category = productCategory,
-                    availableGrades = listOf(grade)
+                    availableGrades = gradeEntries.map { it.grade }.distinct()
                 )
                 productRepository.addProduct(newProduct, null)
                 newId
             } else {
-                // If it's an existing product, we might want to add the grade if it's new to this product
-                if (!selectedProduct.availableGrades.contains(grade)) {
-                    val updatedGrades = selectedProduct.availableGrades + grade
-                    productRepository.addProduct(selectedProduct.copy(availableGrades = updatedGrades), null)
+                val existingGrades = selectedProduct.availableGrades.toMutableSet()
+                val newGrades = gradeEntries.map { it.grade }
+                if (existingGrades.addAll(newGrades)) {
+                    productRepository.addProduct(selectedProduct.copy(availableGrades = existingGrades.toList()), null)
                 }
                 selectedProduct.id
             }
 
-            // 3. Save Arrival
-            val arrival = ArrivalEntity(
-                id = UUID.randomUUID().toString(),
-                farmerId = farmerId,
-                farmerName = farmerName,
-                productId = productId,
-                productName = productName,
-                productCategory = productCategory,
-                grade = grade,
-                quantity = quantity,
-                remainingQuantity = quantity,
-                unit = unit,
-                purchaseRate = rate,
-                grossAmount = grossAmount,
-                commissionPercent = commissionPercent,
-                commissionAmount = commissionAmount,
-                netAmount = netAmount,
-                date = System.currentTimeMillis()
-            )
+            // 3. Save Arrivals (One per Grade)
+            val arrivals = gradeEntries.mapIndexed { index, entry ->
+                val itemGrossAmount = entry.grossAmount
+                val itemCommissionAmount = (itemGrossAmount * commissionPercent) / 100
+                
+                // For simplified accounting, we can split charges or put them on the first entry.
+                // The prompt says "Farmer Ledger must display: Product, Grade, Quantity, Rate, Amount".
+                // This implies each grade is a row.
+                // Net Amount = Total Gross - Charges. 
+                // To keep it simple, we can deduct charges from the total or distribute them.
+                // However, if we save them as separate arrivals, the "Net Amount" per arrival might be misleading if we don't distribute charges.
+                // But the prompt says "Total Gross Amount - Commission Amount - Charges".
+                
+                val itemLabor = if (index == 0) laborCharges else 0.0
+                val itemTransport = if (index == 0) transportCharges else 0.0
+                val itemPacking = if (index == 0) packingCharges else 0.0
+                val itemOther = if (index == 0) otherDeductions else 0.0
+                
+                val itemNetAmount = itemGrossAmount - itemCommissionAmount - itemLabor - itemTransport - itemPacking - itemOther
 
-            when (val result = arrivalRepository.addArrival(arrival)) {
+                ArrivalEntity(
+                    id = UUID.randomUUID().toString(),
+                    farmerId = farmerId,
+                    farmerName = farmerName,
+                    productId = productId,
+                    productName = productName,
+                    productCategory = productCategory,
+                    grade = entry.grade,
+                    quantity = entry.quantity,
+                    unit = unit,
+                    boxCount = entry.boxCount,
+                    tareWeight = entry.tareWeight,
+                    spoilageQuantity = entry.spoilage,
+                    netQuantity = entry.netQuantity,
+                    remainingQuantity = entry.netQuantity,
+                    purchaseRate = entry.rate,
+                    grossAmount = itemGrossAmount,
+                    commissionPercent = commissionPercent,
+                    commissionAmount = itemCommissionAmount,
+                    laborCharges = itemLabor,
+                    transportCharges = itemTransport,
+                    packingCharges = itemPacking,
+                    otherDeductions = itemOther,
+                    netAmount = itemNetAmount,
+                    date = System.currentTimeMillis()
+                )
+            }
+
+            when (val result = arrivalRepository.addArrivalBatch(arrivals)) {
                 is Resource.Success -> _saveSuccess.emit(Unit)
-                is Resource.Error -> _error.emit(result.message ?: "Failed to save arrival")
+                is Resource.Error -> _error.emit(result.message ?: "Failed to save arrival batch")
                 else -> {}
             }
+
             _isLoading.value = false
         }
+    }
+
+    data class GradeEntry(
+        val grade: String,
+        val quantity: Double,
+        val spoilage: Double,
+        val rate: Double = 0.0,
+        val boxCount: Int = 0,
+        val tareWeight: Double = 0.0
+    ) {
+        val netQuantity: Double 
+            get() = (quantity - spoilage - (boxCount * tareWeight)).coerceAtLeast(0.0)
+            
+        val grossAmount: Double
+            get() = netQuantity * rate
     }
 }

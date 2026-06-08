@@ -10,6 +10,9 @@ interface SaleDao {
     @Query("SELECT * FROM sales WHERE isDeleted = 0 ORDER BY date DESC")
     fun getAllSales(): Flow<List<SaleEntity>>
 
+    @Query("SELECT * FROM sale_items ORDER BY date DESC")
+    fun getAllSaleItems(): Flow<List<SaleItemEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSale(sale: SaleEntity)
 
