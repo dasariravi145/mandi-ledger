@@ -8,7 +8,10 @@ interface ArrivalRepository {
     fun getArrivals(): Flow<List<ArrivalEntity>>
     suspend fun getArrivalById(id: String): ArrivalEntity?
     suspend fun addArrival(arrival: ArrivalEntity): Resource<Unit>
-    suspend fun addArrivalBatch(arrivals: List<ArrivalEntity>): Resource<Unit>
+    suspend fun addArrivalBatch(
+        arrivals: List<ArrivalEntity>,
+        boxWeights: List<com.dasariravi145.agrolynch.data.local.entity.BoxWeightItemEntity> = emptyList()
+    ): Resource<Unit>
     fun getAvailableStockByProduct(productId: String): Flow<List<ArrivalEntity>>
     fun getAvailableStockByProductAndGrade(productId: String, grade: String): Flow<List<ArrivalEntity>>
     fun getFarmersWithStock(): Flow<List<com.dasariravi145.agrolynch.data.local.dao.FarmerStockInfo>>

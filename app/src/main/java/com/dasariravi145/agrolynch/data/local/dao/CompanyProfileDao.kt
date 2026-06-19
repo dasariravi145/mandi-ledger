@@ -9,6 +9,12 @@ interface CompanyProfileDao {
     @Query("SELECT * FROM company_profile WHERE id = 1")
     fun getProfile(): Flow<CompanyProfileEntity?>
 
+    @Query("SELECT * FROM company_profile WHERE id = 1")
+    suspend fun getProfileSync(): CompanyProfileEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertProfile(profile: CompanyProfileEntity)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updateProfile(profile: CompanyProfileEntity)
 

@@ -25,9 +25,15 @@ import com.dasariravi145.agrolynch.data.local.entity.*
         SubscriptionEntity::class,
         BackupEntity::class,
         DashboardSummaryEntity::class,
-        CompanyProfileEntity::class
+        CompanyProfileEntity::class,
+        BoxWeightItemEntity::class,
+        BillNumberSeriesEntity::class,
+        EntryDeductionEntity::class,
+        InvoiceTemplatePositionEntity::class,
+        InvoiceLayoutEntity::class,
+        InvoiceWizardConfigEntity::class
     ],
-    version = 31,
+    version = 52,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -48,4 +54,10 @@ abstract class AgroLynchDatabase : RoomDatabase() {
     abstract fun dashboardDao(): DashboardDao
     abstract fun reportDao(): ReportDao
     abstract fun companyProfileDao(): CompanyProfileDao
+    abstract fun boxWeightDao(): BoxWeightDao
+    abstract fun billNumberSeriesDao(): BillNumberSeriesDao
+    abstract fun entryDeductionDao(): EntryDeductionDao
+    abstract fun templatePositionDao(): TemplatePositionDao
+    abstract fun invoiceLayoutDao(): InvoiceLayoutDao
+    abstract fun invoiceWizardDao(): InvoiceWizardDao
 }

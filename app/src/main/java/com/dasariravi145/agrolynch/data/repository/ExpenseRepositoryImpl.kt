@@ -32,7 +32,17 @@ class ExpenseRepositoryImpl @Inject constructor(
             userId?.let { uid ->
                 repositoryScope.launch {
                     try {
-                        firestore.collection("users").document(uid).collection("expenses").document(expense.id).set(expense).await()
+                        val firestoreData = mapOf(
+                            "expenseId" to expense.id,
+                            "ownerUserId" to uid,
+                            "type" to expense.type,
+                            "amount" to expense.amount,
+                            "description" to expense.description,
+                            "date" to expense.date,
+                            "lastUpdated" to expense.lastUpdated,
+                            "isDeleted" to expense.isDeleted
+                        )
+                        firestore.collection("users").document(uid).collection("expenses").document(expense.id).set(firestoreData).await()
                         expenseDao.markAsSynced(expense.id)
                     } catch (e: Exception) {
                         // Will be synced later
@@ -52,7 +62,12 @@ class ExpenseRepositoryImpl @Inject constructor(
             userId?.let { uid ->
                 repositoryScope.launch {
                     try {
-                        firestore.collection("users").document(uid).collection("expenses").document(expense.id).set(updated).await()
+                        val firestoreData = updated.javaClass.declaredFields.associate { field ->
+                            field.isAccessible = true
+                            field.name to field.get(updated)
+                        }.toMutableMap()
+                        firestoreData["ownerUserId"] = uid
+                        firestore.collection("users").document(uid).collection("expenses").document(expense.id).set(firestoreData).await()
                         expenseDao.markAsSynced(expense.id)
                     } catch (e: Exception) {
                         // Will be synced later
@@ -88,7 +103,12 @@ class ExpenseRepositoryImpl @Inject constructor(
         return try {
             val unsynced = expenseDao.getUnsyncedExpenses()
             for (expense in unsynced) {
-                firestore.collection("users").document(uid).collection("expenses").document(expense.id).set(expense).await()
+                val firestoreData = expense.javaClass.declaredFields.associate { field ->
+                    field.isAccessible = true
+                    field.name to field.get(expense)
+                }.toMutableMap()
+                firestoreData["ownerUserId"] = uid
+                firestore.collection("users").document(uid).collection("expenses").document(expense.id).set(firestoreData).await()
                 expenseDao.markAsSynced(expense.id)
             }
             Resource.Success(Unit)

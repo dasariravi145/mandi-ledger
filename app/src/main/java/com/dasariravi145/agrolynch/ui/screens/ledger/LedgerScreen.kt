@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Formatter
 import com.dasariravi145.agrolynch.domain.model.LedgerSummary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,7 +34,7 @@ fun LedgerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.ledger_book)) },
+                title = { Text(stringResource(R.string.account_book)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -99,13 +100,14 @@ fun LedgerSummaryItem(summary: LedgerSummary, onClick: () -> Unit) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Row {
                     Column {
-                        Text(text = stringResource(R.string.stock), fontSize = 10.sp, color = Color.Gray)
-                        Text(text = "₹${String.format("%.0f", summary.totalDebit)}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        val stockLabel = if (summary.advanceAmount > 0) stringResource(R.string.advance) else stringResource(R.string.total_amount)
+                        Text(text = stockLabel, fontSize = 10.sp, color = Color.Gray)
+                        Text(text = "₹${Formatter.formatCurrency(summary.totalDebit)}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                     Spacer(modifier = Modifier.width(20.dp))
                     Column {
                         Text(text = stringResource(R.string.paid), fontSize = 10.sp, color = Color.Gray)
-                        Text(text = "₹${String.format("%.0f", summary.totalCredit)}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(text = "₹${Formatter.formatCurrency(summary.totalCredit)}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -117,7 +119,7 @@ fun LedgerSummaryItem(summary: LedgerSummary, onClick: () -> Unit) {
                 val label = if (isAdvance) stringResource(R.string.advance) else if (amount > 0) stringResource(R.string.pending) else stringResource(R.string.settled)
 
                 Text(
-                    text = "₹${String.format("%.2f", amount)}",
+                    text = "₹${Formatter.formatCurrency(amount)}",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = color

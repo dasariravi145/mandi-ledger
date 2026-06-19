@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dasariravi145.agrolynch.BuildConfig
 
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,8 +31,10 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     onViewProfile: () -> Unit,
     onViewCompanyProfile: () -> Unit,
+    onViewBillSettings: () -> Unit,
     onViewBackup: () -> Unit,
     onViewSubscription: () -> Unit,
+    onViewDeveloperOptions: () -> Unit,
     onLanguageChanged: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -43,6 +46,10 @@ fun SettingsScreen(
 
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showChangePinDialog by remember { mutableStateOf(false) }
+    
+    // Developer options trigger
+    var versionTapCount by remember { mutableIntStateOf(0) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     Scaffold(
         topBar = {
@@ -71,6 +78,12 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.company_profile_branding_sub),
                 icon = Icons.Default.Business,
                 onClick = onViewCompanyProfile
+            )
+            SettingsItem(
+                title = stringResource(R.string.bill_settings),
+                subtitle = stringResource(R.string.bill_prefix),
+                icon = Icons.Default.FormatListNumbered,
+                onClick = onViewBillSettings
             )
 
             // Account Section
@@ -140,7 +153,15 @@ fun SettingsScreen(
                 title = stringResource(R.string.about_app),
                 subtitle = "Version 1.0.0",
                 icon = Icons.Default.Info,
-                onClick = { }
+                onClick = { 
+                    if (BuildConfig.DEBUG) {
+                        versionTapCount++
+                        if (versionTapCount >= 7) {
+                            versionTapCount = 0
+                            onViewDeveloperOptions()
+                        }
+                    }
+                }
             )
             SettingsItem(
                 title = stringResource(R.string.logout),
@@ -152,6 +173,37 @@ fun SettingsScreen(
                     onLogout()
                 }
             )
+
+            if (BuildConfig.DEBUG) {
+                Spacer(modifier = Modifier.height(24.dp))
+                SettingsSectionTitle("Testing / Debug")
+                
+                var isTestingPremium by remember { mutableStateOf(isPremium) }
+
+                Button(
+                    onClick = { 
+                        // Note: SettingsViewModel doesn't currently have access to PremiumStateManager easily or UserRepository
+                        // I might need to add a method to SettingsViewModel to handle this testing toggle
+                        viewModel.togglePremiumTesting()
+                        isTestingPremium = !isTestingPremium
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isTestingPremium) Color(0xFF1B5E20) else Color.DarkGray
+                    )
+                ) {
+                    Text(if (isTestingPremium) "Premium Active (Testing)" else "Enable Premium (Testing)", color = Color.White)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedButton(
+                    onClick = onViewDeveloperOptions,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open All Developer Options")
+                }
+            }
             
             Spacer(modifier = Modifier.height(24.dp))
         }

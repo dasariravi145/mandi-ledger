@@ -8,7 +8,6 @@ import com.dasariravi145.agrolynch.data.local.dao.FarmerDao
 import com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity
 import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import com.dasariravi145.agrolynch.domain.repository.ArrivalRepository
-import com.dasariravi145.agrolynch.util.PdfGenerator
 import com.dasariravi145.agrolynch.util.Resource
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -24,12 +23,14 @@ class ArrivalRepositoryImpl @Inject constructor(
     private val database: AgroLynchDatabase,
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth,
+    private val exportService: com.dasariravi145.agrolynch.util.LedgerExportService,
     @ApplicationContext private val context: Context
 ) : ArrivalRepository {
 
     private val arrivalDao = database.arrivalDao()
     private val farmerDao = database.farmerDao()
     private val profileDao = database.companyProfileDao()
+    private val boxWeightDao = database.boxWeightDao()
 
     private val repositoryScope = CoroutineScope(Dispatchers.IO)
 
@@ -56,7 +57,10 @@ class ArrivalRepositoryImpl @Inject constructor(
         return addArrivalBatch(listOf(arrival))
     }
 
-    override suspend fun addArrivalBatch(arrivals: List<ArrivalEntity>): Resource<Unit> {
+    override suspend fun addArrivalBatch(
+        arrivals: List<ArrivalEntity>,
+        boxWeights: List<com.dasariravi145.agrolynch.data.local.entity.BoxWeightItemEntity>
+    ): Resource<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 if (arrivals.isEmpty()) return@withContext Resource.Error("No data to save")
@@ -71,6 +75,10 @@ class ArrivalRepositoryImpl @Inject constructor(
                     arrivals.forEach {
                         arrivalDao.insertArrival(it)
                         totalNetToPay += it.netAmount
+                    }
+
+                    if (boxWeights.isNotEmpty()) {
+                        boxWeightDao.insertBoxWeights(boxWeights)
                     }
                     
                     var newPending = farmer.pendingAmount + totalNetToPay
@@ -107,7 +115,15 @@ class ArrivalRepositoryImpl @Inject constructor(
                     
                     // Generate PDF with Branding in background
                     try {
-                        PdfGenerator.generateFarmerArrivalPdf(context, profile, arrivals)
+                        val firstArrival = arrivals.first()
+                        val farmer = farmerDao.getFarmerById(firstArrival.farmerId)
+                        exportService.exportArrivalToPdf(
+                            context = context,
+                            profile = profile,
+                            arrivals = arrivals,
+                            deductions = emptyList(),
+                            farmerMobile = farmer?.mobileNumber ?: ""
+                        )
                     } catch (e: Exception) {
                         timber.log.Timber.e(e, "Error generating PDF in background")
                     }
@@ -116,10 +132,21 @@ class ArrivalRepositoryImpl @Inject constructor(
                     userId?.let { uid ->
                         try {
                             val batch = firestore.batch()
-                            arrivals.forEach {
-                                batch.set(firestore.collection("users").document(uid).collection("arrivals").document(it.id), it)
+                            arrivals.forEach { arrival ->
+                                val firestoreData = arrival.javaClass.declaredFields.associate { field ->
+                                    field.isAccessible = true
+                                    field.name to field.get(arrival)
+                                }.toMutableMap()
+                                firestoreData["ownerUserId"] = uid
+                                batch.set(firestore.collection("users").document(uid).collection("arrivals").document(arrival.id), firestoreData)
                             }
-                            batch.set(firestore.collection("users").document(uid).collection("farmers").document(updatedFarmer.id), updatedFarmer)
+                            // Also for updatedFarmer
+                            val farmerData = updatedFarmer.javaClass.declaredFields.associate { field ->
+                                field.isAccessible = true
+                                field.name to field.get(updatedFarmer)
+                            }.toMutableMap()
+                            farmerData["ownerUserId"] = uid
+                            batch.set(firestore.collection("users").document(uid).collection("farmers").document(updatedFarmer.id), farmerData)
                             batch.commit().await()
                             
                             arrivals.forEach { arrivalDao.markAsSynced(it.id) }
@@ -147,7 +174,12 @@ class ArrivalRepositoryImpl @Inject constructor(
             userId?.let { uid ->
                 repositoryScope.launch {
                     try {
-                        firestore.collection("users").document(uid).collection("arrivals").document(arrival.id).set(arrival).await()
+                        val firestoreData = arrival.javaClass.declaredFields.associate { field ->
+                            field.isAccessible = true
+                            field.name to field.get(arrival)
+                        }.toMutableMap()
+                        firestoreData["ownerUserId"] = uid
+                        firestore.collection("users").document(uid).collection("arrivals").document(arrival.id).set(firestoreData).await()
                         arrivalDao.markAsSynced(arrival.id)
                     } catch (e: Exception) { }
                 }
@@ -188,7 +220,13 @@ class ArrivalRepositoryImpl @Inject constructor(
                     try {
                         val batch = firestore.batch()
                         batch.update(firestore.collection("users").document(uid).collection("arrivals").document(id), "isDeleted", true)
-                        batch.set(firestore.collection("users").document(uid).collection("farmers").document(farmer.id), updatedFarmer)
+                        
+                        val farmerData = updatedFarmer.javaClass.declaredFields.associate { field ->
+                            field.isAccessible = true
+                            field.name to field.get(updatedFarmer)
+                        }.toMutableMap()
+                        farmerData["ownerUserId"] = uid
+                        batch.set(firestore.collection("users").document(uid).collection("farmers").document(farmer.id), farmerData)
                         batch.commit().await()
                     } catch (e: Exception) { }
                 }
@@ -204,7 +242,12 @@ class ArrivalRepositoryImpl @Inject constructor(
         return try {
             val unsynced = arrivalDao.getUnsyncedArrivals()
             for (arrival in unsynced) {
-                firestore.collection("users").document(uid).collection("arrivals").document(arrival.id).set(arrival).await()
+                val firestoreData = arrival.javaClass.declaredFields.associate { field ->
+                    field.isAccessible = true
+                    field.name to field.get(arrival)
+                }.toMutableMap()
+                firestoreData["ownerUserId"] = uid
+                firestore.collection("users").document(uid).collection("arrivals").document(arrival.id).set(firestoreData).await()
                 arrivalDao.markAsSynced(arrival.id)
             }
             Resource.Success(Unit)

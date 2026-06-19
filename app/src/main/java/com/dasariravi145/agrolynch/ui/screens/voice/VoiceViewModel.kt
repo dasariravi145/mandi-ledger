@@ -8,39 +8,53 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.dasariravi145.agrolynch.data.local.entity.*
-import com.dasariravi145.agrolynch.domain.repository.*
 import com.dasariravi145.agrolynch.util.PremiumStateManager
-import com.dasariravi145.agrolynch.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.*
 import javax.inject.Inject
 
+sealed class VoiceNavigationEvent {
+    data class NavigateToArrival(val draft: com.dasariravi145.agrolynch.domain.model.FarmerArrivalDraft) : VoiceNavigationEvent()
+}
+
 @HiltViewModel
 class VoiceViewModel @Inject constructor(
-    private val premiumStateManager: PremiumStateManager,
-    private val farmerRepository: FarmerRepository,
-    private val productRepository: ProductRepository,
-    private val arrivalRepository: ArrivalRepository
+    private val premiumStateManager: PremiumStateManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VoiceState())
     val uiState = _uiState.asStateFlow()
 
+    private val _navigationEvent = MutableSharedFlow<VoiceNavigationEvent>()
+    val navigationEvent = _navigationEvent.asSharedFlow()
+
     private var speechRecognizer: SpeechRecognizer? = null
     
     val languages = listOf(
+        VoiceLanguage("Auto", "auto", Locale.getDefault().toLanguageTag()),
         VoiceLanguage("English", "en", "en-US"),
         VoiceLanguage("Telugu", "te", "te-IN"),
-        VoiceLanguage("Hindi", "hi", "hi-IN")
+        VoiceLanguage("Hindi", "hi", "hi-IN"),
+        VoiceLanguage("Tamil", "ta", "ta-IN"),
+        VoiceLanguage("Kannada", "kn", "kn-IN")
     )
 
-    private val stockQuestions = listOf(
-        Question("farmer_name", mapOf("en" to "Farmer Name?", "te" to "రైతు పేరు?")),
-        Question("product_name", mapOf("en" to "Product Name?", "te" to "ఉత్పత్తి పేరు?")),
-        Question("amount", mapOf("en" to "Approximate Amount?", "te" to "సుమారు మొత్తం?"))
+    private val stepQuestions = mapOf(
+        VoiceStep.FARMER_NAME to mapOf("en" to "Please say farmer name", "te" to "రైతు పేరు చెప్పండి", "hi" to "किसान का नाम बोलें"),
+        VoiceStep.PHONE_NUMBER to mapOf("en" to "Say phone number or skip", "te" to "ఫోన్ నంబర్ చెప్పండి లేదా స్కిప్ చేయండి", "hi" to "फ़ोन नंबर बोलें या स्किप करें"),
+        VoiceStep.VILLAGE to mapOf("en" to "Say village or skip", "te" to "గ్రామం చెప్పండి లేదా స్కిప్ చేయండి", "hi" to "गांव का नाम बोलें या स्किप करें"),
+        VoiceStep.PRODUCT_NAME to mapOf("en" to "Say product name", "te" to "ఉత్పత్తి పేరు చెప్పండి", "hi" to "उत्पाद का नाम बोलें"),
+        VoiceStep.GRADE to mapOf("en" to "Say grade", "te" to "గ్రేడ్ చెప్పండి", "hi" to "ग्रेड बोलें"),
+        VoiceStep.UNIT to mapOf("en" to "Say unit: KG, Ton, or Boxes", "te" to "యూనిట్ చెప్పండి: కేజీ, టన్, లేదా బాక్సులు", "hi" to "यूनिट बोलें: केजी, टन, या बॉक्स"),
+        VoiceStep.QUANTITY to mapOf("en" to "Say quantity", "te" to "పరిమాణం చెప్పండి", "hi" to "मात्रा बोलें"),
+        VoiceStep.WASTE to mapOf("en" to "Say waste or skip", "te" to "వేస్ట్ లేదా డామేజ్ చెప్పండి", "hi" to "वेस्ट या डैमेज बोलें"),
+        VoiceStep.RATE to mapOf("en" to "Say rate per KG", "te" to "కేజీ ధర చెప్పండి", "hi" to "प्रति केजी दर बोलें"),
+        VoiceStep.COMMISSION to mapOf("en" to "Say commission percent or skip", "te" to "కమిషన్ శాతం చెప్పండి", "hi" to "कमीशन प्रतिशत बोलें"),
+        VoiceStep.LABOUR_CHARGES to mapOf("en" to "Say labour charges or skip", "te" to "కూలి ఖర్చులు చెప్పండి", "hi" to "मजदूरी बोलें"),
+        VoiceStep.TRANSPORT_CHARGES to mapOf("en" to "Say transport charges or skip", "te" to "రవాణా ఖర్చులు చెప్పండి", "hi" to "परिवहन शुल्क बोलें"),
+        VoiceStep.OTHER_DEDUCTIONS to mapOf("en" to "Say other deductions or skip", "te" to "ఇతర తగ్గింపులు చెప్పండి", "hi" to "अन्य कटौती बोलें")
     )
 
     init {
@@ -52,21 +66,17 @@ class VoiceViewModel @Inject constructor(
     }
 
     fun selectLanguage(language: VoiceLanguage) {
+        timber.log.Timber.d("VOICE_LANGUAGE_SELECTED: ${language.name}")
         _uiState.update { it.copy(
             selectedLanguage = language, 
-            step = VoiceStep.INTERACTIVE_QUESTIONS,
-            dynamicQuestions = stockQuestions,
-            currentQuestionIndex = 0,
-            session = VoiceSession()
+            step = VoiceStep.FARMER_NAME
         ) }
     }
 
     fun getCurrentQuestion(): String {
         val state = _uiState.value
         val lang = state.selectedLanguage?.code ?: "en"
-        if (state.currentQuestionIndex >= state.dynamicQuestions.size) return ""
-        val question = state.dynamicQuestions[state.currentQuestionIndex]
-        return question.text[lang] ?: question.text["en"] ?: ""
+        return stepQuestions[state.step]?.get(lang) ?: stepQuestions[state.step]?.get("en") ?: ""
     }
 
     fun startListening(context: Context) {
@@ -79,12 +89,14 @@ class VoiceViewModel @Inject constructor(
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() { _uiState.update { it.copy(isListening = false) } }
-                override fun onError(error: Int) { _uiState.update { it.copy(isListening = false, error = "Speech error: $error") } }
+                override fun onError(error: Int) { 
+                    timber.log.Timber.e("VOICE_STEP_FAILED: Step=${_uiState.value.step}, Error=$error")
+                    _uiState.update { it.copy(isListening = false, error = "Speech error: $error") } 
+                }
                 override fun onResults(results: Bundle?) {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val confidences = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
                     if (!matches.isNullOrEmpty()) {
-                        handleSpokenResult(matches[0], confidences?.get(0) ?: 1.0f)
+                        handleSpokenResult(matches[0])
                     }
                 }
                 override fun onPartialResults(partialResults: Bundle?) {}
@@ -97,121 +109,100 @@ class VoiceViewModel @Inject constructor(
         })
     }
 
-    private fun handleSpokenResult(text: String, confidence: Float) {
-        val state = _uiState.value
-        val currentQuestion = state.dynamicQuestions[state.currentQuestionIndex]
-        val session = state.session.copy()
-
-        _uiState.update { it.copy(spokenText = text, confidence = confidence) }
-
-        viewModelScope.launch {
-            when (currentQuestion.key) {
-                "farmer_name" -> {
-                    session.farmerName = text
-                    val existing = farmerRepository.getFarmers().first().find { it.name.contains(text, true) }
-                    if (existing != null) {
-                        session.farmerName = existing.name
-                        session.farmerPhone = existing.mobileNumber
-                        session.farmerAddress = existing.village
-                    }
-                }
-                "product_name" -> {
-                    session.productName = text
-                    val existing = productRepository.getProductByName(text)
-                    if (existing != null) {
-                        session.productName = existing.name
-                        session.productCategory = existing.category
-                        session.unit = if (existing.availableGrades.isNotEmpty()) "KG" else "KG" // Default KG
-                    }
-                }
-                "amount" -> {
-                    session.amount = text.filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
-                }
-            }
-
-            _uiState.update { it.copy(session = session) }
-            
-            if (state.currentQuestionIndex < state.dynamicQuestions.size - 1) {
-                _uiState.update { it.copy(currentQuestionIndex = state.currentQuestionIndex + 1, spokenText = "") }
-            } else {
-                _uiState.update { it.copy(step = VoiceStep.EDITABLE_FORM, spokenText = "") }
-            }
-        }
-    }
-
-    fun updateSession(updatedSession: VoiceSession) {
-        _uiState.update { it.copy(session = updatedSession) }
-    }
-
-    fun saveEntry() {
-        if (_uiState.value.session.farmerPhone.isNotBlank() && _uiState.value.session.farmerPhone.length != 10) {
-            _uiState.update { it.copy(error = "Please enter a valid 10-digit mobile number") }
+    private fun handleSpokenResult(text: String) {
+        val currentStep = _uiState.value.step
+        timber.log.Timber.d("VOICE_STEP_CURRENT: $currentStep")
+        timber.log.Timber.d("VOICE_RAW_TEXT: $text")
+        
+        val normalized = com.dasariravi145.agrolynch.util.VoiceTextNormalizer.normalizeVoiceText(text, currentStep)
+        timber.log.Timber.d("VOICE_VALUE_DETECTED: $normalized")
+        
+        if (normalized.isBlank() && !isOptional(currentStep)) {
+            _uiState.update { it.copy(error = "Please speak clearly") }
             return
         }
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            val session = _uiState.value.session
+
+        updateDraftAndMoveToNextStep(normalized)
+    }
+
+    private fun isOptional(step: VoiceStep): Boolean {
+        return when(step) {
+            VoiceStep.PHONE_NUMBER, VoiceStep.VILLAGE, VoiceStep.WASTE, VoiceStep.COMMISSION,
+            VoiceStep.LABOUR_CHARGES, VoiceStep.TRANSPORT_CHARGES, VoiceStep.OTHER_DEDUCTIONS -> true
+            else -> false
+        }
+    }
+
+    fun skipCurrentStep() {
+        updateDraftAndMoveToNextStep("SKIP")
+    }
+
+    private fun updateDraftAndMoveToNextStep(value: String) {
+        val currentStep = _uiState.value.step
+        val isSkip = value == "SKIP"
+        
+        _uiState.update { state ->
+            val updatedDraft = when (currentStep) {
+                VoiceStep.FARMER_NAME -> state.draft.copy(farmerName = value)
+                VoiceStep.PHONE_NUMBER -> state.draft.copy(phone = if (isSkip) "" else value)
+                VoiceStep.VILLAGE -> state.draft.copy(village = if (isSkip) "" else value)
+                VoiceStep.PRODUCT_NAME -> state.draft.copy(productName = value)
+                VoiceStep.GRADE -> state.draft.copy(grade = value)
+                VoiceStep.UNIT -> state.draft.copy(unitType = value)
+                VoiceStep.QUANTITY -> state.draft.copy(quantity = value.toDoubleOrNull() ?: 0.0)
+                VoiceStep.WASTE -> state.draft.copy(waste = if (isSkip) 0.0 else value.toDoubleOrNull() ?: 0.0)
+                VoiceStep.RATE -> state.draft.copy(rate = value.toDoubleOrNull() ?: 0.0)
+                VoiceStep.COMMISSION -> state.draft.copy(commissionPercent = if (isSkip) 0.0 else value.toDoubleOrNull() ?: 0.0)
+                VoiceStep.LABOUR_CHARGES -> state.draft.copy(laborCharges = if (isSkip) 0.0 else value.toDoubleOrNull() ?: 0.0)
+                VoiceStep.TRANSPORT_CHARGES -> state.draft.copy(transportCharges = if (isSkip) 0.0 else value.toDoubleOrNull() ?: 0.0)
+                VoiceStep.OTHER_DEDUCTIONS -> state.draft.copy(otherDeductions = if (isSkip) 0.0 else value.toDoubleOrNull() ?: 0.0)
+                else -> state.draft
+            }
             
-            // 1. Handle Farmer Creation/Resolution
-            val existingFarmers = farmerRepository.getFarmers().first()
-            val farmer = existingFarmers.find { it.name.equals(session.farmerName, true) }
-            val farmerId = if (farmer == null) {
-                val newId = UUID.randomUUID().toString()
-                farmerRepository.addFarmer(FarmerEntity(
-                    id = newId,
-                    name = session.farmerName,
-                    mobileNumber = session.farmerPhone,
-                    village = session.farmerAddress
-                ))
-                newId
-            } else {
-                farmer.id
+            timber.log.Timber.d("VOICE_FIELD_DETECTED: Field=$currentStep, Value=$value")
+            timber.log.Timber.d("VOICE_DRAFT_UPDATED: ${updatedDraft}")
+
+            val nextStep = getNextStep(currentStep)
+            
+            if (nextStep == VoiceStep.COMPLETED) {
+                timber.log.Timber.d("VOICE_STEP_COMPLETED: Flow Finished")
+                viewModelScope.launch {
+                    _navigationEvent.emit(VoiceNavigationEvent.NavigateToArrival(updatedDraft))
+                }
             }
 
-            // 2. Handle Product Creation/Resolution
-            val existingProduct = productRepository.getProductByName(session.productName)
-            val productId = if (existingProduct == null) {
-                val newId = UUID.randomUUID().toString()
-                productRepository.addProduct(ProductEntity(
-                    id = newId,
-                    name = session.productName,
-                    category = session.productCategory,
-                    availableGrades = listOf(session.grade)
-                ), null)
-                newId
-            } else {
-                existingProduct.id
-            }
+            state.copy(
+                draft = updatedDraft,
+                step = nextStep,
+                spokenText = if (isSkip) "Skipped" else value,
+                error = null
+            )
+        }
+    }
 
-            // 3. Save Arrival
-            val result = arrivalRepository.addArrival(ArrivalEntity(
-                id = UUID.randomUUID().toString(),
-                farmerId = farmerId,
-                farmerName = session.farmerName,
-                productId = productId,
-                productName = session.productName,
-                productCategory = session.productCategory,
-                grade = session.grade,
-                quantity = session.quantity,
-                remainingQuantity = session.quantity - session.spoilage,
-                spoilageQuantity = session.spoilage,
-                unit = session.unit,
-                purchaseRate = session.rate,
-                grossAmount = session.quantity * session.rate,
-                commissionPercent = session.commission,
-                commissionAmount = (session.quantity * session.rate * session.commission / 100),
-                transportCharges = session.transport,
-                laborCharges = session.labor,
-                packingCharges = session.packing,
-                netAmount = (session.quantity * session.rate) - (session.quantity * session.rate * session.commission / 100) - session.transport - session.labor - session.packing,
-                date = session.date
-            ))
+    private fun getNextStep(current: VoiceStep): VoiceStep {
+        return when (current) {
+            VoiceStep.FARMER_NAME -> VoiceStep.PHONE_NUMBER
+            VoiceStep.PHONE_NUMBER -> VoiceStep.VILLAGE
+            VoiceStep.VILLAGE -> VoiceStep.PRODUCT_NAME
+            VoiceStep.PRODUCT_NAME -> VoiceStep.GRADE
+            VoiceStep.GRADE -> VoiceStep.UNIT
+            VoiceStep.UNIT -> VoiceStep.QUANTITY
+            VoiceStep.QUANTITY -> VoiceStep.WASTE
+            VoiceStep.WASTE -> VoiceStep.RATE
+            VoiceStep.RATE -> VoiceStep.COMMISSION
+            VoiceStep.COMMISSION -> VoiceStep.LABOUR_CHARGES
+            VoiceStep.LABOUR_CHARGES -> VoiceStep.TRANSPORT_CHARGES
+            VoiceStep.TRANSPORT_CHARGES -> VoiceStep.OTHER_DEDUCTIONS
+            VoiceStep.OTHER_DEDUCTIONS -> VoiceStep.COMPLETED
+            else -> VoiceStep.COMPLETED
+        }
+    }
 
-            if (result is Resource.Success) {
-                _uiState.update { it.copy(isLoading = false, step = VoiceStep.SUCCESS) }
-            } else {
-                _uiState.update { it.copy(isLoading = false, error = result.message) }
-            }
+    fun forceComplete() {
+        timber.log.Timber.d("VOICE_REVIEW_OPENED: Transitioning to Manual Review")
+        viewModelScope.launch {
+            _navigationEvent.emit(VoiceNavigationEvent.NavigateToArrival(_uiState.value.draft))
         }
     }
 

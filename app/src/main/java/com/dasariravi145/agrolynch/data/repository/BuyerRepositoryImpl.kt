@@ -35,7 +35,20 @@ class BuyerRepositoryImpl @Inject constructor(
             userId?.let { uid ->
                 repositoryScope.launch {
                     try {
-                        firestore.collection("users").document(uid).collection("buyers").document(buyer.id).set(buyer).await()
+                        val firestoreData = mapOf(
+                            "buyerId" to buyer.id,
+                            "ownerUserId" to uid,
+                            "name" to buyer.name,
+                            "phone" to buyer.mobileNumber,
+                            "address" to buyer.address,
+                            "gstNumber" to buyer.gstNumber,
+                            "totalPurchase" to buyer.totalPurchase,
+                            "totalPaid" to buyer.totalPaid,
+                            "pendingAmount" to buyer.pendingAmount,
+                            "lastUpdated" to buyer.lastUpdated,
+                            "isDeleted" to buyer.isDeleted
+                        )
+                        firestore.collection("users").document(uid).collection("buyers").document(buyer.id).set(firestoreData).await()
                         buyerDao.markAsSynced(buyer.id)
                     } catch (e: Exception) {
                         // Will be synced later by Worker
@@ -55,7 +68,12 @@ class BuyerRepositoryImpl @Inject constructor(
             userId?.let { uid ->
                 repositoryScope.launch {
                     try {
-                        firestore.collection("users").document(uid).collection("buyers").document(buyer.id).set(updatedBuyer).await()
+                        val firestoreData = updatedBuyer.javaClass.declaredFields.associate { field ->
+                            field.isAccessible = true
+                            field.name to field.get(updatedBuyer)
+                        }.toMutableMap()
+                        firestoreData["ownerUserId"] = uid
+                        firestore.collection("users").document(uid).collection("buyers").document(buyer.id).set(firestoreData).await()
                         buyerDao.markAsSynced(buyer.id)
                     } catch (e: Exception) {
                         // Will be synced later
@@ -91,7 +109,12 @@ class BuyerRepositoryImpl @Inject constructor(
         return try {
             val unsyncedBuyers = buyerDao.getUnsyncedBuyers()
             for (buyer in unsyncedBuyers) {
-                firestore.collection("users").document(uid).collection("buyers").document(buyer.id).set(buyer).await()
+                val firestoreData = buyer.javaClass.declaredFields.associate { field ->
+                    field.isAccessible = true
+                    field.name to field.get(buyer)
+                }.toMutableMap()
+                firestoreData["ownerUserId"] = uid
+                firestore.collection("users").document(uid).collection("buyers").document(buyer.id).set(firestoreData).await()
                 buyerDao.markAsSynced(buyer.id)
             }
             Resource.Success(Unit)

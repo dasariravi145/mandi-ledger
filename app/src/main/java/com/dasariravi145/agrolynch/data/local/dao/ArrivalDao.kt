@@ -34,6 +34,9 @@ interface ArrivalDao {
     @Query("SELECT * FROM arrivals WHERE id = :id")
     suspend fun getArrivalById(id: String): ArrivalEntity?
 
+    @Query("SELECT * FROM arrivals")
+    suspend fun getAllArrivalsList(): List<ArrivalEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArrival(arrival: ArrivalEntity)
 

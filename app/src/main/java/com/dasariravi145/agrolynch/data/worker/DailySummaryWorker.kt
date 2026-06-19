@@ -12,6 +12,9 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
 import java.util.*
 
+import java.util.*
+import com.dasariravi145.agrolynch.R
+
 @HiltWorker
 class DailySummaryWorker @AssistedInject constructor(
     @Assisted context: Context,
@@ -38,7 +41,7 @@ class DailySummaryWorker @AssistedInject constructor(
         notificationHelper.showSimpleNotification(
             NotificationHelper.CHANNEL_DAILY_SUMMARY,
             NotificationHelper.NOTIFICATION_ID_SUMMARY,
-            "Daily Business Summary / వ్యాపార సారాంశం",
+            applicationContext.getString(R.string.daily_business_summary),
             "Sales: ₹$todaySales | Expenses: ₹$todayExpenses"
         )
 

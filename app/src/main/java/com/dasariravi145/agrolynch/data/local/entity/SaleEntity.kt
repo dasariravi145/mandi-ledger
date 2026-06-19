@@ -27,6 +27,7 @@ data class SaleEntity(
     val transportCharges: Double = 0.0,
     val packingCharges: Double = 0.0, // Aggregate or first item
     val otherCharges: Double = 0.0,
+    val billNumber: String = "",
     val totalNetAmount: Double = 0.0, // Final collection
     val totalMargin: Double = 0.0,
     val paidAmount: Double = 0.0,

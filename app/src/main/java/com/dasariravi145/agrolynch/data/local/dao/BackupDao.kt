@@ -9,6 +9,9 @@ interface BackupDao {
     @Query("SELECT * FROM backup_history ORDER BY timestamp DESC")
     fun getBackupHistory(): Flow<List<BackupEntity>>
 
+    @Query("SELECT * FROM backup_history WHERE id = :id")
+    suspend fun getBackupByIdSync(id: String): BackupEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBackup(backup: BackupEntity)
 

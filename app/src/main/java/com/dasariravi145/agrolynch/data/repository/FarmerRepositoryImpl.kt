@@ -34,7 +34,20 @@ class FarmerRepositoryImpl @Inject constructor(
             userId?.let { uid ->
                 repositoryScope.launch {
                     try {
-                        firestore.collection("users").document(uid).collection("farmers").document(farmer.id).set(farmer).await()
+                        val firestoreData = mapOf(
+                            "farmerId" to farmer.id,
+                            "ownerUserId" to uid,
+                            "name" to farmer.name,
+                            "phone" to farmer.mobileNumber,
+                            "village" to farmer.village,
+                            "totalArrivals" to farmer.totalArrivals,
+                            "totalPayments" to farmer.totalPayments,
+                            "pendingAmount" to farmer.pendingAmount,
+                            "advanceAmount" to farmer.advanceAmount,
+                            "lastUpdated" to farmer.lastUpdated,
+                            "isDeleted" to farmer.isDeleted
+                        )
+                        firestore.collection("users").document(uid).collection("farmers").document(farmer.id).set(firestoreData).await()
                         farmerDao.markAsSynced(farmer.id)
                     } catch (e: Exception) {
                         // Synced later
@@ -54,7 +67,12 @@ class FarmerRepositoryImpl @Inject constructor(
             userId?.let { uid ->
                 repositoryScope.launch {
                     try {
-                        firestore.collection("users").document(uid).collection("farmers").document(farmer.id).set(updatedFarmer).await()
+                        val firestoreData = updatedFarmer.javaClass.declaredFields.associate { field ->
+                            field.isAccessible = true
+                            field.name to field.get(updatedFarmer)
+                        }.toMutableMap()
+                        firestoreData["ownerUserId"] = uid
+                        firestore.collection("users").document(uid).collection("farmers").document(farmer.id).set(firestoreData).await()
                         farmerDao.markAsSynced(farmer.id)
                     } catch (e: Exception) {
                         // Synced later
@@ -90,7 +108,12 @@ class FarmerRepositoryImpl @Inject constructor(
         return try {
             val unsyncedFarmers = farmerDao.getUnsyncedFarmers()
             for (farmer in unsyncedFarmers) {
-                firestore.collection("users").document(uid).collection("farmers").document(farmer.id).set(farmer).await()
+                val firestoreData = farmer.javaClass.declaredFields.associate { field ->
+                    field.isAccessible = true
+                    field.name to field.get(farmer)
+                }.toMutableMap()
+                firestoreData["ownerUserId"] = uid
+                firestore.collection("users").document(uid).collection("farmers").document(farmer.id).set(firestoreData).await()
                 farmerDao.markAsSynced(farmer.id)
             }
             Resource.Success(Unit)

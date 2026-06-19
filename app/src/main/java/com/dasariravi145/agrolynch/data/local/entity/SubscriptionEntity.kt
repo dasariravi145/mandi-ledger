@@ -14,5 +14,6 @@ data class SubscriptionEntity(
     val purchaseDate: Long,
     val expiryDate: Long,
     val accountReceived: String = "Google Play Store",
-    val orderId: String = ""
+    val orderId: String = "",
+    val productId: String = ""
 )

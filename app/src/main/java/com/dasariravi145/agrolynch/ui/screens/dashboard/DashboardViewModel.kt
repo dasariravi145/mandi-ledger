@@ -6,6 +6,7 @@ import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import com.dasariravi145.agrolynch.domain.repository.*
 import com.dasariravi145.agrolynch.ui.screens.auth.AuthViewModel
 import com.dasariravi145.agrolynch.util.*
+import java.io.File
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -114,5 +115,9 @@ class DashboardViewModel @Inject constructor(
                 updateState { it.copy(isLoading = false) }
             }
         }
+    }
+
+    fun onLogout() {
+        authRepository.logout()
     }
 }

@@ -402,4 +402,470 @@ object DatabaseMigrations {
             db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `commissionPercent` REAL NOT NULL DEFAULT 0.0")
         }
     }
+
+    val MIGRATION_31_32 = object : Migration(31, 32) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `billNumber` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
+    val MIGRATION_32_33 = object : Migration(32, 33) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Ton mode columns
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `totalKg` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `spoilagePerTon` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `totalSpoilageKg` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `otherCharges` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `netPayable` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `boxWeightMode` TEXT NOT NULL DEFAULT 'AVERAGE'")
+
+            // New table for individual boxes
+            db.execSQL("CREATE TABLE IF NOT EXISTS `box_weight_items` (`id` TEXT NOT NULL, `arrivalId` TEXT NOT NULL, `boxNumber` INTEGER NOT NULL, `grossWeightKg` REAL NOT NULL, `tareWeightKg` REAL NOT NULL, `spoilageKg` REAL NOT NULL, `netWeightKg` REAL NOT NULL, PRIMARY KEY(`id`))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_box_weight_items_arrivalId` ON `box_weight_items` (`arrivalId`)")
+        }
+    }
+
+    val MIGRATION_33_34 = object : Migration(33, 34) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `spoilagePercentage` REAL NOT NULL DEFAULT 0.0")
+        }
+    }
+
+    val MIGRATION_34_35 = object : Migration(34, 35) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Using the correct name from ArrivalEntity
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `weightAfterEmptyBoxesKg` REAL NOT NULL DEFAULT 0.0")
+        }
+    }
+
+    val MIGRATION_35_36 = object : Migration(35, 36) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Remaining Boxes mode columns
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `numberOfBoxes` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `kgPerBox` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `totalEmptyBoxWeightKg` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `spoilageKg` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `grossWeightKg` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `finalNetWeightKg` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `ratePerKg` REAL NOT NULL DEFAULT 0.0")
+        }
+    }
+
+    val MIGRATION_36_37 = object : Migration(36, 37) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `farmerName` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `productName` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `productGrade` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `unit` TEXT NOT NULL DEFAULT 'KG'")
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `numberOfBoxes` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `kgPerBox` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `totalEmptyBoxWeightKg` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `spoilagePercentage` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `rate` REAL NOT NULL DEFAULT 0.0")
+        }
+    }
+
+    val MIGRATION_37_38 = object : Migration(37, 38) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            timber.log.Timber.d("MIGRATION_37_38: Rebuilding arrivals table to fix schema mismatch")
+            
+            // 1. Create new table with exact schema from ArrivalEntity
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `arrivals_new` (
+                    `id` TEXT NOT NULL, 
+                    `farmerId` TEXT NOT NULL, 
+                    `farmerName` TEXT NOT NULL, 
+                    `productId` TEXT NOT NULL, 
+                    `productName` TEXT NOT NULL, 
+                    `productCategory` TEXT NOT NULL DEFAULT 'General', 
+                    `grade` TEXT NOT NULL DEFAULT '', 
+                    `quantity` REAL NOT NULL DEFAULT 0.0, 
+                    `unit` TEXT NOT NULL DEFAULT 'KG', 
+                    `boxCount` INTEGER NOT NULL DEFAULT 0, 
+                    `tareWeight` REAL NOT NULL DEFAULT 0.0, 
+                    `spoilageQuantity` REAL NOT NULL DEFAULT 0.0, 
+                    `netQuantity` REAL NOT NULL DEFAULT 0.0, 
+                    `remainingQuantity` REAL NOT NULL DEFAULT 0.0, 
+                    `purchaseRate` REAL NOT NULL DEFAULT 0.0, 
+                    `grossAmount` REAL NOT NULL DEFAULT 0.0, 
+                    `commissionPercent` REAL NOT NULL DEFAULT 0.0, 
+                    `commissionAmount` REAL NOT NULL DEFAULT 0.0, 
+                    `laborCharges` REAL NOT NULL DEFAULT 0.0, 
+                    `transportCharges` REAL NOT NULL DEFAULT 0.0, 
+                    `packingCharges` REAL NOT NULL DEFAULT 0.0, 
+                    `otherDeductions` REAL NOT NULL DEFAULT 0.0, 
+                    `netAmount` REAL NOT NULL DEFAULT 0.0, 
+                    `billNumber` TEXT NOT NULL DEFAULT '', 
+                    `farmerPendingAmount` REAL NOT NULL DEFAULT 0.0, 
+                    `totalKg` REAL NOT NULL DEFAULT 0.0, 
+                    `spoilagePerTon` REAL NOT NULL DEFAULT 0.0, 
+                    `totalSpoilageKg` REAL NOT NULL DEFAULT 0.0, 
+                    `otherCharges` REAL NOT NULL DEFAULT 0.0, 
+                    `netPayable` REAL NOT NULL DEFAULT 0.0, 
+                    `boxWeightMode` TEXT NOT NULL DEFAULT 'AVERAGE', 
+                    `numberOfBoxes` INTEGER NOT NULL DEFAULT 0, 
+                    `kgPerBox` REAL NOT NULL DEFAULT 0.0, 
+                    `totalEmptyBoxWeightKg` REAL NOT NULL DEFAULT 0.0, 
+                    `spoilagePercentage` REAL NOT NULL DEFAULT 0.0, 
+                    `spoilageKg` REAL NOT NULL DEFAULT 0.0, 
+                    `grossWeightKg` REAL NOT NULL DEFAULT 0.0, 
+                    `weightAfterEmptyBoxesKg` REAL NOT NULL DEFAULT 0.0, 
+                    `finalNetWeightKg` REAL NOT NULL DEFAULT 0.0, 
+                    `ratePerKg` REAL NOT NULL DEFAULT 0.0, 
+                    `date` INTEGER NOT NULL, 
+                    `createdAt` INTEGER NOT NULL, 
+                    `isSynced` INTEGER NOT NULL DEFAULT 0, 
+                    `isDeleted` INTEGER NOT NULL DEFAULT 0, 
+                    PRIMARY KEY(`id`)
+                )
+            """.trimIndent())
+
+            // 2. Identify available columns in old table
+            val cursor = db.query("PRAGMA table_info(arrivals)")
+            val existingColumns = mutableListOf<String>()
+            while (cursor.moveToNext()) {
+                existingColumns.add(cursor.getString(1))
+            }
+            cursor.close()
+            
+            timber.log.Timber.d("MIGRATION_37_38: Existing columns in arrivals: $existingColumns")
+
+            // 3. Construct dynamic SELECT to handle missing columns
+            val targetColumns = listOf(
+                "id", "farmerId", "farmerName", "productId", "productName", "productCategory", "grade",
+                "quantity", "unit", "boxCount", "tareWeight", "spoilageQuantity", "netQuantity",
+                "remainingQuantity", "purchaseRate", "grossAmount", "commissionPercent", "commissionAmount",
+                "laborCharges", "transportCharges", "packingCharges", "otherDeductions", "netAmount",
+                "billNumber", "farmerPendingAmount", "totalKg", "spoilagePerTon", "totalSpoilageKg",
+                "otherCharges", "netPayable", "boxWeightMode", "numberOfBoxes", "kgPerBox",
+                "totalEmptyBoxWeightKg", "spoilagePercentage", "spoilageKg", "grossWeightKg",
+                "weightAfterEmptyBoxesKg", "finalNetWeightKg", "ratePerKg", "date", "createdAt",
+                "isSynced", "isDeleted"
+            )
+
+            val selectClause = targetColumns.joinToString(", ") { col ->
+                if (col in existingColumns) "`$col`"
+                else {
+                    when (col) {
+                        "productCategory" -> "'General'"
+                        "boxWeightMode" -> "'AVERAGE'"
+                        "unit" -> "'KG'"
+                        "id", "farmerId", "farmerName", "productId", "productName", "grade", "billNumber" -> "''"
+                        "numberOfBoxes", "boxCount", "isSynced", "isDeleted" -> "0"
+                        "date", "createdAt" -> "strftime('%s','now')*1000"
+                        else -> "0.0"
+                    } + " AS `$col`"
+                }
+            }
+
+            db.execSQL("INSERT INTO `arrivals_new` ($selectClause) SELECT $selectClause FROM `arrivals` ")
+
+            // 4. Swap tables
+            db.execSQL("DROP TABLE `arrivals`")
+            db.execSQL("ALTER TABLE `arrivals_new` RENAME TO `arrivals`")
+
+            // 5. Recreate Indexes
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_farmerId` ON `arrivals` (`farmerId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_productId` ON `arrivals` (`productId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_date` ON `arrivals` (`date`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_isDeleted` ON `arrivals` (`isDeleted`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_remainingQuantity` ON `arrivals` (`remainingQuantity`)")
+            
+            timber.log.Timber.d("MIGRATION_37_38: Migration completed successfully")
+        }
+    }
+
+    val MIGRATION_38_39 = object : Migration(38, 39) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            timber.log.Timber.d("MIGRATION_38_39: Updating arrivals table for Ton-based Boxes mode")
+            
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `arrivals_new` (
+                    `id` TEXT NOT NULL, `farmerId` TEXT NOT NULL, `farmerName` TEXT NOT NULL, `productId` TEXT NOT NULL, `productName` TEXT NOT NULL, `productCategory` TEXT NOT NULL DEFAULT 'General', `grade` TEXT NOT NULL DEFAULT '', `quantity` REAL NOT NULL DEFAULT 0.0, `unit` TEXT NOT NULL DEFAULT 'KG', `boxCount` INTEGER NOT NULL DEFAULT 0, `tareWeight` REAL NOT NULL DEFAULT 0.0, `spoilageQuantity` REAL NOT NULL DEFAULT 0.0, `netQuantity` REAL NOT NULL DEFAULT 0.0, `remainingQuantity` REAL NOT NULL DEFAULT 0.0, `purchaseRate` REAL NOT NULL DEFAULT 0.0, `grossAmount` REAL NOT NULL DEFAULT 0.0, `commissionPercent` REAL NOT NULL DEFAULT 0.0, `commissionAmount` REAL NOT NULL DEFAULT 0.0, `laborCharges` REAL NOT NULL DEFAULT 0.0, `transportCharges` REAL NOT NULL DEFAULT 0.0, `packingCharges` REAL NOT NULL DEFAULT 0.0, `otherDeductions` REAL NOT NULL DEFAULT 0.0, `netAmount` REAL NOT NULL DEFAULT 0.0, `billNumber` TEXT NOT NULL DEFAULT '', `farmerPendingAmount` REAL NOT NULL DEFAULT 0.0, `totalKg` REAL NOT NULL DEFAULT 0.0, `spoilagePerTon` REAL NOT NULL DEFAULT 0.0, `totalSpoilageKg` REAL NOT NULL DEFAULT 0.0, `otherCharges` REAL NOT NULL DEFAULT 0.0, `netPayable` REAL NOT NULL DEFAULT 0.0, `boxWeightMode` TEXT NOT NULL DEFAULT 'AVERAGE', `numberOfBoxes` INTEGER NOT NULL DEFAULT 0, `totalWeightTon` REAL NOT NULL DEFAULT 0.0, `emptyBoxWeightPerBox` REAL NOT NULL DEFAULT 0.0, `totalEmptyBoxWeightKg` REAL NOT NULL DEFAULT 0.0, `spoilagePercentage` REAL NOT NULL DEFAULT 0.0, `spoilageKg` REAL NOT NULL DEFAULT 0.0, `grossWeightKg` REAL NOT NULL DEFAULT 0.0, `weightAfterEmptyBoxesKg` REAL NOT NULL DEFAULT 0.0, `finalNetWeightKg` REAL NOT NULL DEFAULT 0.0, `ratePerKg` REAL NOT NULL DEFAULT 0.0, `date` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `isSynced` INTEGER NOT NULL DEFAULT 0, `isDeleted` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`)
+                )
+            """.trimIndent())
+
+            val targetColumns = listOf(
+                "id", "farmerId", "farmerName", "productId", "productName", "productCategory", "grade",
+                "quantity", "unit", "boxCount", "tareWeight", "spoilageQuantity", "netQuantity",
+                "remainingQuantity", "purchaseRate", "grossAmount", "commissionPercent", "commissionAmount",
+                "laborCharges", "transportCharges", "packingCharges", "otherDeductions", "netAmount",
+                "billNumber", "farmerPendingAmount", "totalKg", "spoilagePerTon", "totalSpoilageKg",
+                "otherCharges", "netPayable", "boxWeightMode", "numberOfBoxes", "totalWeightTon", 
+                "emptyBoxWeightPerBox", "totalEmptyBoxWeightKg", "spoilagePercentage", "spoilageKg", 
+                "grossWeightKg", "weightAfterEmptyBoxesKg", "finalNetWeightKg", "ratePerKg", "date", 
+                "createdAt", "isSynced", "isDeleted"
+            )
+
+            val selectClause = targetColumns.joinToString(", ") { col ->
+                when (col) {
+                    "totalWeightTon" -> "COALESCE(`grossWeightKg`, 0.0) / 1000.0 AS `totalWeightTon`"
+                    "emptyBoxWeightPerBox" -> "CASE WHEN `numberOfBoxes` > 0 THEN `totalEmptyBoxWeightKg` / `numberOfBoxes` ELSE 0.0 END AS `emptyBoxWeightPerBox`"
+                    else -> "`$col`"
+                }
+            }
+
+            db.execSQL("INSERT INTO `arrivals_new` SELECT $selectClause FROM `arrivals` ")
+            db.execSQL("DROP TABLE `arrivals`")
+            db.execSQL("ALTER TABLE `arrivals_new` RENAME TO `arrivals`")
+
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_farmerId` ON `arrivals` (`farmerId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_productId` ON `arrivals` (`productId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_date` ON `arrivals` (`date`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_isDeleted` ON `arrivals` (`isDeleted`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrivals_remainingQuantity` ON `arrivals` (`remainingQuantity`)")
+        }
+    }
+
+    val MIGRATION_39_40 = object : Migration(39, 40) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            timber.log.Timber.d("MIGRATION_39_40: Updating ocr_scans table for Ton-based Boxes mode")
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `totalWeightTon` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `ocr_scans` ADD COLUMN `emptyBoxWeightPerBox` REAL NOT NULL DEFAULT 0.0")
+        }
+    }
+
+    val MIGRATION_40_41 = object : Migration(40, 41) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            timber.log.Timber.d("MIGRATION_40_41: Rebuilding ocr_scans table to fix schema mismatch")
+            
+            // 1. Create new table with exact schema required by Room
+            db.execSQL("""
+                CREATE TABLE `ocr_scans_new` (
+                    `scanId` TEXT NOT NULL, 
+                    `billNumber` TEXT NOT NULL, 
+                    `amount` REAL NOT NULL, 
+                    `billDate` INTEGER NOT NULL, 
+                    `ocrText` TEXT NOT NULL, 
+                    `imageUrl` TEXT, 
+                    `transactionType` TEXT NOT NULL, 
+                    `farmerName` TEXT NOT NULL, 
+                    `productName` TEXT NOT NULL, 
+                    `productGrade` TEXT NOT NULL, 
+                    `unit` TEXT NOT NULL, 
+                    `numberOfBoxes` INTEGER NOT NULL, 
+                    `totalWeightTon` REAL NOT NULL, 
+                    `emptyBoxWeightPerBox` REAL NOT NULL, 
+                    `totalEmptyBoxWeightKg` REAL NOT NULL, 
+                    `spoilagePercentage` REAL NOT NULL, 
+                    `rate` REAL NOT NULL, 
+                    `createdAt` INTEGER NOT NULL, 
+                    PRIMARY KEY(`scanId`)
+                )
+            """.trimIndent())
+
+            // 2. Identify available columns
+            val cursor = db.query("PRAGMA table_info(ocr_scans)")
+            val existingColumns = mutableListOf<String>()
+            while (cursor.moveToNext()) {
+                existingColumns.add(cursor.getString(1))
+            }
+            cursor.close()
+
+            // 3. Copy data with COALESCE for missing fields
+            val columns = listOf(
+                "scanId", "billNumber", "amount", "billDate", "ocrText", "imageUrl", 
+                "transactionType", "farmerName", "productName", "productGrade", 
+                "unit", "numberOfBoxes", "totalWeightTon", "emptyBoxWeightPerBox", 
+                "totalEmptyBoxWeightKg", "spoilagePercentage", "rate", "createdAt"
+            )
+
+            val selectClause = columns.joinToString(", ") { col ->
+                if (col in existingColumns) "`$col`"
+                else {
+                    when (col) {
+                        "unit" -> "'KG'"
+                        "numberOfBoxes" -> "0"
+                        "imageUrl" -> "NULL"
+                        "billDate", "createdAt" -> "strftime('%s','now')*1000"
+                        "billNumber", "ocrText", "transactionType", "farmerName", "productName", "productGrade" -> "''"
+                        else -> "0.0"
+                    } + " AS `$col`"
+                }
+            }
+
+            db.execSQL("INSERT INTO `ocr_scans_new` SELECT $selectClause FROM `ocr_scans` ")
+
+            // 4. Swap tables
+            db.execSQL("DROP TABLE `ocr_scans`")
+            db.execSQL("ALTER TABLE `ocr_scans_new` RENAME TO `ocr_scans`")
+
+            // 5. Recreate Indices
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_ocr_scans_billDate` ON `ocr_scans` (`billDate`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_ocr_scans_billNumber` ON `ocr_scans` (`billNumber`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_ocr_scans_createdAt` ON `ocr_scans` (`createdAt`)")
+            
+            timber.log.Timber.d("MIGRATION_40_41: Migration completed successfully")
+        }
+    }
+
+    val MIGRATION_41_42 = object : Migration(41, 42) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `company_profile` ADD COLUMN `tagline` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `company_profile` ADD COLUMN `upiId` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `company_profile` ADD COLUMN `upiQrPath` TEXT")
+            db.execSQL("ALTER TABLE `company_profile` ADD COLUMN `fruitImagePath` TEXT")
+        }
+    }
+
+    val MIGRATION_42_43 = object : Migration(42, 43) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 1. Add billNumber to sales and payments
+            db.execSQL("ALTER TABLE `sales` ADD COLUMN `billNumber` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `payments` ADD COLUMN `billNumber` TEXT NOT NULL DEFAULT ''")
+
+            // 2. Create bill_number_series table
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `bill_number_series` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 
+                    `seriesType` TEXT NOT NULL, 
+                    `prefix` TEXT NOT NULL, 
+                    `currentNumber` INTEGER NOT NULL, 
+                    `startingNumber` INTEGER NOT NULL, 
+                    `resetYearly` INTEGER NOT NULL, 
+                    `financialYearEnabled` INTEGER NOT NULL, 
+                    `lastGeneratedDate` INTEGER NOT NULL, 
+                    `createdAt` INTEGER NOT NULL, 
+                    `updatedAt` INTEGER NOT NULL
+                )
+            """.trimIndent())
+
+            // 3. Create entry_deductions table
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `entry_deductions` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 
+                    `entryId` TEXT NOT NULL, 
+                    `entryType` TEXT NOT NULL, 
+                    `billId` TEXT NOT NULL, 
+                    `deductionType` TEXT NOT NULL, 
+                    `customName` TEXT NOT NULL, 
+                    `amount` REAL NOT NULL, 
+                    `notes` TEXT NOT NULL, 
+                    `createdAt` INTEGER NOT NULL
+                )
+            """.trimIndent())
+            
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_entry_deductions_entryId` ON `entry_deductions` (`entryId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_entry_deductions_billId` ON `entry_deductions` (`billId`)")
+        }
+    }
+
+    val MIGRATION_43_44 = object : Migration(43, 44) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `inputQuantity` REAL NOT NULL DEFAULT 0.0")
+        }
+    }
+
+    val MIGRATION_44_45 = object : Migration(44, 45) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `company_profile` ADD COLUMN `defaultTemplate` TEXT NOT NULL DEFAULT 'GK_FRUITS_CLASSIC'")
+        }
+    }
+
+    val MIGRATION_45_46 = object : Migration(45, 46) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Fix BackupEntity mismatch
+            db.execSQL("ALTER TABLE `backup_history` ADD COLUMN `phoneNumber` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `backup_history` ADD COLUMN `userName` TEXT NOT NULL DEFAULT ''")
+            
+            // Fix UserEntity mismatch (suspected missing fields in previous versions)
+            val userInfo = db.query("PRAGMA table_info(users)")
+            val userColumns = mutableListOf<String>()
+            while (userInfo.moveToNext()) { userColumns.add(userInfo.getString(1)) }
+            userInfo.close()
+
+            if ("location" !in userColumns) db.execSQL("ALTER TABLE `users` ADD COLUMN `location` TEXT NOT NULL DEFAULT ''")
+            if ("pinHash" !in userColumns) db.execSQL("ALTER TABLE `users` ADD COLUMN `pinHash` TEXT NOT NULL DEFAULT ''")
+            if ("premiumPlan" !in userColumns) db.execSQL("ALTER TABLE `users` ADD COLUMN `premiumPlan` TEXT NOT NULL DEFAULT ''")
+            if ("premiumStartDate" !in userColumns) db.execSQL("ALTER TABLE `users` ADD COLUMN `premiumStartDate` INTEGER NOT NULL DEFAULT 0")
+            if ("premiumExpiryDate" !in userColumns) db.execSQL("ALTER TABLE `users` ADD COLUMN `premiumExpiryDate` INTEGER NOT NULL DEFAULT 0")
+            if ("purchaseToken" !in userColumns) db.execSQL("ALTER TABLE `users` ADD COLUMN `purchaseToken` TEXT NOT NULL DEFAULT ''")
+            if ("productId" !in userColumns) db.execSQL("ALTER TABLE `users` ADD COLUMN `productId` TEXT NOT NULL DEFAULT ''")
+            if ("lastUpdatedAt" !in userColumns) db.execSQL("ALTER TABLE `users` ADD COLUMN `lastUpdatedAt` INTEGER NOT NULL DEFAULT 0")
+            if ("createdAt" !in userColumns) db.execSQL("ALTER TABLE `users` ADD COLUMN `createdAt` INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+    val MIGRATION_46_47 = object : Migration(46, 47) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `company_profile` ADD COLUMN `marketName` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `company_profile` ADD COLUMN `city` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `company_profile` ADD COLUMN `customTemplatePath` TEXT")
+            
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `template_positions` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 
+                    `templateType` TEXT NOT NULL, 
+                    `fieldKey` TEXT NOT NULL, 
+                    `x` REAL NOT NULL, 
+                    `y` REAL NOT NULL, 
+                    `width` REAL NOT NULL DEFAULT 0.0, 
+                    `height` REAL NOT NULL DEFAULT 0.0, 
+                    `fontSize` REAL NOT NULL DEFAULT 12.0, 
+                    `fontColor` INTEGER NOT NULL DEFAULT -16777216, 
+                    `alignment` TEXT NOT NULL DEFAULT 'LEFT', 
+                    `isVisible` INTEGER NOT NULL DEFAULT 1
+                )
+            """.trimIndent())
+        }
+    }
+
+    val MIGRATION_47_48 = object : Migration(47, 48) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            timber.log.Timber.d("MIGRATION_47_48: Fixing various schema mismatches")
+            
+            // 1. Fix products table
+            val productInfo = db.query("PRAGMA table_info(products)")
+            val productColumns = mutableListOf<String>()
+            while (productInfo.moveToNext()) { productColumns.add(productInfo.getString(1)) }
+            productInfo.close()
+
+            if ("category" !in productColumns) db.execSQL("ALTER TABLE `products` ADD COLUMN `category` TEXT NOT NULL DEFAULT ''")
+            if ("imageUrl" !in productColumns) db.execSQL("ALTER TABLE `products` ADD COLUMN `imageUrl` TEXT NOT NULL DEFAULT ''")
+            if ("availableGrades" !in productColumns) db.execSQL("ALTER TABLE `products` ADD COLUMN `availableGrades` TEXT NOT NULL DEFAULT '[]'")
+
+            // 2. Fix company_profile table
+            val profileInfo = db.query("PRAGMA table_info(company_profile)")
+            val profileColumns = mutableListOf<String>()
+            while (profileInfo.moveToNext()) { profileColumns.add(profileInfo.getString(1)) }
+            profileInfo.close()
+
+            if ("pincode" !in profileColumns) db.execSQL("ALTER TABLE `company_profile` ADD COLUMN `pincode` TEXT NOT NULL DEFAULT ''")
+
+            // 3. Ensure isSynced and isDeleted exist in all major tables
+            val tablesToFix = listOf("farmers", "buyers", "products", "transactions", "arrivals", "sales", "payments", "market_rates")
+            tablesToFix.forEach { table ->
+                val info = db.query("PRAGMA table_info($table)")
+                val cols = mutableListOf<String>()
+                while (info.moveToNext()) { cols.add(info.getString(1)) }
+                info.close()
+
+                if ("isSynced" !in cols) db.execSQL("ALTER TABLE `$table` ADD COLUMN `isSynced` INTEGER NOT NULL DEFAULT 0")
+                if ("isDeleted" !in cols) db.execSQL("ALTER TABLE `$table` ADD COLUMN `isDeleted` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+    }
+
+    val MIGRATION_48_49 = object : Migration(48, 49) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `template_positions` ADD COLUMN `xPercent` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `template_positions` ADD COLUMN `yPercent` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `template_positions` ADD COLUMN `widthPercent` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `template_positions` ADD COLUMN `heightPercent` REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE `template_positions` ADD COLUMN `backgroundColor` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `template_positions` ADD COLUMN `borderColor` INTEGER NOT NULL DEFAULT -7829368")
+            db.execSQL("ALTER TABLE `template_positions` ADD COLUMN `borderEnabled` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `template_positions` ADD COLUMN `bold` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `template_positions` ADD COLUMN `updatedAt` INTEGER NOT NULL DEFAULT 0")
+            
+            // Initialize percentages for existing data (assuming A4 default if x/y were points)
+            db.execSQL("UPDATE `template_positions` SET `xPercent` = `x` / 595.0, `yPercent` = `y` / 842.0 WHERE `x` > 0 OR `y` > 0")
+        }
+    }
+
+    val MIGRATION_49_50 = object : Migration(49, 50) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `backup_history` ADD COLUMN `storagePath` TEXT NOT NULL DEFAULT ''")
+        }
+    }
 }

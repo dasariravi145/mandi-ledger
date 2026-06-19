@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Formatter
 import com.dasariravi145.agrolynch.data.local.entity.TransactionEntity
 import com.dasariravi145.agrolynch.data.local.entity.FarmerEntity
 import com.dasariravi145.agrolynch.ui.components.AgroButton
@@ -82,10 +83,10 @@ fun AddTransactionScreen(
                 }
                 
                 productName = t.productName
-                grossWeight = t.grossWeight.toString()
-                emptyBoxWeight = t.emptyBoxWeight.toString()
-                boxCount = t.boxCount.toString()
-                pricePerUnit = t.pricePerUnit.toString()
+                grossWeight = Formatter.formatWeight(t.grossWeight)
+                emptyBoxWeight = Formatter.formatWeight(t.emptyBoxWeight)
+                boxCount = Formatter.formatWeight(t.boxCount.toDouble())
+                pricePerUnit = Formatter.formatCurrency(t.pricePerUnit)
                 notes = t.notes
                 
                 val prod = products.find { it.name == t.productName }
@@ -204,7 +205,7 @@ fun AddTransactionScreen(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
-                    value = String.format(Locale.US, "%.2f", netWeight),
+                    value = Formatter.formatWeight(netWeight),
                     onValueChange = {},
                     label = { Text(stringResource(R.string.net_wt)) },
                     modifier = Modifier.weight(1f),
@@ -239,7 +240,7 @@ fun AddTransactionScreen(
                 ) {
                     Text(stringResource(R.string.total_amt), fontWeight = FontWeight.Medium)
                     Text(
-                        "₹${String.format(Locale.US, "%.2f", totalAmount)}",
+                        "₹${Formatter.formatCurrency(totalAmount)}",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold
                     )

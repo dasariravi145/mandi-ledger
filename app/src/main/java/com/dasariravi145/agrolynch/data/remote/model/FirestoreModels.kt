@@ -6,6 +6,11 @@ data class FirestoreUserProfile(
     val phone: String = "",
     val role: String = "AGENT",
     val isPremium: Boolean = false,
+    val premiumPlan: String = "",
+    val premiumStartDate: Long = 0L,
+    val premiumExpiryDate: Long = 0L,
+    val purchaseToken: String = "",
+    val productId: String = "",
     val premiumExpiry: Long = 0L,
     val cloudBackupEnabled: Boolean = false,
     val multiDeviceSyncEnabled: Boolean = false,
@@ -102,4 +107,15 @@ data class FirestoreOcrScan(
     val imageUrl: String? = null,
     val scanType: String = "",
     val createdAt: Long = System.currentTimeMillis()
+)
+
+data class FirestoreExpense(
+    val expenseId: String = "",
+    val ownerUserId: String = "",
+    val category: String = "",
+    val amount: Double = 0.0,
+    val description: String = "",
+    val date: Long = 0L,
+    val lastUpdated: Long = 0L,
+    val isDeleted: Boolean = false
 )

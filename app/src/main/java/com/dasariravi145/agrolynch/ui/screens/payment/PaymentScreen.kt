@@ -23,11 +23,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Formatter
 import com.dasariravi145.agrolynch.data.local.entity.BuyerEntity
 import com.dasariravi145.agrolynch.data.local.entity.FarmerEntity
 import com.dasariravi145.agrolynch.data.local.entity.PaymentEntity
 import java.text.SimpleDateFormat
 import java.util.*
+import java.io.File
+import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,9 +49,51 @@ fun PaymentScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val pendingAmount by viewModel.pendingAmount.collectAsState()
     val selectedTab by viewModel.selectedTab.collectAsState()
+    val autoBillNumber by viewModel.billNumber.collectAsState()
+    val exportStatus by viewModel.exportStatus.collectAsState(initial = "")
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     var showAddDialog by remember { mutableStateOf(ocrAmount > 0) }
     var selectedPaymentToEdit by remember { mutableStateOf<PaymentEntity?>(null) }
+    var showPremiumDialog by remember { mutableStateOf(false) }
+    var pendingFileForAction by remember { mutableStateOf<File?>(null) }
+
+    LaunchedEffect(exportStatus) {
+        if (exportStatus == "PREMIUM_REQUIRED") {
+            showPremiumDialog = true
+        } else if (exportStatus.startsWith("SUCCESS:")) {
+            val filePath = exportStatus.removePrefix("SUCCESS:")
+            pendingFileForAction = File(filePath)
+        }
+    }
+
+    if (pendingFileForAction != null) {
+        AlertDialog(
+            onDismissRequest = { pendingFileForAction = null },
+            title = { Text("Bill Generated") },
+            text = { Text("Would you like to Print or Share this bill?") },
+            confirmButton = {
+                Button(onClick = { 
+                    com.dasariravi145.agrolynch.util.PdfGenerator.printPdf(context, pendingFileForAction!!)
+                    pendingFileForAction = null
+                }) {
+                    Icon(Icons.Default.Print, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Print")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    com.dasariravi145.agrolynch.util.PdfGenerator.sharePdf(context, pendingFileForAction!!)
+                    pendingFileForAction = null
+                }) {
+                    Icon(Icons.Default.Share, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Share")
+                }
+            }
+        )
+    }
 
     LaunchedEffect(ocrPartyName) {
         if (ocrPartyName.isNotEmpty()) {
@@ -64,7 +109,7 @@ fun PaymentScreen(
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text(if (selectedTab == 0) stringResource(R.string.buyer_payments) else stringResource(R.string.farmer_payments)) },
+                    title = { Text(if (selectedTab == 0) stringResource(R.string.receive_payment) else stringResource(R.string.pay_farmer)) },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -116,7 +161,8 @@ fun PaymentScreen(
                     items(payments) { payment ->
                         PaymentItem(
                             payment = payment,
-                            onClick = { selectedPaymentToEdit = payment }
+                            onClick = { selectedPaymentToEdit = payment },
+                            onPrint = { viewModel.exportPayment(context, payment) }
                         )
                     }
                 }
@@ -132,6 +178,7 @@ fun PaymentScreen(
                 initialAmount = if (ocrAmount > 0) ocrAmount.toString() else "",
                 initialRef = ocrBillNo,
                 initialPartyName = ocrPartyName,
+                autoBillNumber = autoBillNumber,
                 onPartySelected = viewModel::onPartySelected,
                 onDismiss = { showAddDialog = false },
                 onSave = { partyId, partyName, partyType, amount, mode, ref, notes ->
@@ -161,7 +208,8 @@ fun PaymentScreen(
 @Composable
 fun PaymentItem(
     payment: PaymentEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onPrint: () -> Unit
 ) {
     val dateFormat = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
     Card(
@@ -192,12 +240,18 @@ fun PaymentItem(
                 }
                 Text(text = dateFormat.format(Date(payment.date)), fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
             }
-            Text(
-                text = "₹${payment.amount}",
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                color = color
-            )
+            
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "₹${Formatter.formatCurrency(payment.amount)}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = color
+                )
+                IconButton(onClick = onPrint, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                }
+            }
         }
     }
 }
@@ -212,6 +266,7 @@ fun AddPaymentDialog(
     initialAmount: String = "",
     initialRef: String = "",
     initialPartyName: String = "",
+    autoBillNumber: String = "",
     onPartySelected: (String) -> Unit,
     onDismiss: () -> Unit,
     onSave: (String, String, String, Double, String, String, String) -> Unit
@@ -221,7 +276,8 @@ fun AddPaymentDialog(
     var selectedPartyId by remember { mutableStateOf("") }
     var selectedPartyName by remember { mutableStateOf("") }
 
-    LaunchedEffect(initialPartyName, selectedTab) {
+    // Handle initial party selection (OCR) and auto-select next available farmer
+    LaunchedEffect(farmers, buyers, initialPartyName, selectedTab) {
         if (initialPartyName.isNotEmpty()) {
             if (selectedTab == 0) {
                 buyers.find { it.name.contains(initialPartyName, true) }?.let {
@@ -235,6 +291,19 @@ fun AddPaymentDialog(
                     selectedPartyName = it.name
                     onPartySelected(it.id)
                 }
+            }
+        } else if (selectedTab == 1) {
+            if (farmers.isNotEmpty()) {
+                if (selectedPartyId.isEmpty() || farmers.none { it.id == selectedPartyId }) {
+                    val nextFarmer = farmers.first()
+                    selectedPartyId = nextFarmer.id
+                    selectedPartyName = nextFarmer.name
+                    onPartySelected(nextFarmer.id)
+                    Timber.tag("PAY_FARMER").d("PAY_FARMER_DROPDOWN_REFRESHED: Auto-selected next available farmer ${nextFarmer.name}")
+                }
+            } else {
+                selectedPartyId = ""
+                selectedPartyName = ""
             }
         }
     }
@@ -253,24 +322,50 @@ fun AddPaymentDialog(
 
     LaunchedEffect(settlementType, pendingAmount) {
         if (settlementType == "FULL") {
-            amount = String.format(Locale.US, "%.2f", Math.abs(pendingAmount))
+            amount = Formatter.formatWeight(Math.abs(pendingAmount))
         }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (selectedTab == 0) stringResource(R.string.buyer_payments) else stringResource(R.string.farmer_payments)) },
+        title = { 
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                Text(if (selectedTab == 0) stringResource(R.string.receive_payment) else stringResource(R.string.pay_farmer))
+                Text("Bill: $autoBillNumber", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+        },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Badge for pending count
+                if (selectedTab == 1) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    ) {
+                        Text(
+                            text = "Pending Farmers (${farmers.size})",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
                 // Party Dropdown
                 ExposedDropdownMenuBox(expanded = partyExpanded, onExpandedChange = { partyExpanded = it }) {
                     OutlinedTextField(
-                        value = selectedPartyName.ifEmpty { if (selectedTab == 0) stringResource(R.string.select_buyer) else stringResource(R.string.select_farmer) },
+                        value = selectedPartyName.ifEmpty { 
+                            if (selectedTab == 0) stringResource(R.string.select_buyer) 
+                            else if (farmers.isEmpty()) "No farmers with pending payments"
+                            else stringResource(R.string.select_farmer) 
+                        },
                         onValueChange = {},
                         readOnly = true,
+                        enabled = selectedTab == 0 || farmers.isNotEmpty(),
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = partyExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
@@ -290,12 +385,15 @@ fun AddPaymentDialog(
                         } else {
                             farmers.forEach { farmer ->
                                 DropdownMenuItem(
-                                    text = { Text(farmer.name) }, 
+                                    text = { 
+                                        Text("${farmer.name} • Pending ₹${Formatter.formatCurrency(farmer.pendingAmount)}") 
+                                    }, 
                                     onClick = { 
                                         selectedPartyId = farmer.id
                                         selectedPartyName = farmer.name
                                         onPartySelected(farmer.id)
-                                        partyExpanded = false 
+                                        partyExpanded = false
+                                        Timber.tag("PAY_FARMER").d("PAY_FARMER_DROPDOWN_REFRESHED: Selected ${farmer.name}")
                                     }
                                 )
                             }
@@ -305,8 +403,10 @@ fun AddPaymentDialog(
 
                 // Pending Amount Display
                 if (selectedPartyId.isNotEmpty()) {
+                    val isFarmerSettlePrevented = selectedTab == 1 && pendingAmount <= 0
+
                     Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        color = if (isFarmerSettlePrevented) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
                         shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -316,11 +416,19 @@ fun AddPaymentDialog(
                                 fontSize = 12.sp
                             )
                             Text(
-                                text = "₹${String.format(Locale.US, "%.2f", Math.abs(pendingAmount))}",
+                                text = if (isFarmerSettlePrevented) "Fully Settled" else "₹${Formatter.formatCurrency(Math.abs(pendingAmount))}",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (selectedTab == 0) Color(0xFF16A34A) else Color(0xFFDC2626)
+                                color = if (isFarmerSettlePrevented) MaterialTheme.colorScheme.error 
+                                        else if (selectedTab == 0) Color(0xFF16A34A) else Color(0xFFDC2626)
                             )
+                            if (isFarmerSettlePrevented) {
+                                Text(
+                                    text = "This farmer is already fully settled.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
 
@@ -333,16 +441,18 @@ fun AddPaymentDialog(
                             selected = settlementType == "PARTIAL",
                             onClick = { settlementType = "PARTIAL" },
                             label = { Text(stringResource(R.string.partial_payment)) },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            enabled = !isFarmerSettlePrevented
                         )
                         FilterChip(
                             selected = settlementType == "FULL",
                             onClick = { 
                                 settlementType = "FULL"
-                                amount = String.format(Locale.US, "%.2f", Math.abs(pendingAmount))
+                                amount = Formatter.formatWeight(Math.abs(pendingAmount))
                             },
                             label = { Text(stringResource(R.string.full_settlement)) },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            enabled = !isFarmerSettlePrevented
                         )
                     }
                 }
@@ -357,7 +467,8 @@ fun AddPaymentDialog(
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     prefix = { Text("₹") },
-                    readOnly = settlementType == "FULL"
+                    readOnly = settlementType == "FULL",
+                    enabled = selectedPartyId.isNotEmpty() && !(selectedTab == 1 && pendingAmount <= 0)
                 )
 
                 ExposedDropdownMenuBox(expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
@@ -402,7 +513,7 @@ fun AddPaymentDialog(
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                enabled = selectedPartyId.isNotEmpty() && amount.isNotEmpty()
+                enabled = selectedPartyId.isNotEmpty() && amount.isNotEmpty() && (amount.toDoubleOrNull() ?: 0.0) > 0 && !(selectedTab == 1 && pendingAmount <= 0)
             ) {
                 Text(stringResource(R.string.confirm_payment))
             }

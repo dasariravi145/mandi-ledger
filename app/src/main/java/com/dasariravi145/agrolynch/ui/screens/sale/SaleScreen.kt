@@ -25,8 +25,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Constants
+import com.dasariravi145.agrolynch.util.Formatter
 import com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity
 import com.dasariravi145.agrolynch.data.local.entity.BuyerEntity
+import java.io.File
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.text.SimpleDateFormat
@@ -43,12 +46,16 @@ fun SaleScreen(
     ocrProduct: String = "",
     ocrQty: Double = 0.0,
     ocrRate: Double = 0.0,
+    ocrDeductions: String = "",
     onBackClick: () -> Unit
 ) {
     val buyers by viewModel.buyers.collectAsStateWithLifecycle()
     val saleItems by viewModel.saleItems.collectAsStateWithLifecycle()
     val transactionTotal by viewModel.transactionTotal.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val autoBillNumber by viewModel.billNumber.collectAsStateWithLifecycle()
+    val deductions by viewModel.deductions.collectAsStateWithLifecycle()
+    val totalOtherDeductions by viewModel.totalDeductions.collectAsStateWithLifecycle()
 
     var selectedBuyer by remember { 
         mutableStateOf(buyers.find { it.name.equals(ocrBuyer, ignoreCase = true) }) 
@@ -60,6 +67,21 @@ fun SaleScreen(
             selectedBuyer = buyers.find { it.name.equals(ocrBuyer, ignoreCase = true) }
         }
     }
+
+    LaunchedEffect(ocrDeductions) {
+        if (ocrDeductions.isNotEmpty()) {
+            ocrDeductions.split(";").forEach { pair ->
+                val parts = pair.split(":")
+                if (parts.size == 2) {
+                    val type = parts[0]
+                    val amount = parts[1].toDoubleOrNull() ?: 0.0
+                    if (amount > 0) {
+                        viewModel.addDeduction(type, amount)
+                    }
+                }
+            }
+        }
+    }
     
     var buyerMobile by remember { mutableStateOf("") }
     var buyerAddress by remember { mutableStateOf("") }
@@ -69,6 +91,15 @@ fun SaleScreen(
     var showAddItemSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    
+    val exportStatus by viewModel.exportStatus.collectAsState(initial = "")
+    var pendingFileForAction by remember { mutableStateOf<File?>(null) }
+
+    LaunchedEffect(exportStatus) {
+        if (exportStatus.startsWith("SUCCESS:")) {
+            pendingFileForAction = File(exportStatus.removePrefix("SUCCESS:"))
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.saveSuccess.collect {
@@ -82,17 +113,48 @@ fun SaleScreen(
                 val activity = context as? android.app.Activity
                 if (activity != null) {
                     viewModel.adMobManager.showInterstitialAd(activity) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Sale Entry Saved Successfully!")
-                        }
+                        if (pendingFileForAction == null) onBackClick()
                     }
                 } else {
-                    snackbarHostState.showSnackbar("Sale Entry Saved Successfully!")
+                    if (pendingFileForAction == null) onBackClick()
                 }
             } else {
-                snackbarHostState.showSnackbar("Sale Entry Saved Successfully!")
+                if (pendingFileForAction == null) onBackClick()
             }
         }
+    }
+
+    if (pendingFileForAction != null) {
+        AlertDialog(
+            onDismissRequest = { 
+                pendingFileForAction = null
+                onBackClick()
+            },
+            title = { Text("Bill Generated") },
+            text = { Text("Would you like to Print or Share this bill?") },
+            confirmButton = {
+                Button(onClick = { 
+                    com.dasariravi145.agrolynch.util.PdfGenerator.printPdf(context, pendingFileForAction!!)
+                    pendingFileForAction = null
+                    onBackClick()
+                }) {
+                    Icon(Icons.Default.Print, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Print")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    com.dasariravi145.agrolynch.util.PdfGenerator.sharePdf(context, pendingFileForAction!!)
+                    pendingFileForAction = null
+                    onBackClick()
+                }) {
+                    Icon(Icons.Default.Share, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Share")
+                }
+            }
+        )
     }
 
     LaunchedEffect(Unit) {
@@ -103,7 +165,7 @@ fun SaleScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.sale_entry), fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.buyer_sale), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -119,7 +181,7 @@ fun SaleScreen(
                     isLoading = isLoading,
                     onSave = {
                         if (selectedBuyer != null) {
-                            viewModel.createSale(buyer = selectedBuyer!!)
+                            viewModel.createSale(context = context, buyer = selectedBuyer!!)
                         } else {
                             if (buyerMobile.length != 10) {
                                 scope.launch {
@@ -127,6 +189,7 @@ fun SaleScreen(
                                 }
                             } else {
                                 viewModel.registerBuyerAndCreateSale(
+                                    context = context,
                                     name = buyerSearchText,
                                     mobile = buyerMobile,
                                     address = buyerAddress,
@@ -196,11 +259,80 @@ fun SaleScreen(
                 }
             } else {
                 saleItems.forEach { item ->
-                    SaleItemRowCard(item = item, onRemove = { viewModel.removeSaleItem(item.id) })
+                    SaleItemRowCard(
+                        item = item, 
+                        onUpdate = { updated -> viewModel.updateSaleItem(updated) },
+                        onRemove = { viewModel.removeSaleItem(item.id) }
+                    )
+                }
+                
+            // Detailed Confirmation Summary
+            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+
+            Text(stringResource(R.string.other_deductions), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            deductions.forEachIndexed { index, deduction ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (deduction.deductionType == "Other") deduction.customName else deduction.deductionType, modifier = Modifier.weight(1f))
+                    Text("₹${Formatter.formatCurrency(deduction.amount)}", fontWeight = FontWeight.Bold)
+                    IconButton(onClick = { viewModel.removeDeduction(index) }) {
+                        Icon(Icons.Default.Delete, null, tint = Color.Red)
+                    }
                 }
             }
+
+            var showAddDeduction by remember { mutableStateOf(false) }
+            if (!showAddDeduction) {
+                OutlinedButton(onClick = { showAddDeduction = true }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Other Charge")
+                }
+            } else {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        var dtype by remember { mutableStateOf("Loading") }
+                        var cname by remember { mutableStateOf("") }
+                        var amt by remember { mutableStateOf("") }
+                        var exp by remember { mutableStateOf(false) }
+
+                        Box {
+                            OutlinedTextField(value = dtype, onValueChange = {}, readOnly = true, label = { Text("Type") }, modifier = Modifier.fillMaxWidth(),
+                                trailingIcon = { IconButton(onClick = { exp = true }) { Icon(Icons.Default.ArrowDropDown, null) } })
+                            DropdownMenu(expanded = exp, onDismissRequest = { exp = false }) {
+                                Constants.DEFAULT_DEDUCTION_TYPES.forEach { type ->
+                                    DropdownMenuItem(text = { Text(type) }, onClick = { dtype = type; exp = false })
+                                }
+                            }
+                        }
+                        if (dtype == "Other") {
+                            OutlinedTextField(value = cname, onValueChange = { cname = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+                        }
+                        OutlinedTextField(value = amt, onValueChange = { amt = it }, label = { Text("Amount ₹") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        Row(Modifier.fillMaxWidth(), Arrangement.End) {
+                            TextButton(onClick = { showAddDeduction = false }) { Text("Cancel") }
+                            Button(onClick = {
+                                val v = amt.toDoubleOrNull() ?: 0.0
+                                if (v > 0) { viewModel.addDeduction(dtype, v, cname); showAddDeduction = false }
+                            }, enabled = amt.isNotBlank()) { Text("Add") }
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+
+            SaleConfirmationSummary(
+                buyerName = if (selectedBuyer != null) selectedBuyer!!.name else buyerSearchText,
+                buyerMobile = if (selectedBuyer != null) selectedBuyer!!.mobileNumber else buyerMobile,
+                buyerAddress = if (selectedBuyer != null) selectedBuyer!!.address else buyerAddress,
+                buyerGst = if (selectedBuyer != null) selectedBuyer!!.gstNumber else buyerGst,
+                totals = transactionTotal,
+                otherDeductionsTotal = totalOtherDeductions,
+                billNumber = autoBillNumber
+            )
+            }
             
-            Spacer(modifier = Modifier.height(140.dp))
+            Spacer(modifier = Modifier.height(180.dp))
         }
     }
 
@@ -259,7 +391,7 @@ fun BuyerSearchableDropdown(
                                 Column {
                                     Text(buyer.name, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
                                     Row {
-                                        Text("Pending: ₹${String.format("%.0f", buyer.pendingAmount)}", color = Color(0xFFC62828), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text("${stringResource(R.string.pending)}: ₹${Formatter.formatCurrency(buyer.pendingAmount)}", color = Color(0xFFC62828), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                         Spacer(Modifier.width(12.dp))
                                         Text(buyer.mobileNumber, color = Color.Gray, fontSize = 12.sp)
                                     }
@@ -320,33 +452,215 @@ fun NewBuyerDetailsFields(
 }
 
 @Composable
-fun SaleItemRowCard(item: SaleItemDraft, onRemove: () -> Unit) {
+fun SaleItemRowCard(
+    item: com.dasariravi145.agrolynch.ui.screens.sale.SaleItemDraft, 
+    onUpdate: (com.dasariravi145.agrolynch.ui.screens.sale.SaleItemDraft) -> Unit,
+    onRemove: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(item.arrival.farmerName, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.Gray)
+                    Text("Farmer: ${item.arrival.farmerName}", fontSize = 12.sp, color = Color.Gray)
                     Text("${item.arrival.productName} (${item.arrival.grade})", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Category: ${item.arrival.productCategory}", fontSize = 12.sp, color = Color.Gray)
                 }
                 IconButton(onClick = onRemove) { Icon(Icons.Default.Delete, null, tint = Color.Red) }
             }
             
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+            HorizontalDivider(thickness = 0.5.dp)
+
+            // Available Info
+            val unit = item.arrival.unit
+            val availableOrig = item.arrival.remainingQuantity
+            val availableKg = availableOrig * (if(unit == "Ton" || unit == "Boxes") 1000.0 else 1.0)
+            
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Stock: ${Formatter.formatWeight(availableOrig)} $unit", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                if (unit != "KG") {
+                    Text("Net: ${Formatter.formatWeight(availableKg)} KG", fontSize = 12.sp, color = Color.Gray)
+                }
+                Text("P. Rate: ₹${Formatter.formatCurrency(if(item.arrival.ratePerKg > 0) item.arrival.ratePerKg else item.arrival.purchaseRate / (if(unit == "Ton") 1000.0 else 1.0))}/KG", fontSize = 12.sp, color = Color.Gray)
+            }
+
+            // Editable Fields
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val isTon = unit == "Ton"
+                Column(Modifier.weight(1f)) {
+                    OutlinedTextField(
+                        value = item.rawInputQuantity.ifEmpty { 
+                            if(item.inputQuantity == 0.0) "" else Formatter.formatWeight(item.inputQuantity) 
+                        },
+                        onValueChange = { input ->
+                            // Requirement 7: Allow max 3 decimal places
+                            if (input.contains(".") && input.substring(input.indexOf(".") + 1).length > 3) return@OutlinedTextField
+                            
+                            // Requirement 6: If user types ".84", convert/display as "0.84"
+                            val sanitizedInput = if (input.startsWith(".")) "0$input" else input
+                            
+                            val v = sanitizedInput.toDoubleOrNull() ?: 0.0
+                            onUpdate(item.copy(inputQuantity = v, rawInputQuantity = sanitizedInput))
+                        },
+                        label = { Text("Sale Qty ($unit)") },
+                        placeholder = { if (isTon) Text("0.00") }, // Requirement 3: Show "0.00" only as placeholder
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        isError = item.inputQuantity > (availableOrig + 0.0001)
+                    )
+                    if (isTon && item.inputQuantity > 0) {
+                        Text(
+                            "Equivalent: ${Formatter.formatNetWeight(item.inputQuantity * 1000.0)}",
+                            fontSize = 11.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                        )
+                    }
+                    if (item.inputQuantity > (availableOrig + 0.0001)) {
+                        Text(
+                            "Sale quantity exceeds available stock",
+                            fontSize = 10.sp,
+                            color = Color.Red,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = if(item.saleRate == 0.0) "" else Formatter.formatWeight(item.saleRate),
+                    onValueChange = { 
+                        val v = it.toDoubleOrNull() ?: 0.0
+                        onUpdate(item.copy(saleRate = v))
+                    },
+                    label = { Text("Sale Rate/KG") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = if(item.laborCharges == 0.0) "" else Formatter.formatWeight(item.laborCharges),
+                    onValueChange = { 
+                        val v = it.toDoubleOrNull() ?: 0.0
+                        onUpdate(item.copy(laborCharges = v))
+                    },
+                    label = { Text("Labor ₹") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                OutlinedTextField(
+                    value = if(item.transportCharges == 0.0) "" else Formatter.formatWeight(item.transportCharges),
+                    onValueChange = { 
+                        val v = it.toDoubleOrNull() ?: 0.0
+                        onUpdate(item.copy(transportCharges = v))
+                    },
+                    label = { Text("Trans ₹") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+            }
+            
+            OutlinedTextField(
+                value = if(item.otherCharges == 0.0) "" else Formatter.formatWeight(item.otherCharges),
+                onValueChange = { 
+                    val v = it.toDoubleOrNull() ?: 0.0
+                    onUpdate(item.copy(otherCharges = v))
+                },
+                label = { Text("Other Charges ₹") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+            )
+
+            HorizontalDivider(thickness = 0.5.dp)
+            
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 Column {
-                    Text("Qty: ${item.quantity} ${item.arrival.unit}", fontSize = 13.sp)
-                    Text("Rate: ₹${item.saleRate} (Buy: ₹${item.arrival.purchaseRate})", fontSize = 13.sp)
+                    Text("Qty: ${Formatter.formatQuantityDisplay(item.inputQuantity, item.arrival.unit)}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    if (item.arrival.unit != "KG") {
+                        Text("Net: ${Formatter.formatNetWeight(item.quantity)}", fontSize = 11.sp, color = Color.Gray)
+                    }
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("Net Amount", fontSize = 11.sp, color = Color.Gray)
-                    Text("₹${String.format("%.2f", item.netAmount)}", fontWeight = FontWeight.ExtraBold, color = Color(0xFF2E7D32))
+                    Text(stringResource(R.string.total_collection), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        Formatter.formatAmount(item.netAmount),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        color = Color(0xFF1B5E20)
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+fun DetailRow(label: String, value: String, color: Color = Color.Black) {
+    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+        Text(label, fontSize = 12.sp, color = Color.Gray)
+        Text(value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = color)
+    }
+}
+
+@Composable
+fun SaleConfirmationSummary(
+    buyerName: String,
+    buyerMobile: String,
+    buyerAddress: String,
+    buyerGst: String,
+    totals: TransactionTotal,
+    otherDeductionsTotal: Double,
+    billNumber: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                Text(stringResource(R.string.summary), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+                Text("Bill: $billNumber", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+            
+            Text(stringResource(R.string.new_buyer_details), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SummaryRow(stringResource(R.string.farmer_name_label), buyerName)
+                SummaryRow(stringResource(R.string.mobile_number), buyerMobile)
+                SummaryRow(stringResource(R.string.address), buyerAddress)
+                if (buyerGst.isNotBlank()) SummaryRow(stringResource(R.string.gst_number), buyerGst)
+            }
+            
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            
+            Text(stringResource(R.string.amount), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SummaryRow(stringResource(R.string.total_items), Formatter.formatWeight(totals.totalQuantity))
+                SummaryRow(stringResource(R.string.gross_amount), "₹${Formatter.formatCurrency(totals.totalSaleAmount)}")
+                SummaryRow(stringResource(R.string.labor_rs), "₹${Formatter.formatCurrency(totals.totalLabor)}", color = Color.Red)
+                SummaryRow(stringResource(R.string.transport_rs), "₹${Formatter.formatCurrency(totals.totalTransport)}", color = Color.Red)
+                SummaryRow(stringResource(R.string.other_rs), "₹${Formatter.formatCurrency(totals.totalOther + otherDeductionsTotal)}", color = Color.Red)
+                
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                    Text(stringResource(R.string.total_collection), fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                    Text("₹${Formatter.formatCurrency(totals.totalNetAmount + otherDeductionsTotal)}", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Color(0xFF15803D))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SummaryRow(label: String, value: String, color: Color = Color.Unspecified) {
+    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+        Text(label, fontSize = 14.sp, color = Color.Gray)
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = color)
     }
 }
 
@@ -355,7 +669,7 @@ fun SaleItemRowCard(item: SaleItemDraft, onRemove: () -> Unit) {
 fun AddItemModalSheet(
     viewModel: SaleViewModel,
     onDismiss: () -> Unit,
-    onItemAdded: (SaleItemDraft) -> Unit
+    onItemAdded: (com.dasariravi145.agrolynch.ui.screens.sale.SaleItemDraft) -> Unit
 ) {
     val modalState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val farmersWithStock by viewModel.farmersWithStock.collectAsStateWithLifecycle()
@@ -365,119 +679,52 @@ fun AddItemModalSheet(
         viewModel.getAvailableStockByFarmer(selectedFarmerId!!).collectAsStateWithLifecycle(emptyList())
         else remember { mutableStateOf(emptyList<ArrivalEntity>()) }
     
-    var selectedStockItem by remember { mutableStateOf<ArrivalEntity?>(null) }
-
-    // Form inputs
-    var saleQty by remember { mutableStateOf("") }
-    var saleRate by remember { mutableStateOf("") }
-    var labor by remember { mutableStateOf("0") }
-    var transport by remember { mutableStateOf("0") }
-    var commission by remember { mutableStateOf("5.0") }
-    var other by remember { mutableStateOf("0") }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = modalState) {
         Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(stringResource(R.string.add_item), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-            // Step 2: Select Farmer
+            // Step 1: Select Farmer
             Text(stringResource(R.string.select_farmer), style = MaterialTheme.typography.labelMedium)
             SelectionDropdown(
                 items = farmersWithStock.map { it.farmerName },
                 selectedIndex = farmersWithStock.indexOfFirst { it.farmerId == selectedFarmerId },
                 onSelect = { index ->
                     selectedFarmerId = farmersWithStock[index].farmerId
-                    selectedStockItem = null
                 }
             )
 
-            // Step 3: Load Stock Entries
+            // Step 2: Load Stock Entries
             if (selectedFarmerId != null) {
-                Text(stringResource(R.string.select_stock_entry), style = MaterialTheme.typography.labelMedium)
-                stockByFarmer.forEach { arrival ->
-                    FarmerStockSelectionCard(
-                        arrival = arrival,
-                        isSelected = selectedStockItem?.id == arrival.id,
-                        onClick = { 
-                            selectedStockItem = arrival
-                            saleRate = arrival.purchaseRate.toString()
-                            if (arrival.commissionPercent > 0) {
-                                commission = arrival.commissionPercent.toString()
-                            }
-                        }
-                    )
+                val stockList = stockByFarmer.filter { arrival ->
+                    // Additional safety check to prevent duplicate selection
+                    viewModel.saleItems.value.none { it.arrival.id == arrival.id }
                 }
-            }
-
-            // Step 4 & 5: Details
-            if (selectedStockItem != null) {
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 
-                Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(12.dp), Arrangement.SpaceBetween) {
-                        Column {
-                            Text(stringResource(R.string.available_stock), fontSize = 11.sp, color = Color.Gray)
-                            Text("${selectedStockItem!!.remainingQuantity} ${selectedStockItem!!.unit}", fontWeight = FontWeight.Bold)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(stringResource(R.string.farmer_purchase_rate), fontSize = 11.sp, color = Color.Gray)
-                            Text("₹${selectedStockItem!!.purchaseRate}", fontWeight = FontWeight.Bold)
-                        }
+                if (stockList.isEmpty()) {
+                    Text("No more available stock for this farmer.", modifier = Modifier.padding(8.dp), color = Color.Gray)
+                } else {
+                    Text(stringResource(R.string.select_stock_entry), style = MaterialTheme.typography.labelMedium)
+                    stockList.forEach { arrival ->
+                        FarmerStockSelectionCard(
+                            arrival = arrival,
+                            isSelected = false,
+                            onClick = { 
+                                val defaultSaleRate = if (arrival.ratePerKg > 0) arrival.ratePerKg else (arrival.purchaseRate / (if(arrival.unit == "Ton") 1000.0 else 1.0))
+                                
+                                onItemAdded(com.dasariravi145.agrolynch.ui.screens.sale.SaleItemDraft(
+                                    arrival = arrival,
+                                    inputQuantity = 0.0,
+                                    saleRate = defaultSaleRate,
+                                    laborCharges = 0.0,
+                                    transportCharges = 0.0,
+                                    otherCharges = 0.0
+                                ))
+                                android.widget.Toast.makeText(context, "Added ${arrival.productName} ${arrival.grade}", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        )
                     }
-                }
-
-                OutlinedTextField(
-                    value = saleQty,
-                    onValueChange = { saleQty = it },
-                    label = { Text(stringResource(R.string.sale_qty_with_unit, selectedStockItem!!.unit)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    isError = (saleQty.toDoubleOrNull() ?: 0.0) > selectedStockItem!!.remainingQuantity
-                )
-
-                OutlinedTextField(
-                    value = saleRate,
-                    onValueChange = { saleRate = it },
-                    label = { Text(stringResource(R.string.sale_rate_per_unit, selectedStockItem!!.unit)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-
-                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = commission, 
-                        onValueChange = { commission = it }, 
-                        label = { Text(stringResource(R.string.comm_percent)) }, 
-                        modifier = Modifier.weight(1f), 
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        supportingText = {
-                            val amt = ((saleQty.toDoubleOrNull() ?: 0.0) * (saleRate.toDoubleOrNull() ?: 0.0) * (commission.toDoubleOrNull() ?: 0.0)) / 100
-                            Text(stringResource(R.string.earned_amt, String.format("%.2f", amt)), color = Color(0xFF16A34A))
-                        }
-                    )
-                    OutlinedTextField(value = labor, onValueChange = { labor = it }, label = { Text(stringResource(R.string.labor_rs)) }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                }
-
-                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = transport, onValueChange = { transport = it }, label = { Text(stringResource(R.string.transport_rs)) }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                    OutlinedTextField(value = other, onValueChange = { other = it }, label = { Text(stringResource(R.string.other_rs)) }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                }
-
-                Button(
-                    onClick = {
-                        onItemAdded(SaleItemDraft(
-                            arrival = selectedStockItem!!,
-                            quantity = saleQty.toDoubleOrNull() ?: 0.0,
-                            saleRate = saleRate.toDoubleOrNull() ?: 0.0,
-                            commissionPercent = commission.toDoubleOrNull() ?: 0.0,
-                            laborCharges = labor.toDoubleOrNull() ?: 0.0,
-                            transportCharges = transport.toDoubleOrNull() ?: 0.0,
-                            otherCharges = other.toDoubleOrNull() ?: 0.0
-                        ))
-                    },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    enabled = saleQty.isNotEmpty() && saleRate.isNotEmpty() && (saleQty.toDoubleOrNull() ?: 0.0) <= selectedStockItem!!.remainingQuantity
-                ) {
-                    Text(stringResource(R.string.add_to_sale_list))
                 }
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -499,8 +746,12 @@ fun FarmerStockSelectionCard(arrival: ArrivalEntity, isSelected: Boolean, onClic
                 Text(dateStr, fontSize = 11.sp, color = Color.Gray)
             }
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                Text("Stock: ${arrival.remainingQuantity} ${arrival.unit}", fontSize = 13.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Medium)
-                Text("Rate: ₹${arrival.purchaseRate}", fontSize = 13.sp, color = Color.Gray)
+                val availableInUnit = if (arrival.unit == "Boxes") {
+                    if (arrival.quantity > 0) (arrival.remainingQuantity / arrival.quantity) * arrival.numberOfBoxes else 0.0
+                } else arrival.remainingQuantity
+                
+                Text("${stringResource(R.string.stock_label)}: ${Formatter.formatWeight(availableInUnit)} ${arrival.unit}", fontSize = 13.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Medium)
+                Text("${stringResource(R.string.rate)}: ₹${Formatter.formatCurrency(if(arrival.ratePerKg > 0) arrival.ratePerKg else arrival.purchaseRate / (if(arrival.unit == "Ton") 1000.0 else 1.0))}${if(arrival.unit == "Ton" || arrival.unit == "Boxes") "/KG" else ""}", fontSize = 13.sp, color = Color.Gray)
             }
         }
     }
@@ -537,27 +788,37 @@ fun SaleTransactionSummaryCard(
     onSave: () -> Unit
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .imePadding(),
         color = Color(0xFF111827),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         shadowElevation = 16.dp
     ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .padding(top = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                 Column {
                     Text(stringResource(R.string.total_items), color = Color.Gray, fontSize = 12.sp)
-                    Text("Qty: ${total.totalQuantity} Units", color = Color.White, fontWeight = FontWeight.Bold)
+                    // We don't have a single unit for multiple items, but we can show total weight or something descriptive
+                    Text("Total Net: ${Formatter.formatNetWeight(total.totalQuantity)}", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(stringResource(R.string.total_collection), color = Color.Gray, fontSize = 12.sp)
-                    Text("₹${String.format("%.2f", total.totalNetAmount)}", color = Color(0xFF4ADE80), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Text(Formatter.formatAmount(total.totalNetAmount), color = Color(0xFF4ADE80), fontSize = 22.sp, fontWeight = FontWeight.Black)
                 }
             }
             
             Button(
                 onClick = onSave,
                 modifier = Modifier.fillMaxWidth().height(56.dp),
-                enabled = !isLoading,
+                // Requirement 11: Save button should enable when conditions met
+                enabled = !isLoading && total.totalQuantity > 0 && total.totalNetAmount > 0,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
                 shape = RoundedCornerShape(12.dp)
             ) {

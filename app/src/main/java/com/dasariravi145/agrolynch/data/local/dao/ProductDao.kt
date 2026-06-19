@@ -15,6 +15,9 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE name = :name AND isDeleted = 0 LIMIT 1")
     suspend fun getProductByName(name: String): ProductEntity?
 
+    @Query("SELECT * FROM products")
+    suspend fun getProductsList(): List<ProductEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProduct(product: ProductEntity)
 

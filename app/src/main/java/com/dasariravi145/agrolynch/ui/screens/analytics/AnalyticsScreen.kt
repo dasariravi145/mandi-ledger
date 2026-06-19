@@ -17,6 +17,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Formatter
 import com.dasariravi145.agrolynch.ui.components.BarChart
 import com.dasariravi145.agrolynch.ui.components.LineChart
 import com.dasariravi145.agrolynch.ui.components.PieChart
@@ -33,7 +36,7 @@ fun AnalyticsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Business Analytics / వ్యాపార విశ్లేషణ") },
+                title = { Text(stringResource(R.string.business_analytics)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -56,12 +59,12 @@ fun AnalyticsScreen(
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 // 1. Sales Trend
-                AnalyticsCard(title = "Sales Trend (7 Days) / అమ్మకాల ధోరణి") {
+                AnalyticsCard(title = stringResource(R.string.sales_trend_7d)) {
                     LineChart(data = summary!!.salesTrend, modifier = Modifier.fillMaxWidth())
                 }
 
                 // 2. Product Distribution
-                AnalyticsCard(title = "Top Products / ప్రధాన ఉత్పత్తులు") {
+                AnalyticsCard(title = stringResource(R.string.top_products)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         PieChart(data = summary!!.productDistribution, modifier = Modifier.weight(1f))
                         Column(modifier = Modifier.weight(1f)) {
@@ -77,7 +80,7 @@ fun AnalyticsScreen(
                 }
 
                 // 3. Top Farmers
-                AnalyticsCard(title = "Top Farmers / ఉత్తమ రైతులు") {
+                AnalyticsCard(title = stringResource(R.string.top_farmers)) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         summary!!.topFarmers.forEach { farmer ->
                             TopEntityRow(entity = farmer)
@@ -86,7 +89,7 @@ fun AnalyticsScreen(
                 }
 
                 // 4. Top Buyers
-                AnalyticsCard(title = "Top Buyers / ఉత్తమ వ్యాపారులు") {
+                AnalyticsCard(title = stringResource(R.string.top_buyers)) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         summary!!.topBuyers.forEach { buyer ->
                             TopEntityRow(entity = buyer)
@@ -95,7 +98,7 @@ fun AnalyticsScreen(
                 }
 
                 // 5. Profit Trend
-                AnalyticsCard(title = "Estimated Profit Trend / అంచనా లాభం") {
+                AnalyticsCard(title = stringResource(R.string.estimated_profit_trend)) {
                     BarChart(data = summary!!.profitTrend, modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.tertiary)
                 }
             }
@@ -129,8 +132,8 @@ fun TopEntityRow(entity: TopEntity) {
     ) {
         Column {
             Text(text = entity.name, fontWeight = FontWeight.Medium)
-            Text(text = "${entity.transactionCount} transactions", fontSize = 12.sp, color = Color.Gray)
+            Text(text = "${entity.transactionCount} entries", fontSize = 12.sp, color = Color.Gray)
         }
-        Text(text = "₹${entity.totalValue}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Text(text = "₹${Formatter.formatCurrency(entity.totalValue)}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
     }
 }

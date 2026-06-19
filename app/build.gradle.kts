@@ -71,6 +71,9 @@ dependencies {
     implementation(libs.firebase.storage)
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.crashlytics)
+    implementation("com.google.firebase:firebase-appcheck-playintegrity:19.1.0")
+    implementation("com.google.firebase:firebase-appcheck:19.1.0")
+    debugImplementation("com.google.firebase:firebase-appcheck-debug:19.1.0")
 
     // Navigation
     implementation(libs.navigation.compose)
@@ -100,6 +103,7 @@ dependencies {
     // Billing & Ads
     implementation("com.android.billingclient:billing-ktx:7.0.0")
     implementation("com.google.android.gms:play-services-ads:23.6.0")
+    implementation(libs.gson)
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

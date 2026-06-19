@@ -4,11 +4,9 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
-import com.dasariravi145.agrolynch.domain.model.LedgerSummary
-import com.dasariravi145.agrolynch.domain.model.TransactionType
+import com.dasariravi145.agrolynch.domain.model.*
 import com.dasariravi145.agrolynch.domain.repository.LedgerRepository
 import com.dasariravi145.agrolynch.domain.repository.CompanyRepository
-import com.dasariravi145.agrolynch.domain.repository.SyncRepository
 import com.dasariravi145.agrolynch.util.LedgerExportService
 import com.dasariravi145.agrolynch.util.PremiumStateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,13 +27,12 @@ data class LedgerFilter(
 class LedgerViewModel @Inject constructor(
     private val repository: LedgerRepository,
     private val companyRepository: CompanyRepository,
-    private val syncRepository: SyncRepository,
     private val premiumStateManager: PremiumStateManager,
     private val exportService: LedgerExportService
 ) : ViewModel() {
 
     val isPremium = premiumStateManager.isPremium
-    private val companyProfile = companyRepository.getProfile()
+    val companyProfile = companyRepository.getProfile()
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _exportStatus = MutableSharedFlow<String>()
@@ -72,31 +69,61 @@ class LedgerViewModel @Inject constructor(
         _filter.value = _filter.value.copy(query = query)
     }
 
+    private val _currentSummary = MutableStateFlow<LedgerSummary?>(null)
+
     fun getFarmerLedger(farmerId: String): Flow<LedgerSummary> {
-        return repository.getFarmerLedger(farmerId).map { applyDetailFilter(it) }
+        return repository.getFarmerLedger(farmerId).onEach { _currentSummary.value = it }.map { applyDetailFilter(it) }
     }
 
     fun getBuyerLedger(buyerId: String): Flow<LedgerSummary> {
-        return repository.getBuyerLedger(buyerId).map { applyDetailFilter(it) }
+        return repository.getBuyerLedger(buyerId).onEach { _currentSummary.value = it }.map { applyDetailFilter(it) }
     }
 
-    fun exportLedger(context: Context, summary: LedgerSummary, partyType: String) {
+    fun exportLedgerEntry(context: Context, entry: LedgerEntry, partyType: String) {
         viewModelScope.launch {
-            if (!premiumStateManager.getCachedPremiumStatus()) {
-                _exportStatus.emit("PREMIUM_REQUIRED")
-                return@launch
-            }
-
             try {
                 _isLoading.value = true
                 val profile = companyProfile.value ?: CompanyProfileEntity()
-                val file = exportService.exportLedgerToPdf(context, profile, summary, partyType)
+                val details = entry.details
+                
+                val file = when (entry.transactionType) {
+                    TransactionType.ARRIVAL -> {
+                        if (details != null && details.arrivalItems.isNotEmpty()) {
+                            exportService.exportArrivalToPdf(context, profile, details.arrivalItems, details.deductions)
+                        } else null
+                    }
+                    TransactionType.SALE -> {
+                        if (details != null) {
+                            val sale = com.dasariravi145.agrolynch.data.local.entity.SaleEntity(
+                                id = entry.id,
+                                buyerName = _currentSummary.value?.partyName ?: "",
+                                totalAmount = details.grossAmount,
+                                totalNetAmount = details.netAmount,
+                                laborCharges = details.laborCharges,
+                                transportCharges = details.transportCharges,
+                                billNumber = details.billNumber,
+                                date = entry.date
+                            )
+                            exportService.exportSaleToPdf(context, profile, sale, details.saleItems, details.deductions)
+                        } else null
+                    }
+                    TransactionType.PAYMENT -> {
+                        val payment = com.dasariravi145.agrolynch.data.local.entity.PaymentEntity(
+                            id = entry.id,
+                            partyName = _currentSummary.value?.partyName ?: "",
+                            partyType = partyType,
+                            amount = entry.amount,
+                            paymentMode = if(entry.title.contains(":")) entry.title.split(":")[1].trim() else "CASH",
+                            referenceNumber = entry.reference,
+                            billNumber = details?.billNumber ?: "",
+                            date = entry.date
+                        )
+                        exportService.exportPaymentToPdf(context, profile, payment, partyType)
+                    }
+                    else -> null
+                }
 
                 if (file != null && file.exists()) {
-                    // Premium Backup logic
-                    if (premiumStateManager.getCachedPremiumStatus()) {
-                        syncRepository.uploadFile(file, "ledgers/${summary.partyName}")
-                    }
                     _exportStatus.emit("SUCCESS:${file.absolutePath}")
                 } else {
                     _exportStatus.emit("FAILED: PDF generation failed")

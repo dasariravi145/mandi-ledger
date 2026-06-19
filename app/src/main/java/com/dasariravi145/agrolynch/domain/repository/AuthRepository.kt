@@ -17,4 +17,9 @@ interface AuthRepository {
     suspend fun getSavedPin(): String?
     suspend fun hasSavedPin(): Boolean
     suspend fun updatePin(newPin: String)
+    fun setPendingProfileSync(pending: Boolean)
+    fun hasPendingProfileSync(): Boolean
+    fun saveSession(uid: String, phone: String, name: String, location: String, pin: String)
+    fun isProfileCreated(): Boolean
+    fun isPinCreated(): Boolean
 }

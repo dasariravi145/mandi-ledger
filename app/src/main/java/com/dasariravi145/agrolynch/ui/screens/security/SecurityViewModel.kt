@@ -27,7 +27,7 @@ class SecurityViewModel @Inject constructor(
             _state.update { it.copy(isAuthenticated = true, error = null) }
             securityManager.updateLastActivityTime()
         } else {
-            _state.update { it.copy(error = "Invalid PIN / తప్పు పిన్") }
+            _state.update { it.copy(error = "invalid_pin") }
         }
     }
 

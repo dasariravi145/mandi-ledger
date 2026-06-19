@@ -33,14 +33,17 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.ads.BannerAdView
 import com.dasariravi145.agrolynch.util.ExtractedData
+import com.dasariravi145.agrolynch.util.Formatter
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
@@ -51,12 +54,12 @@ fun BillScanScreen(
     viewModel: BillScanViewModel,
     isPremium: Boolean,
     onUpgradeClick: () -> Unit,
-    onNavigateToEntry: (ScanTarget, String, Double, Long, String, String, String, String, Double, Double, String) -> Unit,
+    onNavigateToEntry: (ScanTarget, String, Double, Long, String, String, String, String, String, String, String, String, Double, Double, String, String, Int, Double, Double, Double, String) -> Unit,
     onBackClick: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var showTypeDialog by remember { mutableStateOf(true) }
+    var showTypeDialog by remember { mutableStateOf(false) }
     
     var hasCameraPermission by remember { 
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
@@ -79,6 +82,8 @@ fun BillScanScreen(
         }
     }
 
+    // Type selection dialog removed - directly default to STOCK_ENTRY
+    /*
     if (showTypeDialog) {
         ScanTypeSelectionDialog(
             onTypeSelected = { 
@@ -88,22 +93,34 @@ fun BillScanScreen(
             onDismiss = onBackClick
         )
     }
+    */
 
-    if (state.isSuccess) {
-        LaunchedEffect(Unit) {
+    LaunchedEffect(state.isSuccess) {
+        if (state.isSuccess) {
             val d = state.extractedData
+            val deductionsStr = d.deductions.joinToString(";") { "${it.deductionType}:${it.amount}" }
             onNavigateToEntry(
-                state.target!!,
+                state.target ?: ScanTarget.STOCK_ENTRY,
                 d.billNumber,
                 if (d.amount > 0) d.amount else d.netAmount,
                 d.date,
                 d.farmerName,
+                d.farmerPhone,
+                d.farmerVillage,
                 d.buyerName,
                 d.partyName,
                 d.productName,
+                d.category,
+                d.grade,
                 d.quantity,
                 d.rate,
-                d.paymentMode
+                d.paymentMode,
+                d.unit,
+                d.numberOfBoxes,
+                d.totalWeightTon,
+                d.emptyBoxWeightPerBox,
+                d.spoilagePercentage,
+                deductionsStr
             )
             viewModel.resetState()
         }
@@ -112,7 +129,7 @@ fun BillScanScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Smart OCR Selection") },
+                title = { Text(stringResource(R.string.read_bill)) },
                 navigationIcon = {
                     IconButton(onClick = { 
                         if (showCamera) showCamera = false 
@@ -172,8 +189,8 @@ fun BillScanScreen(
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                     )
                     
-                    Text(state.target?.label ?: "Scan Bill", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Capture bill to extract numbers and dates.", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(state.target?.let { getTargetLabel(it) } ?: stringResource(R.string.read_bill), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Capture bill to extract details.", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -224,14 +241,25 @@ fun BillScanScreen(
 }
 
 @Composable
+fun getTargetLabel(target: ScanTarget): String {
+    return when(target) {
+        ScanTarget.STOCK_ENTRY -> stringResource(R.string.farmer_arrival)
+        ScanTarget.SALE_ENTRY -> stringResource(R.string.buyer_sale)
+        ScanTarget.PAYMENT -> stringResource(R.string.receive_payment)
+        ScanTarget.CHEQUE -> "Cheque"
+        ScanTarget.EXPENSE -> stringResource(R.string.expenses)
+    }
+}
+
+@Composable
 fun ScanTypeSelectionDialog(onTypeSelected: (ScanTarget) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("What are you scanning?") },
+        title = { Text("What are you reading?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ScanTarget.entries.forEach { target ->
-                    ScanTypeOption(target.label, getIconForTarget(target), target, onTypeSelected)
+                    ScanTypeOption(getTargetLabel(target), getIconForTarget(target), target, onTypeSelected)
                 }
             }
         },
@@ -277,16 +305,25 @@ fun OcrReviewContent(
     var billNo by remember { mutableStateOf(data.billNumber) }
     var dateStr by remember { mutableStateOf(sdf.format(Date(data.date))) }
     var farmerName by remember { mutableStateOf(data.farmerName) }
+    var farmerPhone by remember { mutableStateOf(data.farmerPhone) }
+    var farmerVillage by remember { mutableStateOf(data.farmerVillage) }
     var buyerName by remember { mutableStateOf(data.buyerName) }
     var productName by remember { mutableStateOf(data.productName) }
+    var category by remember { mutableStateOf(data.category) }
     var grade by remember { mutableStateOf(data.grade) }
-    var qty by remember { mutableStateOf(if(data.quantity > 0) data.quantity.toString() else "") }
-    var damage by remember { mutableStateOf(if(data.damageOrSoot > 0) data.damageOrSoot.toString() else "0") }
-    var rate by remember { mutableStateOf(if(data.rate > 0) data.rate.toString() else "") }
-    var amount by remember { mutableStateOf(if(data.amount > 0) data.amount.toString() else "") }
-    var comm by remember { mutableStateOf(if(data.commission > 0) data.commission.toString() else "0") }
-    var trans by remember { mutableStateOf(if(data.transport > 0) data.transport.toString() else "0") }
-    var netAmt by remember { mutableStateOf(if(data.netAmount > 0) data.netAmount.toString() else "") }
+    var unit by remember { mutableStateOf(data.unit) }
+    var qty by remember { mutableStateOf(if(data.quantity > 0) Formatter.formatWeight(data.quantity) else "") }
+    var boxes by remember { mutableStateOf(if(data.numberOfBoxes > 0) data.numberOfBoxes.toString() else "") }
+    var weightTon by remember { mutableStateOf(if(data.totalWeightTon > 0) Formatter.formatWeight(data.totalWeightTon) else "") }
+    var emptyWtPerBox by remember { mutableStateOf(if(data.emptyBoxWeightPerBox > 0) Formatter.formatWeight(data.emptyBoxWeightPerBox) else "") }
+    var spoilagePercent by remember { mutableStateOf(if(data.spoilagePercentage > 0) Formatter.formatWeight(data.spoilagePercentage) else "0") }
+    var damage by remember { mutableStateOf(if(data.damageOrSoot > 0) Formatter.formatWeight(data.damageOrSoot) else "0") }
+    var rate by remember { mutableStateOf(if(data.rate > 0) Formatter.formatWeight(data.rate) else "") }
+    var amount by remember { mutableStateOf(if(data.amount > 0) Formatter.formatCurrency(data.amount) else "") }
+    var comm by remember { mutableStateOf(if(data.commission > 0) Formatter.formatWeight(data.commission) else "5") }
+    var labor by remember { mutableStateOf(if(data.labor > 0) Formatter.formatWeight(data.labor) else "0") }
+    var trans by remember { mutableStateOf(if(data.transport > 0) Formatter.formatWeight(data.transport) else "0") }
+    var netAmt by remember { mutableStateOf(if(data.netAmount > 0) Formatter.formatCurrency(data.netAmount) else "") }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         bitmap?.let {
@@ -316,34 +353,62 @@ fun OcrReviewContent(
                 when(target) {
                     ScanTarget.STOCK_ENTRY -> {
                         OutlinedTextField(value = farmerName, onValueChange = { farmerName = it }, label = { Text("Farmer Name *") }, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = productName, onValueChange = { productName = it }, label = { Text("Product Name *") }, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = grade, onValueChange = { grade = it }, label = { Text("Grade") }, modifier = Modifier.fillMaxWidth())
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(value = farmerPhone, onValueChange = { if(it.length <= 10) farmerPhone = it }, label = { Text("Phone") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                            OutlinedTextField(value = farmerVillage, onValueChange = { farmerVillage = it }, label = { Text("Village") }, modifier = Modifier.weight(1f))
+                        }
                         
-                        OcrSelectionField("Quantity (KG) *", qty, { qty = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        OcrSelectionField("Damage / Soot", damage, { damage = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        OcrSelectionField("Rate *", rate, { rate = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        OcrSelectionField("Commission", comm, { comm = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        OcrSelectionField("Transport", trans, { trans = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        OcrSelectionField("Net Amount", netAmt, { netAmt = it }, data.detectedNumbers, KeyboardType.Decimal)
-                    }
-                    ScanTarget.SALE_ENTRY -> {
-                        OutlinedTextField(value = buyerName, onValueChange = { buyerName = it }, label = { Text("Buyer Name *") }, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = productName, onValueChange = { productName = it }, label = { Text("Product Name *") }, modifier = Modifier.fillMaxWidth())
-                        OcrSelectionField("Quantity *", qty, { qty = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        OcrSelectionField("Sale Rate *", rate, { rate = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        OcrSelectionField("Total Amount", amount, { amount = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, modifier = Modifier.weight(1f))
+                            OutlinedTextField(value = grade, onValueChange = { grade = it }, label = { Text("Grade") }, modifier = Modifier.weight(1f))
+                        }
+                        
+                        // Unit Selection
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Unit:", modifier = Modifier.padding(end = 8.dp), style = MaterialTheme.typography.bodyMedium)
+                            listOf("KG", "Ton", "Boxes").forEach { u ->
+                                FilterChip(
+                                    selected = unit == u,
+                                    onClick = { unit = u },
+                                    label = { Text(u) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        if (unit == "Boxes") {
+                            OcrSelectionField("Total Weight (Ton) *", weightTon, { weightTon = it }, data.detectedNumbers, KeyboardType.Decimal)
+                            OcrSelectionField("Number of Boxes *", boxes, { boxes = it }, data.detectedNumbers, KeyboardType.Number)
+                            OcrSelectionField("Empty Wt/Box (KG) *", emptyWtPerBox, { emptyWtPerBox = it }, data.detectedNumbers, KeyboardType.Decimal)
+                            OcrSelectionField("Spoilage %", spoilagePercent, { spoilagePercent = it }, data.detectedNumbers, KeyboardType.Decimal)
+                            OcrSelectionField("Rate per KG *", rate, { rate = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        } else {
+                            OcrSelectionField("Quantity (${unit}) *", qty, { qty = it }, data.detectedNumbers, KeyboardType.Decimal)
+                            OcrSelectionField("Damage / Soot", damage, { damage = it }, data.detectedNumbers, KeyboardType.Decimal)
+                            OcrSelectionField(if (unit == "Ton") "Rate per KG *" else "Rate *", rate, { rate = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        }
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OcrSelectionField("Commission %", comm, { comm = it }, data.detectedNumbers, KeyboardType.Decimal)
+                            OcrSelectionField("Labor ₹", labor, { labor = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OcrSelectionField("Transport ₹", trans, { trans = it }, data.detectedNumbers, KeyboardType.Decimal)
+                            OcrSelectionField("Net Amount ₹", netAmt, { netAmt = it }, data.detectedNumbers, KeyboardType.Decimal)
+                        }
                     }
-                    else -> {
-                        OutlinedTextField(value = farmerName, onValueChange = { farmerName = it }, label = { Text("Party Name *") }, modifier = Modifier.fillMaxWidth())
-                        OcrSelectionField("Amount *", amount, { amount = it }, data.detectedNumbers, KeyboardType.Decimal)
-                    }
+                    else -> { /* Other types hidden */ }
                 }
             }
         }
 
         val isReady = when(target) {
-            ScanTarget.STOCK_ENTRY -> farmerName.isNotEmpty() && productName.isNotEmpty() && qty.isNotEmpty() && rate.isNotEmpty()
-            ScanTarget.SALE_ENTRY -> buyerName.isNotEmpty() && productName.isNotEmpty() && qty.isNotEmpty() && rate.isNotEmpty()
+            ScanTarget.STOCK_ENTRY -> {
+                if (unit == "Boxes") farmerName.isNotEmpty() && productName.isNotEmpty() && weightTon.isNotEmpty() && boxes.isNotEmpty() && emptyWtPerBox.isNotEmpty() && rate.isNotEmpty()
+                else farmerName.isNotEmpty() && productName.isNotEmpty() && qty.isNotEmpty() && rate.isNotEmpty()
+            }
             else -> farmerName.isNotEmpty() && amount.isNotEmpty()
         }
 
@@ -354,18 +419,27 @@ fun OcrReviewContent(
                     val finalDate = try { sdf.parse(dateStr)?.time ?: data.date } catch(e: Exception) { data.date }
                     onConfirm(data.copy(
                         billNumber = billNo, date = finalDate,
-                        farmerName = farmerName, buyerName = buyerName, partyName = farmerName,
-                        productName = productName, grade = grade,
-                        quantity = qty.toDoubleOrNull() ?: 0.0, damageOrSoot = damage.toDoubleOrNull() ?: 0.0,
+                        farmerName = farmerName, farmerPhone = farmerPhone, farmerVillage = farmerVillage,
+                        buyerName = buyerName, partyName = farmerName,
+                        productName = productName, category = category, grade = grade, unit = unit,
+                        quantity = if (unit == "Boxes") weightTon.toDoubleOrNull() ?: 0.0 else qty.toDoubleOrNull() ?: 0.0,
+                        numberOfBoxes = boxes.toIntOrNull() ?: 0,
+                        totalWeightTon = if (unit == "Boxes") weightTon.toDoubleOrNull() ?: 0.0 else 0.0,
+                        emptyBoxWeightPerBox = emptyWtPerBox.toDoubleOrNull() ?: 0.0,
+                        totalEmptyBoxWeightKg = (boxes.toIntOrNull() ?: 0) * (emptyWtPerBox.toDoubleOrNull() ?: 0.0),
+                        spoilagePercentage = spoilagePercent.toDoubleOrNull() ?: 0.0,
+                        damageOrSoot = damage.toDoubleOrNull() ?: 0.0,
                         rate = rate.toDoubleOrNull() ?: 0.0, amount = amount.toDoubleOrNull() ?: 0.0,
-                        commission = comm.toDoubleOrNull() ?: 0.0, transport = trans.toDoubleOrNull() ?: 0.0,
+                        commission = comm.toDoubleOrNull() ?: 0.0, 
+                        labor = labor.toDoubleOrNull() ?: 0.0,
+                        transport = trans.toDoubleOrNull() ?: 0.0,
                         netAmount = netAmt.toDoubleOrNull() ?: 0.0
                     ))
                 },
                 modifier = Modifier.weight(2f).height(56.dp),
                 enabled = isReady,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-            ) { Text("Confirm & Save", fontWeight = FontWeight.Bold) }
+            ) { Text("Review Farmer Arrival", fontWeight = FontWeight.Bold) }
         }
         Spacer(modifier = Modifier.height(40.dp))
     }
@@ -402,7 +476,7 @@ fun GuidanceCard() {
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBBF7D0))
     ) {
         Column(Modifier.padding(12.dp)) {
-            Text("OCR TIPS:", fontWeight = FontWeight.Bold, color = Color(0xFF166534), fontSize = 12.sp)
+            Text("TIPS:", fontWeight = FontWeight.Bold, color = Color(0xFF166534), fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
             GuidanceRow("Handwriting is hard to read for names.")
             GuidanceRow("Assign detected numbers to fields manually.")

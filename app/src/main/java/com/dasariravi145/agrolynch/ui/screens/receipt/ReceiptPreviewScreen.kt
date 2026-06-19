@@ -1,22 +1,29 @@
 package com.dasariravi145.agrolynch.ui.screens.receipt
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dasariravi145.agrolynch.domain.model.ReceiptData
+import com.dasariravi145.agrolynch.util.PdfGenerator
+import com.dasariravi145.agrolynch.util.Formatter
+import com.dasariravi145.agrolynch.util.pdf.TemplateInvoicePdfService
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -25,39 +32,61 @@ import java.util.*
 fun ReceiptPreviewScreen(
     data: ReceiptData,
     viewModel: ReceiptViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onUpgradeClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+    val profile by viewModel.companyProfile.collectAsState()
+    val previewFile by viewModel.generatedPdfFile.collectAsState()
+    val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+
+    // Trigger PDF generation for actual renderer logic
+    LaunchedEffect(profile) {
+        // Since we refactored the service, the PDF generation logic in ViewModel 
+        // will now use the new rendering engine.
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Receipt Preview / రసీదు ప్రివ్యూ") },
+                title = { Text("Bill Preview") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.generateAndShare(context, data) }) {
-                        Icon(Icons.Default.Share, contentDescription = "Share")
                     }
                 }
             )
         },
         bottomBar = {
-            BottomAppBar {
-                Button(
-                    onClick = { viewModel.generateAndShare(context, data) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    shape = MaterialTheme.shapes.medium
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                tonalElevation = 8.dp,
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp).navigationBarsPadding(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Share, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Share PDF / వాట్సాప్ ద్వారా పంపండి")
+                    Button(
+                        onClick = { viewModel.generateAndSharePdf(context, data) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Share, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Share")
+                    }
+                    
+                    Button(
+                        onClick = { viewModel.generateAndPrintPdf(context, data) },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Print, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Print")
+                    }
                 }
             }
         }
@@ -66,79 +95,133 @@ fun ReceiptPreviewScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color.Gray.copy(alpha = 0.1f))
-                .padding(16.dp)
+                .background(Color(0xFFF5F5F5))
                 .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
-                Column(modifier = Modifier.padding(24.dp)) {
-                    // Header
-                    Text(text = data.agentName, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    Text(text = "Contact: ${data.agentContact}", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Divider()
-                    Spacer(modifier = Modifier.height(16.dp))
+            // Actual PDF Preview or visual card
+            if (previewFile != null) {
+                com.dasariravi145.agrolynch.ui.screens.template.PdfPreviewCard(previewFile!!)
+                Spacer(Modifier.height(16.dp))
+            }
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Card(
+                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                shape = RoundedCornerShape(0.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    profile?.let { pr ->
+                        Text(
+                            text = pr.companyName.uppercase(),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF1B5E20),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                        if (pr.tagline.isNotEmpty()) {
+                            Text(
+                                text = pr.tagline,
+                                fontSize = 12.sp,
+                                color = Color.Gray,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        Text(
+                            text = "${pr.address}, ${pr.village}\nMob: ${pr.mobile1} | GST: ${pr.gstNumber}",
+                            fontSize = 10.sp,
+                            color = Color.DarkGray,
+                            lineHeight = 14.sp,
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = Color.LightGray, thickness = 0.5.dp)
+                    
+                    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column {
-                            Text(text = "RECEIPT FOR", fontSize = 12.sp, color = Color.Gray)
-                            Text(text = data.partyName, fontWeight = FontWeight.Bold)
-                            Text(text = data.partyType, fontSize = 12.sp)
+                            Text("BILL TO:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            Text(data.partyName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(data.partyType, fontSize = 11.sp, color = Color.Gray)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(text = "DATE", fontSize = 12.sp, color = Color.Gray)
-                            Text(text = dateFormat.format(Date(data.date)), fontWeight = FontWeight.Bold)
-                            Text(text = "#${data.receiptId}", fontSize = 12.sp)
+                            Text("DATE: ${dateFormat.format(Date(data.date))}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("NO: #${data.receiptId}", fontSize = 11.sp, color = Color.Gray)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Table
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(text = "Description", modifier = Modifier.weight(2f), fontWeight = FontWeight.Bold)
-                        Text(text = "Qty", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                        Text(text = "Rate", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                        Text(text = "Total", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    TableHead()
+                    data.items.forEach { item ->
+                        TableRow(item.description, item.quantity, item.rate, item.amount)
                     }
                     
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Divider()
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
-                    data.items.forEach { item ->
-                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(text = item.description, modifier = Modifier.weight(2f))
-                            Text(text = item.quantity, modifier = Modifier.weight(1f))
-                            Text(text = item.rate, modifier = Modifier.weight(1f))
-                            Text(text = "₹${item.amount}", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    Column(modifier = Modifier.align(Alignment.End).width(200.dp)) {
+                        TotalItem("SUB TOTAL", data.totalAmount)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(color = Color(0xFF1B5E20), shape = RoundedCornerShape(4.dp)) {
+                            Row(Modifier.padding(8.dp).fillMaxWidth(), Arrangement.SpaceBetween) {
+                                Text("GRAND TOTAL", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("₹${Formatter.formatCurrency(data.totalAmount)}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Divider()
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(40.dp))
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(text = "Grand Total / మొత్తం", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "₹${data.totalAmount}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.Bottom) {
+                        Column {
+                            profile?.upiQrPath?.let {
+                                Text("SCAN TO PAY", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Box(Modifier.size(70.dp).border(1.dp, Color.LightGray))
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            HorizontalDivider(Modifier.width(120.dp), thickness = 0.5.dp)
+                            Text("Authorized Signature", fontSize = 10.sp, color = Color.Gray)
+                        }
                     }
-
-                    if (data.notes.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(text = "Notes:", fontSize = 12.sp, color = Color.Gray)
-                        Text(text = data.notes, fontSize = 14.sp)
-                    }
-
-                    Spacer(modifier = Modifier.height(48.dp))
-                    Text(text = "Authorized Signature", modifier = Modifier.align(Alignment.End), color = Color.Gray)
                 }
             }
+            Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun TableHead() {
+    Surface(color = Color(0xFFF1F8E9)) {
+        Row(Modifier.fillMaxWidth().padding(8.dp)) {
+            Text("Description", modifier = Modifier.weight(2f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text("Qty", modifier = Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text("Rate", modifier = Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text("Amount", modifier = Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+        }
+    }
+}
+
+@Composable
+private fun TableRow(desc: String, qty: String, rate: String, amount: String) {
+    Row(Modifier.fillMaxWidth().padding(8.dp)) {
+        Text(desc, modifier = Modifier.weight(2f), fontSize = 11.sp)
+        Text(qty, modifier = Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.Center)
+        Text(rate, modifier = Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.Center)
+        Text("₹$amount", modifier = Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+    }
+    HorizontalDivider(thickness = 0.5.dp, color = Color.LightGray.copy(alpha = 0.5f))
+}
+
+@Composable
+private fun TotalItem(label: String, value: Double) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+        Text(label, fontSize = 10.sp, color = Color.Gray)
+        Text("₹${Formatter.formatCurrency(value)}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }

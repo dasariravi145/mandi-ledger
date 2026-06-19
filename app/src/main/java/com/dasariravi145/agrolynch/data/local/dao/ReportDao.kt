@@ -8,16 +8,21 @@ data class StockReportModel(
     val productId: String,
     val productName: String,
     val totalQuantity: Double,
-    val unit: String
+    val unit: String,
+    val numberOfBoxes: Int = 0,
+    val totalNetWeightKg: Double = 0.0
 )
 
 data class DetailedSaleReportModel(
     val id: String,
+    val saleId: String = "",
     val buyerName: String,
     val date: Long,
+    val billNumber: String = "",
     val productName: String,
     val grade: String,
-    val quantity: Double,
+    val quantity: Double, // Always Net KG
+    val inputQuantity: Double = 0.0, // Original Unit Quantity
     val unit: String = "KG",
     val rate: Double,
     val saleAmount: Double,
@@ -33,6 +38,7 @@ data class DetailedArrivalReportModel(
     val id: String,
     val farmerName: String,
     val date: Long,
+    val billNumber: String = "",
     val productName: String,
     val grade: String,
     val quantity: Double,
@@ -41,8 +47,16 @@ data class DetailedArrivalReportModel(
     val grossAmount: Double,
     val commissionPercent: Double,
     val commissionAmount: Double,
+    val otherDeductions: Double = 0.0,
     val netAmount: Double,
-    val pendingAmount: Double
+    val pendingAmount: Double,
+    val numberOfBoxes: Int = 0,
+    val finalNetWeightKg: Double = 0.0,
+    val totalWeightTon: Double = 0.0,
+    val emptyBoxWeightPerBox: Double = 0.0,
+    val totalEmptyBoxWeightKg: Double = 0.0,
+    val spoilagePercentage: Double = 0.0,
+    val spoilageKg: Double = 0.0
 )
 
 data class ProductPerformanceModel(
@@ -84,22 +98,24 @@ data class ChartDataModel(
 
 data class CommissionReportModel(
     val id: String,
-    val buyerName: String,
     val farmerName: String,
     val productName: String,
+    val category: String,
     val grade: String,
     val quantity: Double,
-    val saleAmount: Double,
+    val netQuantity: Double,
+    val rate: Double,
+    val grossAmount: Double,
     val commissionPercent: Double,
     val commissionAmount: Double,
-    val marginAmount: Double,
     val date: Long
 )
 
 @Dao
 interface ReportDao {
     @Query("""
-        SELECT productId, productName, SUM(remainingQuantity) as totalQuantity, unit 
+        SELECT productId, productName, SUM(remainingQuantity) as totalQuantity, unit,
+               SUM(numberOfBoxes) as numberOfBoxes, SUM(finalNetWeightKg) as totalNetWeightKg
         FROM arrivals 
         WHERE remainingQuantity > 0 AND isDeleted = 0
         GROUP BY productId
@@ -107,8 +123,8 @@ interface ReportDao {
     fun getStockReport(): Flow<List<StockReportModel>>
 
     @Query("""
-        SELECT si.id, s.buyerName, s.date, si.productName, si.grade, si.quantitySold as quantity, 
-               si.unit, si.saleRate as rate, si.saleAmount,
+        SELECT si.id, si.saleId, s.buyerName, s.date, s.billNumber, si.productName, si.grade, si.quantitySold as quantity,
+               si.inputQuantity, si.unit, si.saleRate as rate, si.saleAmount,
                si.transportCharges, si.laborCharges, si.otherCharges,
                si.netAmount as totalAmount,
                0.0 as paidAmount, 0.0 as pendingAmount
@@ -120,9 +136,11 @@ interface ReportDao {
     fun getBuyerDetailedReport(startDate: Long, endDate: Long): Flow<List<DetailedSaleReportModel>>
 
     @Query("""
-        SELECT id, farmerName, date, productName, grade, quantity, unit,
+        SELECT id, farmerName, date, billNumber, productName, grade, quantity, unit,
                purchaseRate as rate, grossAmount, commissionPercent, commissionAmount,
-               netAmount, farmerPendingAmount as pendingAmount
+               otherDeductions, netAmount, farmerPendingAmount as pendingAmount,
+               numberOfBoxes, finalNetWeightKg, totalWeightTon, emptyBoxWeightPerBox, totalEmptyBoxWeightKg,
+               spoilagePercentage, spoilageKg
         FROM arrivals
         WHERE date BETWEEN :startDate AND :endDate AND isDeleted = 0
         ORDER BY date DESC
@@ -131,10 +149,10 @@ interface ReportDao {
 
     @Query("""
         SELECT a.productName, a.productCategory as category, a.grade, 
-               SUM(a.quantity) as totalArrivals,
+               SUM(CASE WHEN a.unit = 'Ton' THEN a.quantity * 1000.0 ELSE a.quantity END) as totalArrivals,
                COALESCE((SELECT SUM(si.quantitySold) FROM sale_items si WHERE si.productName = a.productName AND si.grade = a.grade), 0.0) as totalSold,
-               SUM(a.remainingQuantity) as currentStock,
-               AVG(a.purchaseRate) as avgPurchaseRate,
+               SUM(CASE WHEN a.unit = 'Ton' THEN a.remainingQuantity * 1000.0 ELSE a.remainingQuantity END) as currentStock,
+               AVG(CASE WHEN a.ratePerKg > 0 THEN a.ratePerKg WHEN a.unit = 'Ton' THEN a.purchaseRate / 1000.0 ELSE a.purchaseRate END) as avgPurchaseRate,
                COALESCE((SELECT AVG(si.saleRate) FROM sale_items si WHERE si.productName = a.productName AND si.grade = a.grade), 0.0) as avgSaleRate,
                0.0 as totalProfit
         FROM arrivals a
@@ -168,21 +186,21 @@ interface ReportDao {
 
     @Query("""
         SELECT 
-            si.id, 
-            s.buyerName, 
-            si.farmerName, 
-            si.productName, 
-            si.grade,
-            si.quantitySold as quantity, 
-            si.saleAmount, 
-            si.commissionPercent,
-            si.commissionAmount,
-            si.marginAmount,
-            si.date
-        FROM sale_items si
-        JOIN sales s ON si.saleId = s.id
-        WHERE si.date BETWEEN :startDate AND :endDate
-        ORDER BY si.date DESC
+            id, 
+            farmerName, 
+            productName, 
+            productCategory as category,
+            grade,
+            quantity, 
+            netQuantity,
+            CASE WHEN purchaseRate > 0 AND ratePerKg > 0 THEN ratePerKg WHEN unit = 'Ton' THEN purchaseRate / 1000.0 ELSE purchaseRate END as rate,
+            grossAmount, 
+            commissionPercent,
+            commissionAmount,
+            date
+        FROM arrivals
+        WHERE date BETWEEN :startDate AND :endDate AND isDeleted = 0
+        ORDER BY date DESC
     """)
     fun getCommissionReport(startDate: Long, endDate: Long): Flow<List<CommissionReportModel>>
 
@@ -195,20 +213,44 @@ interface ReportDao {
     """)
     fun getSalesTrend(sinceDate: Long): Flow<List<ChartDataModel>>
 
-    @Query("SELECT SUM(totalNetAmount) FROM sales WHERE date BETWEEN :start AND :end AND isDeleted = 0")
+    @Query("""
+        SELECT SUM(totalNetAmount) 
+        FROM sales 
+        WHERE date BETWEEN :start AND :end AND isDeleted = 0
+    """)
     fun getTotalSales(start: Long, end: Long): Flow<Double?>
 
     @Query("SELECT SUM(grossAmount) FROM arrivals WHERE date BETWEEN :start AND :end AND isDeleted = 0")
     fun getTotalPurchases(start: Long, end: Long): Flow<Double?>
 
-    @Query("SELECT SUM(commissionAmount) FROM sale_items WHERE date BETWEEN :start AND :end")
+    @Query("""
+        SELECT 
+            (SELECT COALESCE(SUM(CASE WHEN commissionAmount > 0 THEN commissionAmount ELSE (grossAmount * commissionPercent / 100) END), 0.0) FROM arrivals WHERE date BETWEEN :start AND :end AND isDeleted = 0) +
+            (SELECT COALESCE(SUM(totalCommission), 0.0) FROM sales WHERE date BETWEEN :start AND :end AND isDeleted = 0)
+    """)
     fun getTotalCommission(start: Long, end: Long): Flow<Double?>
 
-    @Query("SELECT SUM(pendingAmount) FROM buyers WHERE isDeleted = 0")
+    @Query("""
+        SELECT (SELECT COALESCE(SUM(totalNetAmount), 0.0) FROM sales WHERE isDeleted = 0) - 
+               (SELECT COALESCE(SUM(amount), 0.0) FROM payments WHERE partyType = 'BUYER' AND isDeleted = 0)
+    """)
     fun getBuyerPendingTotal(): Flow<Double?>
 
-    @Query("SELECT SUM(pendingAmount) FROM farmers WHERE isDeleted = 0")
+    @Query("""
+        SELECT (SELECT COALESCE(SUM(netAmount), 0.0) FROM arrivals WHERE isDeleted = 0) + 
+               (SELECT COALESCE(SUM(totalAmount), 0.0) FROM transactions WHERE isDeleted = 0) - 
+               (SELECT COALESCE(SUM(amount), 0.0) FROM payments WHERE partyType = 'FARMER' AND isDeleted = 0)
+    """)
     fun getFarmerPendingTotal(): Flow<Double?>
+
+    @Query("SELECT COUNT(*) FROM arrivals WHERE isDeleted = 0")
+    fun getArrivalCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM sales WHERE isDeleted = 0")
+    fun getSaleCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM payments WHERE isDeleted = 0")
+    fun getPaymentCount(): Flow<Int>
 
     @Query("UPDATE sale_items SET commissionAmount = (saleAmount * commissionPercent / 100) WHERE (commissionAmount = 0 OR commissionAmount IS NULL) AND saleAmount > 0 AND commissionPercent > 0")
     suspend fun recalculateCommissions()

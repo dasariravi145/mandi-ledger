@@ -12,10 +12,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
+
 @Composable
 fun SummaryCard(
     title: String,
-    teluguTitle: String,
     amount: String,
     containerColor: Color,
     contentColor: Color = Color.White,
@@ -39,19 +41,11 @@ fun SummaryCard(
         ) {
             Text(
                 text = title,
-                fontSize = 11.sp,
-                lineHeight = 13.sp,
+                fontSize = 13.sp,
+                lineHeight = 15.sp,
                 fontWeight = FontWeight.Bold
             )
-            if (teluguTitle.isNotEmpty()) {
-                Text(
-                    text = teluguTitle,
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = amount,
                 fontSize = 20.sp,
@@ -130,14 +124,9 @@ fun PendingMiniSummary(
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
             Text(
-                text = "Buyer Pending Collection",
-                fontSize = 10.sp,
+                text = stringResource(R.string.buyer_due),
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "కొనుగోలుదారు వసూళ్లు",
-                fontSize = 9.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
@@ -152,14 +141,9 @@ fun PendingMiniSummary(
         
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
             Text(
-                text = "Farmer Pending Payment",
-                fontSize = 10.sp,
+                text = stringResource(R.string.farmer_due),
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "రైతు చెల్లింపులు",
-                fontSize = 9.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(

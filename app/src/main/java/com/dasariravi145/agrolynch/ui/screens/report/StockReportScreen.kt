@@ -12,6 +12,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dasariravi145.agrolynch.util.Formatter
 
 @Composable
 fun StockReportScreen(
@@ -53,16 +54,32 @@ fun StockReportScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(item.productName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 Text("ID: ${item.productId.takeLast(6).uppercase()}", fontSize = 11.sp, color = Color.Gray)
+                                if (item.unit == "Boxes") {
+                                    Text("${item.numberOfBoxes} Boxes", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                }
                             }
-                            Text(
-                                "${item.totalQuantity} ${item.unit}",
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (item.totalQuantity > 0) Color(0xFF16A34A) else Color.Red,
-                                fontSize = 18.sp
-                            )
+                            Column(horizontalAlignment = Alignment.End) {
+                                val displayQty = if (item.unit == "Ton") "${Formatter.formatWeight(item.totalQuantity)} Ton" 
+                                                 else if (item.unit == "Boxes") "${item.numberOfBoxes} Boxes"
+                                                 else "${Formatter.formatWeight(item.totalQuantity)} KG"
+                                
+                                Text(
+                                    displayQty,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (item.totalQuantity > 0) Color(0xFF16A34A) else Color.Red,
+                                    fontSize = 18.sp
+                                )
+                                
+                                if (item.unit != "KG") {
+                                    Text("Net: ${Formatter.formatNetWeight(item.totalNetWeightKg)}", fontSize = 11.sp, color = Color.Gray)
+                                    timber.log.Timber.d("REPORT_QTY_DISPLAY: $displayQty | Net: ${item.totalNetWeightKg} KG")
+                                } else {
+                                    timber.log.Timber.d("REPORT_QTY_DISPLAY: $displayQty")
+                                }
+                            }
                         }
                     }
                 }

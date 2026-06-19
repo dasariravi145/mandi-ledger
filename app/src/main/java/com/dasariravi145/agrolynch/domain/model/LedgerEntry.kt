@@ -25,6 +25,7 @@ data class LedgerEntryDetails(
     val unit: String = "",
     val rate: Double = 0.0, // Sale Rate
     val purchaseRate: Double = 0.0,
+    val ratePerKg: Double = 0.0,
     val grossAmount: Double = 0.0,
     val commissionPercent: Double = 0.0,
     val commissionAmount: Double = 0.0,
@@ -33,9 +34,19 @@ data class LedgerEntryDetails(
     val packingCharges: Double = 0.0,
     val otherDeductions: Double = 0.0,
     val netAmount: Double = 0.0,
+    val totalNetWeightKg: Double = 0.0,
+    val kgPerBox: Double = 0.0,
+    val totalWeightTon: Double = 0.0,
+    val emptyBoxWeightPerBox: Double = 0.0,
+    val totalGrossKg: Double = 0.0,
+    val lessWeightKg: Double = 0.0,
+    val spoilagePercentage: Double = 0.0,
+    val spoilageKg: Double = 0.0,
     val paymentMade: Double = 0.0,
     val pendingAmount: Double = 0.0,
-    val saleItems: List<com.dasariravi145.agrolynch.data.local.entity.SaleItemEntity> = emptyList()
+    val deductions: List<com.dasariravi145.agrolynch.data.local.entity.EntryDeductionEntity> = emptyList(),
+    val saleItems: List<com.dasariravi145.agrolynch.data.local.entity.SaleItemEntity> = emptyList(),
+    val arrivalItems: List<com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity> = emptyList()
 )
 
 enum class LedgerType {

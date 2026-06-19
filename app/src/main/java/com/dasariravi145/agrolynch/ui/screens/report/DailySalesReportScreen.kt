@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dasariravi145.agrolynch.util.Formatter
 
 @Composable
 fun DailySalesReportScreen(
@@ -38,11 +39,11 @@ fun DailySalesReportScreen(
                                 Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray)
                             }
                             Text("${item.productName} (${item.grade})", fontSize = 13.sp, color = Color.DarkGray)
-                            Text("${item.quantity} ${item.unit} @ ₹${item.rate}", fontSize = 12.sp, color = Color.Gray)
+                            Text("${Formatter.formatWeight(item.quantity)} ${item.unit} @ ₹${Formatter.formatCurrency(item.rate)}", fontSize = 12.sp, color = Color.Gray)
                             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
                             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                                Text("Sale Amt: ₹${String.format("%.0f", item.saleAmount)}", fontSize = 12.sp)
-                                Text("₹${String.format("%.2f", item.totalAmount)}", fontWeight = FontWeight.ExtraBold, color = Color(0xFF2E7D32))
+                                Text("Sale Amt: ₹${Formatter.formatCurrency(item.saleAmount)}", fontSize = 12.sp)
+                                Text("₹${Formatter.formatCurrency(item.totalAmount)}", fontWeight = FontWeight.ExtraBold, color = Color(0xFF2E7D32))
                             }
                         }
                     }

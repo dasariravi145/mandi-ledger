@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -19,6 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.SubscriptionEntity
 import java.text.SimpleDateFormat
 import java.util.*
@@ -30,7 +33,6 @@ fun PremiumScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val productDetails by viewModel.productDetails.collectAsState()
     val isPremium by viewModel.isPremium.collectAsState()
     val subscriptionHistory by viewModel.subscriptionHistory.collectAsState()
     val activity = LocalActivity.current as Activity
@@ -38,7 +40,7 @@ fun PremiumScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Premium & Payments") },
+                title = { Text(stringResource(R.string.subscription)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
@@ -65,7 +67,7 @@ fun PremiumScreen(
             Spacer(modifier = Modifier.height(16.dp))
             
             Text(
-                text = if (isPremium) "Premium Member" else "Upgrade to Premium",
+                text = if (isPremium) stringResource(R.string.premium_member) else stringResource(R.string.upgrade_sub),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (isPremium) Color(0xFF16A34A) else MaterialTheme.colorScheme.onSurface
@@ -73,43 +75,47 @@ fun PremiumScreen(
             
             Spacer(modifier = Modifier.height(32.dp))
             
-            PremiumFeatureItem("Ad-free experience / ప్రకటనలు లేవు")
-            PremiumFeatureItem("Unlimited OCR Bill Scanning / అపరిమిత బిల్ స్కాన్")
-            PremiumFeatureItem("Cloud Backup & Restore / క్లౌడ్ బ్యాకప్")
-            PremiumFeatureItem("Export PDF & Excel Reports / నివేదికల ఎగుమతి")
+            PremiumFeatureItem(stringResource(R.string.ad_free_experience))
+            PremiumFeatureItem(stringResource(R.string.unlimited_ocr_scan))
+            PremiumFeatureItem(stringResource(R.string.cloud_backup_restore))
+            PremiumFeatureItem(stringResource(R.string.export_reports))
+            PremiumFeatureItem("One-Tap Farmer Calling")
+            PremiumFeatureItem("One-Tap Buyer Calling")
+            PremiumFeatureItem("One-Tap WhatsApp Chat")
             
             Spacer(modifier = Modifier.height(32.dp))
             
             if (!isPremium) {
-                val price = productDetails?.subscriptionOfferDetails?.get(0)
-                    ?.pricingPhases?.pricingPhaseList?.get(0)?.formattedPrice ?: "₹999/year"
+                val billingProductDetails = viewModel.productDetailsList.collectAsState().value
                 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                if (billingProductDetails.isEmpty() && uiState !is PremiumUiState.Loading) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                     ) {
-                        Text(text = "Best Value Plan", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                        Text(text = "Premium Yearly", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        Text(text = price, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        Button(
-                            onClick = { viewModel.subscribe(activity) },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = uiState !is PremiumUiState.Loading
-                        ) {
-                            if (uiState is PremiumUiState.Loading) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
-                            } else {
-                                Text("Subscribe Now")
-                            }
-                        }
+                        Text(
+                            text = "Premium plan not available. Please check Play Console product setup.",
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            textAlign = TextAlign.Center
+                        )
                     }
+                }
+
+                com.dasariravi145.agrolynch.domain.model.PREMIUM_PLANS.forEach { plan ->
+                    val details = billingProductDetails.find { it.productId == plan.productId }
+                    val formattedPrice = details?.subscriptionOfferDetails?.get(0)?.pricingPhases?.pricingPhaseList?.get(0)?.formattedPrice 
+                        ?: plan.formattedPrice
+
+                    PremiumPlanCard(
+                        plan = plan,
+                        formattedPrice = formattedPrice,
+                        isLoading = uiState is PremiumUiState.Loading,
+                        onSubscribe = { 
+                            details?.let { viewModel.subscribe(activity, it) }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
                 
                 TextButton(onClick = { viewModel.restorePurchases() }) {
@@ -125,7 +131,7 @@ fun PremiumScreen(
                 ) {
                     Icon(Icons.Default.Receipt, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Payment Details / లావాదేవీల వివరాలు", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(text = stringResource(R.string.payment_details), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -143,6 +149,74 @@ fun PremiumScreen(
                     color = MaterialTheme.colorScheme.error,
                     textAlign = TextAlign.Center
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun PremiumPlanCard(
+    plan: com.dasariravi145.agrolynch.domain.model.PremiumPlan,
+    formattedPrice: String,
+    isLoading: Boolean,
+    onSubscribe: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(horizontalAlignment = Alignment.Start) {
+                    Text(text = plan.name, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(text = plan.durationText, fontSize = 12.sp, color = Color.Gray)
+                }
+                
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(
+                        text = plan.badge,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Text(text = formattedPrice, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
+                if (plan.productId != "premium_1_month") {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "(${plan.monthlyPrice})", fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 6.dp))
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Button(
+                onClick = onSubscribe,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Subscribe Now", fontWeight = FontWeight.Bold)
             }
         }
     }

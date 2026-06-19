@@ -23,6 +23,7 @@ import com.dasariravi145.agrolynch.ads.BannerAdView
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumUpgradePopup
 import com.dasariravi145.agrolynch.util.PdfGenerator
+import com.dasariravi145.agrolynch.util.Formatter
 import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,10 +45,10 @@ fun DashboardScreen(
     onViewAnalytics: () -> Unit,
     onViewReports: () -> Unit,
     onViewBillScan: () -> Unit,
-    onViewVoiceEntry: () -> Unit,
     onViewSecurity: () -> Unit,
     onViewBackup: () -> Unit,
     onViewSettings: () -> Unit,
+    onViewCompanyProfile: () -> Unit,
     onLogout: () -> Unit
 ) {
     Timber.d("DashboardScreen: Initializing...")
@@ -83,19 +84,19 @@ fun DashboardScreen(
 
     // Optimization: remember expensive string formatting
     val todaySalesStr = remember(state.summary.todaySales) { 
-        "₹${String.format("%.0f", state.summary.todaySales)}" 
+        "₹${Formatter.formatCurrency(state.summary.todaySales)}" 
     }
     val todayCommStr = remember(state.summary.todayCommission) { 
-        "₹${String.format("%.0f", state.summary.todayCommission)}" 
+        "₹${Formatter.formatCurrency(state.summary.todayCommission)}" 
     }
     val totalCommStr = remember(state.summary.commissionEarned) { 
-        "₹${String.format("%.0f", state.summary.commissionEarned)}" 
+        "₹${Formatter.formatCurrency(state.summary.commissionEarned)}" 
     }
     val buyerPendingStr = remember(state.summary.buyerPending) { 
-        String.format("%.0f", state.summary.buyerPending) 
+        Formatter.formatCurrency(state.summary.buyerPending) 
     }
     val farmerPendingStr = remember(state.summary.farmerPending) { 
-        String.format("%.0f", state.summary.farmerPending) 
+        Formatter.formatCurrency(state.summary.farmerPending)
     }
 
     Scaffold(
@@ -115,7 +116,7 @@ fun DashboardScreen(
                                 shape = MaterialTheme.shapes.extraSmall
                             ) {
                                 Text(
-                                    "PREMIUM",
+                                    stringResource(R.string.premium_member).uppercase(),
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
@@ -158,7 +159,7 @@ fun DashboardScreen(
                     selected = false,
                     onClick = onViewLedger,
                     icon = { Icon(Icons.Default.MenuBook, contentDescription = null) },
-                    label = { Text(stringResource(R.string.ledger)) }
+                    label = { Text(stringResource(R.string.account_book)) }
                 )
                 NavigationBarItem(
                     selected = false,
@@ -198,19 +199,16 @@ fun DashboardScreen(
                 ) {
                     SummaryCard(
                         title = stringResource(R.string.today_sales),
-                        teluguTitle = "",
                         amount = todaySalesStr,
                         containerColor = Color(0xFF1B5E20)
                     )
                     SummaryCard(
                         title = stringResource(R.string.today_commission),
-                        teluguTitle = "",
                         amount = todayCommStr,
                         containerColor = Color(0xFF0D47A1)
                     )
                     SummaryCard(
                         title = stringResource(R.string.total_commission),
-                        teluguTitle = "",
                         amount = totalCommStr,
                         containerColor = Color(0xFFE65100)
                     )
@@ -244,14 +242,14 @@ fun DashboardScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         DashboardBoxItem(
-                            text = stringResource(R.string.add_stock_entry),
+                            text = stringResource(R.string.farmer_arrival),
                             icon = Icons.Default.AddBusiness,
                             onClick = onAddTransaction,
                             modifier = Modifier.weight(1f),
                             contentColor = Color(0xFF2E7D32)
                         )
                         DashboardBoxItem(
-                            text = stringResource(R.string.add_sale_entry),
+                            text = stringResource(R.string.buyer_sale),
                             icon = Icons.Default.ShoppingCart,
                             onClick = onViewSales,
                             modifier = Modifier.weight(1f),
@@ -260,37 +258,22 @@ fun DashboardScreen(
                     }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         DashboardBoxItem(
-                            text = stringResource(R.string.analytics),
-                            icon = Icons.Default.PieChart,
+                            text = stringResource(R.string.business_analytics),
+                            icon = Icons.Default.Analytics,
                             onClick = onViewAnalytics,
                             modifier = Modifier.weight(1f),
-                            contentColor = Color(0xFFEF6C00)
+                            contentColor = Color(0xFF7C3AED)
                         )
                         DashboardBoxItem(
-                            text = stringResource(R.string.reports),
-                            icon = Icons.Default.Analytics,
-                            onClick = onViewReports,
+                            text = stringResource(R.string.read_bill),
+                            icon = Icons.Default.DocumentScanner,
+                            onClick = {
+                                if (isPremium) onViewBillScan() else showPremiumLockedDialog = true
+                            },
                             modifier = Modifier.weight(1f),
-                            contentColor = Color(0xFF1565C0)
+                            contentColor = Color(0xFFEF6C00)
                         )
                     }
-
-                    /*Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DashboardBoxItem(
-                            text = stringResource(R.string.bill_scan),
-                            icon = Icons.Default.DocumentScanner,
-                            onClick = onViewBillScan,
-                            modifier = Modifier.weight(1f),
-                            contentColor = Color(0xFFEF6C00)
-                        )
-                        DashboardBoxItem(
-                            text = stringResource(R.string.voice_entry),
-                            icon = Icons.Default.Mic,
-                            onClick = onViewVoiceEntry,
-                            modifier = Modifier.weight(1f),
-                            contentColor = Color(0xFF1565C0)
-                        )
-                    }*/
                 }
 
                 // SECTION 4: QUICK ACCESS
@@ -325,16 +308,12 @@ fun DashboardScreen(
             onDismiss = { showMoreMenu = false },
             onViewAnalytics = onViewAnalytics,
             onViewReports = onViewReports,
-            onViewBillScan = {
-                if (isPremium) onViewBillScan() else showPremiumLockedDialog = true
-            },
-            onViewVoiceEntry = onViewVoiceEntry,
-            onViewSecurity = onViewSecurity,
-            onViewBackup = {
-                if (isPremium) onViewBackup() else showPremiumLockedDialog = true
-            },
-            onViewMarketRates = onViewMarketRates,
-            onViewProducts = onViewProducts
+            onViewBackup = onViewBackup,
+            onViewBillScan = onViewBillScan,
+            onViewCompanyProfile = onViewCompanyProfile,
+            onUpgradeClick = onUpgradeClick,
+            onViewSettings = onViewSettings,
+            showPremiumLockedDialog = { showPremiumLockedDialog = true }
         )
     }
 
@@ -355,12 +334,12 @@ fun MoreFeaturesDialog(
     onDismiss: () -> Unit,
     onViewAnalytics: () -> Unit,
     onViewReports: () -> Unit,
-    onViewBillScan: () -> Unit,
-    onViewVoiceEntry: () -> Unit,
-    onViewSecurity: () -> Unit,
     onViewBackup: () -> Unit,
-    onViewMarketRates: () -> Unit,
-    onViewProducts: () -> Unit
+    onViewBillScan: () -> Unit,
+    onViewCompanyProfile: () -> Unit,
+    onUpgradeClick: () -> Unit,
+    onViewSettings: () -> Unit,
+    showPremiumLockedDialog: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -371,29 +350,55 @@ fun MoreFeaturesDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 MoreMenuItem(
-                    text = stringResource(R.string.bill_scan), 
+                    text = stringResource(R.string.business_analytics),
+                    icon = Icons.Default.Analytics,
+                    onClick = onViewAnalytics,
+                    onDismiss = onDismiss
+                )
+                MoreMenuItem(
+                    text = stringResource(R.string.business_reports),
+                    icon = Icons.Default.Assessment,
+                    onClick = onViewReports,
+                    onDismiss = onDismiss
+                )
+                MoreMenuItem(
+                    text = stringResource(R.string.backup_reports),
+                    icon = Icons.Default.CloudUpload,
+                    onClick = onViewBackup,
+                    onDismiss = onDismiss
+                )
+                MoreMenuItem(
+                    text = stringResource(R.string.read_bill), 
                     icon = Icons.Default.DocumentScanner, 
-                    onClick = onViewBillScan, 
+                    onClick = {
+                        if (isPremium) onViewBillScan() else showPremiumLockedDialog()
+                    }, 
                     onDismiss = onDismiss,
                     isPremiumFeature = true,
                     isPremium = isPremium
                 )
-                MoreMenuItem(stringResource(R.string.voice_entry), Icons.Default.Mic, onViewVoiceEntry, onDismiss)
-                MoreMenuItem(stringResource(R.string.market_rates), Icons.Default.TrendingUp, onViewMarketRates, onDismiss)
-                //MoreMenuItem("Products", Icons.Default.Inventory, onViewProducts, onDismiss)
-                //MoreMenuItem("Security & PIN", Icons.Default.Lock, onViewSecurity, onDismiss)
                 MoreMenuItem(
-                    text = stringResource(R.string.backup_sync),
-                    icon = Icons.Default.CloudSync, 
-                    onClick = onViewBackup, 
-                    onDismiss = onDismiss,
-                    isPremiumFeature = true,
-                    isPremium = isPremium
+                    text = stringResource(R.string.company_profile_branding),
+                    icon = Icons.Default.Business,
+                    onClick = onViewCompanyProfile,
+                    onDismiss = onDismiss
+                )
+                MoreMenuItem(
+                    text = stringResource(R.string.subscription),
+                    icon = Icons.Default.Star,
+                    onClick = onUpgradeClick,
+                    onDismiss = onDismiss
+                )
+                MoreMenuItem(
+                    text = stringResource(R.string.settings),
+                    icon = Icons.Default.Settings,
+                    onClick = onViewSettings,
+                    onDismiss = onDismiss
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }

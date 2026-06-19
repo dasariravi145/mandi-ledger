@@ -14,10 +14,6 @@ import javax.inject.Singleton
 class PremiumStateManager @Inject constructor(
     @ApplicationContext context: Context
 ) {
-    // For development testing only: unlock all premium features in debug builds
-    // Set to false temporarily to verify AdMob integration in debug builds
-    private val isPremiumTestingEnabled = false // was BuildConfig.DEBUG
-
     private val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
     
     private val sharedPreferences = EncryptedSharedPreferences.create(
@@ -37,12 +33,46 @@ class PremiumStateManager @Inject constructor(
             .putLong("expiry_time", expiryTime)
             .putLong("last_verified", System.currentTimeMillis())
             .apply()
-        _isPremium.value = if (isPremiumTestingEnabled) true else isPremium
+        _isPremium.value = getCachedPremiumStatus()
     }
 
     fun getCachedPremiumStatus(): Boolean {
-        if (isPremiumTestingEnabled) return true
-        return sharedPreferences.getBoolean("is_premium", false)
+        if (BuildConfig.DEBUG) {
+            if (sharedPreferences.contains("premium_testing_enabled")) {
+                return sharedPreferences.getBoolean("premium_testing_enabled", false)
+            }
+        }
+        
+        val isPremium = sharedPreferences.getBoolean("is_premium", false)
+        val expiryTime = sharedPreferences.getLong("expiry_time", 0L)
+        
+        if (isPremium && expiryTime > 0 && System.currentTimeMillis() > expiryTime) {
+            // Plan expired
+            return false
+        }
+        
+        return isPremium
+    }
+
+    // --- Developer / Testing Overrides ---
+
+    fun setPremiumTestingOverride(enabled: Boolean?) {
+        if (!BuildConfig.DEBUG) return
+        
+        if (enabled == null) {
+            sharedPreferences.edit().remove("premium_testing_enabled").apply()
+            timber.log.Timber.d("Premium Testing Override Reset")
+        } else {
+            sharedPreferences.edit().putBoolean("premium_testing_enabled", enabled).apply()
+            timber.log.Timber.d("Premium Testing Override Set: $enabled")
+        }
+        _isPremium.value = getCachedPremiumStatus()
+    }
+
+    fun getPremiumTestingOverride(): Boolean? {
+        if (!BuildConfig.DEBUG) return null
+        if (!sharedPreferences.contains("premium_testing_enabled")) return null
+        return sharedPreferences.getBoolean("premium_testing_enabled", false)
     }
 
     fun getExpiryTime(): Long {

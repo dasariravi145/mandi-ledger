@@ -1,6 +1,7 @@
 package com.dasariravi145.agrolynch.ui.screens.ledger
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,16 +16,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Formatter
 import com.dasariravi145.agrolynch.domain.model.*
 import java.text.SimpleDateFormat
 import java.util.*
 
-import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
@@ -42,30 +44,50 @@ fun LedgerDetailScreen(
         .collectAsStateWithLifecycle(initialValue = null)
     
     val filter by viewModel.filter.collectAsStateWithLifecycle()
-    val isPremium by viewModel.isPremium.collectAsStateWithLifecycle()
     val exportStatus by viewModel.exportStatus.collectAsState(initial = "")
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     
     var showPremiumDialog by remember { mutableStateOf(false) }
-
+    var pendingFileForAction by remember { mutableStateOf<File?>(null) }
+    
     LaunchedEffect(exportStatus) {
         if (exportStatus == "PREMIUM_REQUIRED") {
             showPremiumDialog = true
         } else if (exportStatus.startsWith("SUCCESS:")) {
             val filePath = exportStatus.removePrefix("SUCCESS:")
-            val file = File(filePath)
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(shareIntent, "Share Ledger PDF"))
+            pendingFileForAction = File(filePath)
         } else if (exportStatus.startsWith("FAILED:")) {
             snackbarHostState.showSnackbar(exportStatus.removePrefix("FAILED:"))
         }
+    }
+
+    if (pendingFileForAction != null) {
+        AlertDialog(
+            onDismissRequest = { pendingFileForAction = null },
+            title = { Text("Bill Generated") },
+            text = { Text("Would you like to Print or Share this bill?") },
+            confirmButton = {
+                Button(onClick = { 
+                    com.dasariravi145.agrolynch.util.PdfGenerator.printPdf(context, pendingFileForAction!!)
+                    pendingFileForAction = null
+                }) {
+                    Icon(Icons.Default.Print, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Print")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    com.dasariravi145.agrolynch.util.PdfGenerator.sharePdf(context, pendingFileForAction!!)
+                    pendingFileForAction = null
+                }) {
+                    Icon(Icons.Default.Share, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Share")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -84,23 +106,8 @@ fun LedgerDetailScreen(
                     }
                 },
                 actions = {
-                    Box {
-                        IconButton(onClick = { 
-                            if (isPremium) {
-                                summary?.let { viewModel.exportLedger(context, it, partyType) }
-                            } else {
-                                showPremiumDialog = true
-                            }
-                        }) {
-                            Icon(
-                                Icons.Default.PictureAsPdf, 
-                                contentDescription = "Export PDF",
-                                tint = if (isPremium) MaterialTheme.colorScheme.primary else Color(0xFFFFD700)
-                            )
-                            if (!isPremium) {
-                                Text("👑", modifier = Modifier.align(Alignment.TopEnd), fontSize = 10.sp)
-                            }
-                        }
+                    IconButton(onClick = { viewModel.clearFilters() }) {
+                        Icon(Icons.Default.FilterList, contentDescription = "Clear Filters")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -129,7 +136,13 @@ fun LedgerDetailScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(s.entries, key = { it.id }) { entry ->
-                            EnhancedLedgerEntryItem(entry, partyType)
+                            EnhancedLedgerEntryItem(
+                                entry = entry, 
+                                partyType = partyType,
+                                onPrint = { 
+                                    viewModel.exportLedgerEntry(context, entry, partyType)
+                                }
+                            )
                         }
                         item { Spacer(modifier = Modifier.height(80.dp)) }
                     }
@@ -168,7 +181,7 @@ fun LedgerStatsHeader(summary: LedgerSummary) {
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(stringResource(R.string.pending), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                    Text("₹${String.format(Locale.US, "%.2f", summary.balance)}", color = Color(0xFFFFEB3B), fontSize = 24.sp, fontWeight = FontWeight.Black)
+                    Text("₹${Formatter.formatCurrency(summary.balance)}", color = Color(0xFFFFEB3B), fontSize = 24.sp, fontWeight = FontWeight.Black)
                 }
             }
             
@@ -191,7 +204,7 @@ fun LedgerStatsHeader(summary: LedgerSummary) {
 fun SummaryStatItem(label: String, value: Double, color: Color = Color.White) {
     Column {
         Text(label, color = color.copy(alpha = 0.7f), fontSize = 10.sp)
-        Text("₹${String.format(Locale.US, "%.0f", value)}", color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("₹${Formatter.formatCurrency(value)}", color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -217,7 +230,11 @@ fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
 }
 
 @Composable
-fun EnhancedLedgerEntryItem(entry: LedgerEntry, partyType: String) {
+fun EnhancedLedgerEntryItem(
+    entry: LedgerEntry, 
+    partyType: String,
+    onPrint: () -> Unit
+) {
     var expanded by remember { mutableStateOf(false) }
     val dateFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
     
@@ -239,9 +256,15 @@ fun EnhancedLedgerEntryItem(entry: LedgerEntry, partyType: String) {
                     color = Color.Gray
                 )
                 Spacer(modifier = Modifier.weight(1f))
+                
+                IconButton(onClick = onPrint, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Print, contentDescription = "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                }
+                
                 if (entry.details?.billNumber?.isNotEmpty() == true) {
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "#${entry.details.billNumber}",
+                        text = "#${entry.details!!.billNumber}",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Gray
@@ -262,11 +285,33 @@ fun EnhancedLedgerEntryItem(entry: LedgerEntry, partyType: String) {
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Medium
                             )
-                            Text(
-                                text = "${details.quantity} ${details.unit} @ ₹${details.rate}",
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
+                            val hasMultipleGrades = (details.arrivalItems.size > 1)
+                            
+                            if (!hasMultipleGrades) {
+                                val rateToDisplay = if (details.ratePerKg > 0) details.ratePerKg 
+                                                   else if (details.unit == "Ton") details.rate / 1000.0 
+                                                   else details.rate
+                                val rateLabel = if (details.unit == "Ton" || details.unit == "Boxes" || details.ratePerKg > 0) "/ KG" 
+                                               else "/ ${details.unit}"
+                                
+                                val qtyDisplay = Formatter.formatQuantityDisplay(details.quantity, details.unit)
+                                val netWeightDisplay = if (details.unit != "KG") " (${Formatter.formatNetWeight(details.totalNetWeightKg)})" else ""
+
+                                Text(
+                                    text = "$qtyDisplay$netWeightDisplay @ ₹${Formatter.formatWeight(rateToDisplay)} $rateLabel",
+                                    fontSize = 13.sp,
+                                    color = Color.Gray
+                                )
+                                timber.log.Timber.d("ACCOUNT_BOOK_QTY_DISPLAY: $qtyDisplay$netWeightDisplay")
+                            } else {
+                                Text(
+                                    text = "${Formatter.formatWeight(details.totalNetWeightKg)} KG | ${details.arrivalItems.size} Grades",
+                                    fontSize = 13.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                            
+                            timber.log.Timber.d("LEDGER_DISPLAY_UNIT: ledgerEntryId=${entry.id} displayedQuantity=${details.quantity} displayedUnit=${details.unit}")
                         }
                     }
                 }
@@ -277,13 +322,13 @@ fun EnhancedLedgerEntryItem(entry: LedgerEntry, partyType: String) {
                         LedgerType.CREDIT -> Color(0xFF2E7D32) // Green
                     }
                     Text(
-                        text = "${if (entry.type == LedgerType.DEBIT) "+" else "-"} ₹${String.format(Locale.US, "%.2f", entry.amount)}",
+                        text = "${if (entry.type == LedgerType.DEBIT) "+" else "-"} ₹${Formatter.formatCurrency(entry.amount)}",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = color
                     )
                     Text(
-                        text = "Bal: ₹${String.format(Locale.US, "%.0f", entry.balance)}",
+                        text = "Bal: ₹${Formatter.formatCurrency(entry.balance)}",
                         fontSize = 11.sp,
                         color = Color.Gray
                     )
@@ -300,16 +345,84 @@ fun EnhancedLedgerEntryItem(entry: LedgerEntry, partyType: String) {
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     entry.details?.let { details ->
-                        if (details.productName.isNotEmpty()) {
+                        if (details.arrivalItems.size > 1) {
+                            Text("Grade Breakdown:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                            Spacer(Modifier.height(4.dp))
+                            Row(Modifier.fillMaxWidth().background(Color(0xFFF1F8E9)).padding(8.dp)) {
+                                Text("Grade", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Net KG", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                Text("Rate/KG", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                Text("Amount", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                            }
+                            details.arrivalItems.forEach { item ->
+                                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                    Text(item.grade, Modifier.weight(1f), fontSize = 11.sp)
+                                    Text(Formatter.formatWeight(item.finalNetWeightKg), Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                                    Text("₹${Formatter.formatWeight(item.ratePerKg)}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                                    Text("₹${Formatter.formatCurrency(item.grossAmount)}", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                }
+                            }
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                                Text("Total", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(Formatter.formatWeight(details.totalNetWeightKg), Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                Text("-", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                                Text("₹${Formatter.formatCurrency(details.grossAmount)}", Modifier.weight(1.2f), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.End)
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        } else if (details.productName.isNotEmpty()) {
                             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
                                 Text(stringResource(R.string.category_grade), fontSize = 13.sp, color = Color.Gray)
                                 Text("${details.category} / ${details.grade}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
                                 Text(stringResource(R.string.quantity_unit), fontSize = 13.sp, color = Color.Gray)
-                                Text("${details.quantity} ${details.unit}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Text(Formatter.formatQuantityDisplay(details.quantity, details.unit), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
-                            DetailRow(stringResource(R.string.rate), details.rate)
+                            if (details.unit != "KG") {
+                                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+                                    Text("Net Weight", fontSize = 13.sp, color = Color.Gray)
+                                    val netW = if (details.totalNetWeightKg > 0.0) details.totalNetWeightKg 
+                                               else if (details.unit == "Ton") details.quantity * 1000.0 
+                                               else details.quantity
+                                    Text(Formatter.formatNetWeight(netW), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            
+                            val rateToDisplay = if (details.ratePerKg > 0) details.ratePerKg 
+                                               else if (details.unit == "Ton") details.rate / 1000.0 
+                                               else details.rate
+                            val rateLabel = if (details.unit == "Ton" || details.unit == "Boxes" || details.ratePerKg > 0) "/ KG" 
+                                           else "/ ${details.unit}"
+                            
+                            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+                                Text(stringResource(R.string.rate), fontSize = 13.sp, color = Color.Gray)
+                                Text("${Formatter.formatAmount(rateToDisplay)} $rateLabel", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            if (details.unit == "Boxes") {
+                                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+                                    Text("Total Gross KG", fontSize = 13.sp, color = Color.Gray)
+                                    Text("${Formatter.formatWeight(details.totalGrossKg)} KG", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+                                    Text("Empty Box Weight/Box", fontSize = 13.sp, color = Color.Gray)
+                                    Text("${Formatter.formatWeight(details.emptyBoxWeightPerBox)} KG", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+                                    Text("Total Empty Box Weight", fontSize = 13.sp, color = Color.Gray)
+                                    Text("${Formatter.formatWeight(details.lessWeightKg)} KG", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                                val weightAfterEmpty = (details.totalGrossKg - details.lessWeightKg).coerceAtLeast(0.0)
+                                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+                                    Text("Weight After Empty Boxes", fontSize = 13.sp, color = Color.Gray)
+                                    Text("${Formatter.formatWeight(weightAfterEmpty)} KG", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+                                    Text("Spoilage (${Formatter.formatWeight(details.spoilagePercentage)}%)", fontSize = 13.sp, color = Color.Gray)
+                                    Text("${Formatter.formatWeight(details.spoilageKg)} KG", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                             Spacer(Modifier.height(4.dp))
                         }
 
@@ -318,12 +431,25 @@ fun EnhancedLedgerEntryItem(entry: LedgerEntry, partyType: String) {
                             DetailRow("${stringResource(R.string.commission)} (${details.commissionPercent}%)", -details.commissionAmount, Color.Red)
                             if (details.laborCharges > 0) DetailRow(stringResource(R.string.labor_charges), -details.laborCharges, Color.Red)
                             if (details.transportCharges > 0) DetailRow(stringResource(R.string.transport), -details.transportCharges, Color.Red)
+                            if (details.packingCharges > 0) DetailRow(stringResource(R.string.packing), -details.packingCharges, Color.Red)
+                            
+                            details.deductions.forEach { d ->
+                                val label = if (d.deductionType == "Other") d.customName else d.deductionType
+                                DetailRow(label, -d.amount, Color.Red)
+                            }
+                            
                             DetailRow(stringResource(R.string.net_payable), details.netAmount, fontWeight = FontWeight.ExtraBold)
                         } else if (entry.transactionType == TransactionType.SALE) {
                             DetailRow(stringResource(R.string.gross_amount), details.grossAmount)
                             if (details.commissionAmount > 0) DetailRow(stringResource(R.string.commission_margin), details.commissionAmount, Color(0xFF2E7D32))
                             if (details.laborCharges > 0) DetailRow(stringResource(R.string.labor_charges), details.laborCharges)
                             if (details.transportCharges > 0) DetailRow(stringResource(R.string.transport), details.transportCharges)
+                            
+                            details.deductions.forEach { d ->
+                                val label = if (d.deductionType == "Other") d.customName else d.deductionType
+                                DetailRow(label, d.amount)
+                            }
+
                             DetailRow(stringResource(R.string.total_collection), details.netAmount, fontWeight = FontWeight.ExtraBold)
                         } else {
                             if (details.paymentMade > 0) DetailRow(stringResource(R.string.payment_amount), details.paymentMade, Color(0xFF2E7D32))
@@ -358,7 +484,7 @@ fun DetailRow(label: String, value: Double, color: Color = Color.Black, fontWeig
     ) {
         Text(text = label, fontSize = 13.sp, color = Color.Gray)
         Text(
-            text = "₹${String.format(Locale.US, "%.2f", value)}",
+            text = "₹${Formatter.formatCurrency(value)}",
             fontSize = 13.sp,
             color = color,
             fontWeight = fontWeight

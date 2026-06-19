@@ -12,7 +12,6 @@ import com.dasariravi145.agrolynch.data.local.entity.PaymentEntity
 import com.dasariravi145.agrolynch.data.local.entity.SaleEntity
 import com.dasariravi145.agrolynch.data.local.entity.SaleItemEntity
 import com.dasariravi145.agrolynch.domain.repository.SaleRepository
-import com.dasariravi145.agrolynch.util.PdfGenerator
 import com.dasariravi145.agrolynch.util.Resource
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -29,6 +28,7 @@ class SaleRepositoryImpl @Inject constructor(
     private val database: AgroLynchDatabase,
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth,
+    private val exportService: com.dasariravi145.agrolynch.util.LedgerExportService,
     @ApplicationContext private val context: Context
 ) : SaleRepository {
 
@@ -57,7 +57,13 @@ class SaleRepositoryImpl @Inject constructor(
                     saleDao.insertSaleItems(items)
 
                     for (item in items) {
-                        arrivalDao.reduceStock(item.arrivalId, item.quantitySold)
+                        val arrival = arrivalDao.getArrivalById(item.arrivalId) ?: throw Exception("Stock item not found")
+                        val reductionAmount = if (arrival.unit == "Ton" || arrival.unit == "Boxes") {
+                            item.quantitySold / 1000.0 // Convert KG sold to Tons for database reduction
+                        } else {
+                            item.quantitySold
+                        }
+                        arrivalDao.reduceStock(item.arrivalId, reductionAmount)
                     }
 
                     val totalNetReceivable = sale.totalNetAmount
@@ -81,7 +87,15 @@ class SaleRepositoryImpl @Inject constructor(
                     
                     // Generate Invoice PDF with Branding in background
                     try {
-                        PdfGenerator.generateBuyerSalePdf(context, profile, sale, items)
+                        val buyer = buyerDao.getBuyerById(sale.buyerId)
+                        exportService.exportSaleToPdf(
+                            context = context,
+                            profile = profile,
+                            sale = sale,
+                            items = items,
+                            deductions = emptyList(),
+                            buyerMobile = buyer?.mobileNumber ?: ""
+                        )
                     } catch (e: Exception) {
                         timber.log.Timber.e(e, "Error generating Sale PDF in background")
                     }
@@ -90,10 +104,32 @@ class SaleRepositoryImpl @Inject constructor(
                     userId?.let { uid ->
                         try {
                             val batch = firestore.batch()
-                            batch.set(firestore.collection("users").document(uid).collection("sales").document(sale.id), sale)
-                            batch.set(firestore.collection("users").document(uid).collection("buyers").document(updatedBuyer.id), updatedBuyer)
+                            
+                            // Convert sale to map and add ownerUserId
+                            val saleMap = sale.javaClass.declaredFields.associate { field ->
+                                field.isAccessible = true
+                                field.name to field.get(sale)
+                            }.toMutableMap()
+                            saleMap["ownerUserId"] = uid
+                            
+                            batch.set(firestore.collection("users").document(uid).collection("sales").document(sale.id), saleMap)
+                            
+                            // Convert updatedBuyer to map and add ownerUserId
+                            val buyerMap = updatedBuyer.javaClass.declaredFields.associate { field ->
+                                field.isAccessible = true
+                                field.name to field.get(updatedBuyer)
+                            }.toMutableMap()
+                            buyerMap["ownerUserId"] = uid
+
+                            batch.set(firestore.collection("users").document(uid).collection("buyers").document(updatedBuyer.id), buyerMap)
+                            
                             for (item in items) {
-                                batch.set(firestore.collection("users").document(uid).collection("sales").document(sale.id).collection("items").document(item.id), item)
+                                val itemMap = item.javaClass.declaredFields.associate { field ->
+                                    field.isAccessible = true
+                                    field.name to field.get(item)
+                                }.toMutableMap()
+                                itemMap["ownerUserId"] = uid
+                                batch.set(firestore.collection("users").document(uid).collection("sales").document(sale.id).collection("items").document(item.id), itemMap)
                             }
                             batch.commit().await()
                             saleDao.markAsSynced(sale.id)

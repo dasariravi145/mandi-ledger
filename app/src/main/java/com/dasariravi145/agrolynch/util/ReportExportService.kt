@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Environment
 import com.dasariravi145.agrolynch.data.local.dao.*
 import com.dasariravi145.agrolynch.data.local.entity.*
+import com.dasariravi145.agrolynch.util.Formatter
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
@@ -82,16 +83,20 @@ class ReportExportService @Inject constructor() {
     private fun getHeaders(item: Any): List<String> = when (item) {
         is DetailedSaleReportModel -> listOf("Date", "Buyer", "Product", "Grade", "Qty", "Rate", "Gross", "Labor", "Trans", "Total")
         is DetailedArrivalReportModel -> listOf("Date", "Farmer", "Product", "Grade", "Qty", "Rate", "Gross", "Comm", "Net")
-        is CommissionReportModel -> listOf("Date", "Buyer", "Farmer", "Product", "Grade", "Qty", "SaleAmt", "CommAmt", "Margin")
+        is CommissionReportModel -> listOf("Date", "Farmer", "Product", "Category", "Grade", "Qty", "NetQty", "Rate", "GrossAmt", "CommAmt")
         is PaymentReportModel -> listOf("Date", "Party", "Type", "Mode", "Amount", "Balance", "Status")
         else -> listOf("Data")
     }
 
     private fun getRowDataForCsv(item: Any): List<String> = when (item) {
-        is DetailedSaleReportModel -> listOf(formatDate(item.date), item.buyerName, item.productName, item.grade, "${item.quantity}${item.unit}", item.rate.toString(), item.saleAmount.toString(), item.laborCharges.toString(), item.transportCharges.toString(), item.totalAmount.toString())
-        is DetailedArrivalReportModel -> listOf(formatDate(item.date), item.farmerName, item.productName, item.grade, "${item.quantity}${item.unit}", item.rate.toString(), item.grossAmount.toString(), item.commissionAmount.toString(), item.netAmount.toString())
-        is CommissionReportModel -> listOf(formatDate(item.date), item.buyerName, item.farmerName, item.productName, item.grade, item.quantity.toString(), item.saleAmount.toString(), item.commissionAmount.toString(), item.marginAmount.toString())
-        is PaymentReportModel -> listOf(formatDate(item.date), item.partyName, item.partyType, item.paymentMode, item.amount.toString(), item.remainingBalance.toString(), item.status)
+        is DetailedSaleReportModel -> {
+            val qtyDisplay = if (item.unit == "KG") Formatter.formatWeight(item.quantity)
+                             else "${Formatter.formatWeight(item.inputQuantity)} (${Formatter.formatWeight(item.quantity)} KG)"
+            listOf(formatDate(item.date), item.buyerName, item.productName, item.grade, qtyDisplay, Formatter.formatCurrency(item.rate), Formatter.formatCurrency(item.saleAmount), Formatter.formatCurrency(item.laborCharges), Formatter.formatCurrency(item.transportCharges), Formatter.formatCurrency(item.totalAmount))
+        }
+        is DetailedArrivalReportModel -> listOf(formatDate(item.date), item.farmerName, item.productName, item.grade, "${Formatter.formatWeight(item.quantity)}${item.unit}", Formatter.formatCurrency(item.rate), Formatter.formatCurrency(item.grossAmount), Formatter.formatCurrency(item.commissionAmount), Formatter.formatCurrency(item.netAmount))
+        is CommissionReportModel -> listOf(formatDate(item.date), item.farmerName, item.productName, item.category, item.grade, Formatter.formatWeight(item.quantity), Formatter.formatWeight(item.netQuantity), Formatter.formatCurrency(item.rate), Formatter.formatCurrency(item.grossAmount), Formatter.formatCurrency(item.commissionAmount))
+        is PaymentReportModel -> listOf(formatDate(item.date), item.partyName, item.partyType, item.paymentMode, Formatter.formatCurrency(item.amount), Formatter.formatCurrency(item.remainingBalance), item.status)
         else -> listOf(item.toString().replace(",", " "))
     }
 

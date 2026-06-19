@@ -42,5 +42,11 @@ class ReportRepositoryImpl @Inject constructor(
 
     override fun getFarmerPendingTotal(): Flow<Double?> = reportDao.getFarmerPendingTotal()
 
+    override fun getArrivalCount(): Flow<Int> = reportDao.getArrivalCount()
+
+    override fun getSaleCount(): Flow<Int> = reportDao.getSaleCount()
+
+    override fun getPaymentCount(): Flow<Int> = reportDao.getPaymentCount()
+
     override suspend fun recalculateCommissions() = reportDao.recalculateCommissions()
 }

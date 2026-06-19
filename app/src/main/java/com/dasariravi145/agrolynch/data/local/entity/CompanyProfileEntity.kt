@@ -26,5 +26,14 @@ data class CompanyProfileEntity(
     val nextInvoiceNumber: Int = 1,
     val nextReceiptNumber: Int = 1,
     val billLanguage: String = "English + Telugu",
+    val tagline: String = "",
+    val upiId: String = "",
+    val upiQrPath: String? = null,
+    val fruitImagePath: String? = null,
+    val marketName: String = "",
+    val city: String = "",
+    val pincode: String = "",
+    val customTemplatePath: String? = null,
+    val defaultTemplate: String = "GK_FRUITS_CLASSIC",
     val lastUpdated: Long = System.currentTimeMillis()
 )

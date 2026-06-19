@@ -7,6 +7,8 @@ import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun PremiumFeatureLockedDialog(
+    title: String = "Premium Feature Locked",
+    message: String = "This feature requires a Premium Subscription. Upgrade now to unlock OCR scanning, Cloud backup, and more!",
     onDismiss: () -> Unit,
     onUpgradeClick: () -> Unit
 ) {
@@ -14,12 +16,12 @@ fun PremiumFeatureLockedDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Premium Feature Locked",
+                text = title,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
-            Text("This feature requires a Premium Subscription. Upgrade now to unlock OCR scanning, Cloud backup, and more!")
+            Text(message)
         },
         confirmButton = {
             Button(

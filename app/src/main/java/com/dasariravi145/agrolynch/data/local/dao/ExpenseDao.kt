@@ -9,6 +9,9 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE isDeleted = 0 ORDER BY date DESC")
     fun getAllExpenses(): Flow<List<ExpenseEntity>>
 
+    @Query("SELECT * FROM expenses")
+    suspend fun getAllExpensesList(): List<ExpenseEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertExpense(expense: ExpenseEntity)
 

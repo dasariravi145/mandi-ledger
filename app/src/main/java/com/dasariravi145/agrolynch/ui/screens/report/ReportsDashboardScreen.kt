@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Formatter
 import com.dasariravi145.agrolynch.domain.model.ChartPoint
 import com.dasariravi145.agrolynch.ui.components.BarChart
 import com.dasariravi145.agrolynch.ui.components.LineChart
@@ -49,7 +50,7 @@ fun ReportsDashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.business_reports), fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.reports), fontSize = 18.sp, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -78,8 +79,8 @@ fun ReportsDashboardScreen(
             ) {
                 SummaryMetricCard(stringResource(R.string.total_sales), summary["Total Sales"] ?: 0.0, Color(0xFF1B5E20))
                 SummaryMetricCard(stringResource(R.string.commission), summary["Total Commission"] ?: 0.0, Color(0xFF0D47A1))
-                SummaryMetricCard(stringResource(R.string.buyer_due), summary["Buyer Pending"] ?: 0.0, Color(0xFFE65100))
-                SummaryMetricCard(stringResource(R.string.farmer_due), summary["Farmer Pending"] ?: 0.0, Color(0xFFC62828))
+                SummaryMetricCard(stringResource(R.string.buyer_balance), summary["Buyer Pending"] ?: 0.0, Color(0xFFE65100))
+                SummaryMetricCard(stringResource(R.string.farmer_balance), summary["Farmer Pending"] ?: 0.0, Color(0xFFC62828))
             }
 
             // 2. VISUAL REPORTING (Charts)
@@ -162,7 +163,7 @@ fun SummaryMetricCard(label: String, value: Double, color: Color) {
         ) {
             Text(label, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
             Text(
-                "₹${String.format("%.0f", value)}",
+                "₹${Formatter.formatCurrency(value)}",
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Black

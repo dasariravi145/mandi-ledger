@@ -12,6 +12,12 @@ interface MarketRateDao {
     @Query("SELECT * FROM market_rates WHERE productId = :productId ORDER BY date DESC")
     fun getHistoricalRates(productId: String): Flow<List<MarketRateEntity>>
 
+    @Query("SELECT * FROM market_rates")
+    suspend fun getMarketRatesList(): List<MarketRateEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMarketRate(rate: MarketRateEntity)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRate(rate: MarketRateEntity)
 

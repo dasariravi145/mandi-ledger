@@ -10,6 +10,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
 import timber.log.Timber
 import java.io.ByteArrayOutputStream
@@ -41,7 +42,7 @@ class OcrRepositoryImpl @Inject constructor(
             val uid = auth.currentUser?.uid
             if (uid != null && bitmap != null) {
                 val fileName = "${scan.scanId}.jpg"
-                val storagePath = "bill_images/$uid/$fileName"
+                val storagePath = "ocr_images/$uid/$fileName"
                 val storageRef = storage.reference.child(storagePath)
                 
                 Timber.d("Uploading OCR image to Cloud: Path=$storagePath, User=$uid")
@@ -85,7 +86,7 @@ class OcrRepositoryImpl @Inject constructor(
                             scanType = scan.transactionType,
                             createdAt = scan.createdAt
                         )
-                        firestore.collection("ocr_scans").document(scan.scanId).set(firestoreScan).await()
+                        firestore.collection("users").document(uid).collection("ocr_scans").document(scan.scanId).set(firestoreScan).await()
                     } else {
                         Timber.e(lastError, "Download URL generation failed after retries")
                         if (lastError?.message?.contains("Object does not exist", ignoreCase = true) == true) {
@@ -110,8 +111,21 @@ class OcrRepositoryImpl @Inject constructor(
     override suspend fun syncScans(): Resource<Unit> {
         val uid = auth.currentUser?.uid ?: return Resource.Error("User not logged in")
         return try {
-            // Basic implementation to push local scans to firestore
-            // In a real app, you'd track 'isSynced'
+            val unsynced = ocrScanDao.getAllScans().first() // In a real app, use getUnsynced
+            for (scan in unsynced) {
+                val firestoreScan = FirestoreOcrScan(
+                    scanId = scan.scanId,
+                    ownerUserId = uid,
+                    billNumber = scan.billNumber,
+                    billDate = scan.billDate,
+                    amount = scan.amount,
+                    ocrText = scan.ocrText,
+                    imageUrl = scan.imageUrl,
+                    scanType = scan.transactionType,
+                    createdAt = scan.createdAt
+                )
+                firestore.collection("users").document(uid).collection("ocr_scans").document(scan.scanId).set(firestoreScan).await()
+            }
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error(e.message ?: "Sync failed")

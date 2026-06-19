@@ -22,6 +22,7 @@ data class PaymentEntity(
     val referenceNumber: String = "",
     val remainingBalance: Double = 0.0,
     val advanceAmount: Double = 0.0,
+    val billNumber: String = "",
     val notes: String = "",
     val date: Long = System.currentTimeMillis(),
     val lastUpdated: Long = System.currentTimeMillis(),

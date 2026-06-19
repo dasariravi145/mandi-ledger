@@ -29,8 +29,16 @@ fun SplashScreen(
     LaunchedEffect(key1 = true) {
         delay(800)
         val isLoggedIn = viewModel.isUserLoggedIn()
+        val uid = viewModel.getCurrentUserId()
+        val isProfileCreated = viewModel.isProfileCreated()
+        val isPinCreated = viewModel.isPinCreated()
         val hasPin = viewModel.hasSavedPin()
-        onNavigate(isLoggedIn, isLanguageSelected, hasPin)
+
+        timber.log.Timber.d("APP_START_AUTH_UID: $uid")
+        timber.log.Timber.d("APP_START_PROFILE_CREATED: $isProfileCreated")
+        timber.log.Timber.d("APP_START_PIN_CREATED: $isPinCreated")
+
+        onNavigate(isLoggedIn, isLanguageSelected, isProfileCreated && isPinCreated)
     }
 
     Box(

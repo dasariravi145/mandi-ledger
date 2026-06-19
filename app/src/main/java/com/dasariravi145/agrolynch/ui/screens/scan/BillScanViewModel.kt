@@ -31,7 +31,7 @@ data class BillScanUiState(
     val isLoading: Boolean = false,
     val extractedData: ExtractedData = ExtractedData(),
     val currentImageBitmap: Bitmap? = null,
-    val target: ScanTarget? = null,
+    val target: ScanTarget? = ScanTarget.STOCK_ENTRY,
     val error: String? = null,
     val isSuccess: Boolean = false,
     val ocrFinished: Boolean = false
@@ -127,6 +127,16 @@ class BillScanViewModel @Inject constructor(
                 billDate = updatedData.date,
                 ocrText = updatedData.ocrText,
                 transactionType = _state.value.target?.name ?: "",
+                farmerName = updatedData.farmerName,
+                productName = updatedData.productName,
+                productGrade = updatedData.grade,
+                unit = updatedData.unit,
+                numberOfBoxes = updatedData.numberOfBoxes,
+                totalWeightTon = updatedData.totalWeightTon,
+                emptyBoxWeightPerBox = updatedData.emptyBoxWeightPerBox,
+                totalEmptyBoxWeightKg = updatedData.totalEmptyBoxWeightKg,
+                spoilagePercentage = updatedData.spoilagePercentage,
+                rate = updatedData.rate,
                 createdAt = System.currentTimeMillis()
             )
             

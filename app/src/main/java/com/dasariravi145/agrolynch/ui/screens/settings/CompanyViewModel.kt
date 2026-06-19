@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import com.dasariravi145.agrolynch.domain.repository.CompanyRepository
+import com.dasariravi145.agrolynch.util.PremiumStateManager
 import com.dasariravi145.agrolynch.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -16,12 +17,16 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CompanyViewModel @Inject constructor(
-    private val repository: CompanyRepository
+    private val repository: CompanyRepository,
+    private val premiumStateManager: PremiumStateManager
 ) : ViewModel() {
 
     private val _profile = repository.getProfile()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val profile = _profile
+
+    val isPremium = premiumStateManager.isPremium
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val _message = MutableSharedFlow<String>()
     val message = _message.asSharedFlow()
@@ -29,7 +34,7 @@ class CompanyViewModel @Inject constructor(
     fun updateProfile(updated: CompanyProfileEntity) {
         viewModelScope.launch {
             when (val result = repository.updateProfile(updated)) {
-                is Resource.Success -> _message.emit("Profile updated successfully! / ప్రొఫైల్ అప్‌డేట్ చేయబడింది!")
+                is Resource.Success -> _message.emit("profile_updated_success")
                 is Resource.Error -> _message.emit("Update failed: ${result.message}")
                 else -> {}
             }
@@ -50,6 +55,9 @@ class CompanyViewModel @Inject constructor(
                     "signature" -> current.copy(signaturePath = file.absolutePath)
                     "stamp" -> current.copy(stampPath = file.absolutePath)
                     "god" -> current.copy(godImagePath = file.absolutePath)
+                    "upi_qr" -> current.copy(upiQrPath = file.absolutePath)
+                    "fruit" -> current.copy(fruitImagePath = file.absolutePath)
+                    "custom_template" -> current.copy(customTemplatePath = file.absolutePath)
                     else -> current
                 }
                 repository.updateProfile(updated)

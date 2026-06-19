@@ -4,6 +4,7 @@ import com.dasariravi145.agrolynch.data.local.dao.*
 import com.dasariravi145.agrolynch.data.local.entity.*
 import com.dasariravi145.agrolynch.domain.model.*
 import com.dasariravi145.agrolynch.domain.repository.LedgerRepository
+import com.dasariravi145.agrolynch.domain.repository.BillNumberRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -17,6 +18,7 @@ class LedgerRepositoryImpl @Inject constructor(
     private val farmerDao: FarmerDao,
     private val buyerDao: BuyerDao,
     private val productDao: ProductDao,
+    private val billNumberRepository: BillNumberRepository
 ) : LedgerRepository {
 
     override fun getFarmerLedger(farmerId: String): Flow<LedgerSummary> {
@@ -25,85 +27,100 @@ class LedgerRepositoryImpl @Inject constructor(
             paymentDao.getAllPayments().distinctUntilChanged(),
             farmerDao.getAllFarmers().distinctUntilChanged()
         ) { arrivals, payments, farmers ->
-            val farmer = farmers.find { it.id == farmerId } ?: return@combine LedgerSummary("", "Unknown", 0.0, 0.0, 0.0)
-            calculateFarmerSummary(farmer, arrivals, payments)
-        }.flowOn(Dispatchers.Default)
-    }
+            val farmer = farmers.find { it.id == farmerId } ?: return@combine null
+            farmer to (arrivals.filter { it.farmerId == farmerId && !it.isDeleted } to 
+                      payments.filter { it.partyId == farmerId && it.partyType == "FARMER" && !it.isDeleted })
+        }.map { data ->
+            if (data == null) return@map LedgerSummary("", "Unknown", 0.0, 0.0, 0.0)
+            val (farmer, pair) = data
+            val (arrivals, payments) = pair
+            
+            val arrivalsByBill = arrivals.groupBy { it.billNumber }
+            
+            val entries = (arrivalsByBill.map { (billNo, billArrivals) ->
+                val firstArrival = billArrivals.first()
+                val totalGross = billArrivals.sumOf { it.grossAmount }
+                val totalNetPayable = billArrivals.sumOf { it.netAmount }
+                val totalCommission = billArrivals.sumOf { it.commissionAmount }
+                val totalLabor = billArrivals.sumOf { it.laborCharges }
+                val totalTransport = billArrivals.sumOf { it.transportCharges }
+                val totalPacking = billArrivals.sumOf { it.packingCharges }
+                val totalOtherDeductions = billArrivals.sumOf { it.otherDeductions }
+                
+                val allDeductions = billArrivals.flatMap { billNumberRepository.getDeductionsByEntryIdSync(it.id) }.distinctBy { it.id }
 
-    private fun calculateFarmerSummary(
-        farmer: FarmerEntity,
-        allArrivals: List<ArrivalEntity>,
-        allPayments: List<PaymentEntity>
-    ): LedgerSummary {
-        val farmerArrivals = allArrivals.filter { it.farmerId == farmer.id && !it.isDeleted }
-        val farmerPayments = allPayments.filter { it.partyId == farmer.id && it.partyType == "FARMER" && !it.isDeleted }
+                val details = LedgerEntryDetails(
+                    billNumber = billNo.ifBlank { firstArrival.id.takeLast(6).uppercase() },
+                    productName = firstArrival.productName,
+                    category = firstArrival.productCategory,
+                    grade = if (billArrivals.size > 1) "Multiple" else firstArrival.grade,
+                    quantity = billArrivals.sumOf { it.quantity },
+                    damageQuantity = billArrivals.sumOf { it.spoilageQuantity },
+                    netQuantity = billArrivals.sumOf { it.netQuantity },
+                    unit = firstArrival.unit,
+                    rate = if (billArrivals.size == 1) firstArrival.purchaseRate else 0.0,
+                    purchaseRate = if (billArrivals.size == 1) firstArrival.purchaseRate else 0.0,
+                    ratePerKg = if (billArrivals.size == 1) firstArrival.ratePerKg else 0.0,
+                    grossAmount = totalGross,
+                    commissionPercent = firstArrival.commissionPercent,
+                    commissionAmount = totalCommission,
+                    netAmount = totalNetPayable,
+                    totalNetWeightKg = billArrivals.sumOf { it.finalNetWeightKg },
+                    totalWeightTon = billArrivals.sumOf { it.totalWeightTon },
+                    emptyBoxWeightPerBox = firstArrival.emptyBoxWeightPerBox,
+                    totalGrossKg = billArrivals.sumOf { it.grossWeightKg },
+                    lessWeightKg = billArrivals.sumOf { it.totalEmptyBoxWeightKg },
+                    spoilagePercentage = firstArrival.spoilagePercentage,
+                    spoilageKg = billArrivals.sumOf { it.spoilageKg },
+                    laborCharges = totalLabor,
+                    transportCharges = totalTransport,
+                    packingCharges = totalPacking,
+                    otherDeductions = totalOtherDeductions,
+                    deductions = allDeductions,
+                    arrivalItems = billArrivals
+                )
+                LedgerEntry(
+                    id = firstArrival.id,
+                    title = "Stock Arrival: ${if(billArrivals.distinctBy { it.productId }.size > 1) "Multiple Products" else firstArrival.productName}",
+                    amount = totalNetPayable,
+                    type = LedgerType.DEBIT,
+                    transactionType = TransactionType.ARRIVAL,
+                    date = firstArrival.date,
+                    status = if (totalNetPayable == 0.0) LedgerStatus.PAID else LedgerStatus.PENDING,
+                    details = details
+                )
+            } + payments.map { payment ->
+                LedgerEntry(
+                    id = payment.id,
+                    title = "Payment: ${payment.paymentMode}",
+                    amount = payment.amount,
+                    type = LedgerType.CREDIT,
+                    transactionType = TransactionType.PAYMENT,
+                    date = payment.date,
+                    status = LedgerStatus.PAID,
+                    reference = payment.referenceNumber,
+                    details = LedgerEntryDetails(paymentMade = payment.amount, billNumber = payment.billNumber)
+                )
+            }).sortedBy { it.date }
 
-        val entries = (farmerArrivals.map { arrival ->
-            val details = LedgerEntryDetails(
-                billNumber = arrival.id.takeLast(6).uppercase(),
-                productName = arrival.productName,
-                category = arrival.productCategory,
-                grade = arrival.grade,
-                quantity = arrival.quantity,
-                damageQuantity = arrival.spoilageQuantity,
-                netQuantity = arrival.netQuantity,
-                unit = arrival.unit,
-                rate = arrival.purchaseRate, // Rate for farmer is purchase rate
-                purchaseRate = arrival.purchaseRate,
-                grossAmount = arrival.grossAmount,
-                commissionPercent = arrival.commissionPercent,
-                commissionAmount = arrival.commissionAmount,
-                netAmount = arrival.netAmount,
-                laborCharges = arrival.laborCharges,
-                transportCharges = arrival.transportCharges,
-                packingCharges = arrival.packingCharges,
-                otherDeductions = arrival.otherDeductions
-            )
-            LedgerEntry(
-                id = arrival.id,
-                title = "Stock Arrival: ${arrival.productName}",
-                amount = arrival.netAmount,
-                type = LedgerType.DEBIT,
-                transactionType = TransactionType.ARRIVAL,
-                date = arrival.date,
-                status = if (arrival.netAmount == 0.0) LedgerStatus.PAID else LedgerStatus.PENDING,
-                details = details
-            )
-        }
-+ farmerPayments.map { payment ->
-            val details = LedgerEntryDetails(
-                paymentMade = payment.amount
-            )
-            LedgerEntry(
-                id = payment.id,
-                title = "Payment: ${payment.paymentMode}",
-                amount = payment.amount,
-                type = LedgerType.CREDIT,
-                transactionType = TransactionType.PAYMENT,
-                date = payment.date,
-                status = LedgerStatus.PAID,
-                reference = payment.referenceNumber,
-                details = details
-            )
-        }).sortedBy { it.date }
+            var currentBalance = 0.0
+            val entriesWithBalance = entries.map {
+                currentBalance += if (it.type == LedgerType.DEBIT) it.amount else -it.amount
+                it.copy(balance = currentBalance)
+            }
 
-        var currentBalance = 0.0
-        val entriesWithBalance = entries.map {
-            currentBalance += if (it.type == LedgerType.DEBIT) it.amount else -it.amount
-            it.copy(balance = currentBalance)
-        }
-
-        return LedgerSummary(
-            partyId = farmer.id,
-            partyName = farmer.name,
-            totalDebit = farmerArrivals.sumOf { it.netAmount },
-            totalCredit = farmerPayments.sumOf { it.amount },
-            balance = farmer.pendingAmount,
-            advanceAmount = farmer.advanceAmount,
-            totalTransactions = entries.size,
-            lastTransactionDate = entries.lastOrNull()?.date ?: 0L,
-            entries = entriesWithBalance.reversed()
-        )
+            LedgerSummary(
+                partyId = farmer.id,
+                partyName = farmer.name,
+                totalDebit = arrivals.sumOf { it.netAmount },
+                totalCredit = payments.sumOf { it.amount },
+                balance = farmer.pendingAmount,
+                advanceAmount = farmer.advanceAmount,
+                totalTransactions = entries.size,
+                lastTransactionDate = entries.lastOrNull()?.date ?: 0L,
+                entries = entriesWithBalance.reversed()
+            )
+        }.flowOn(Dispatchers.IO)
     }
 
     override fun getBuyerLedger(buyerId: String): Flow<LedgerSummary> {
@@ -111,117 +128,97 @@ class LedgerRepositoryImpl @Inject constructor(
             saleDao.getAllSales().distinctUntilChanged(),
             saleDao.getAllSaleItems().distinctUntilChanged(),
             paymentDao.getAllPayments().distinctUntilChanged(),
-            buyerDao.getAllBuyers().distinctUntilChanged(),
-            productDao.getAllProducts().distinctUntilChanged()
-        ) { sales, saleItems, payments, buyers, products ->
-            val buyer = buyers.find { it.id == buyerId } ?: return@combine LedgerSummary("", "Unknown", 0.0, 0.0, 0.0)
-            calculateBuyerSummary(buyer, sales, saleItems, payments, products)
-        }.flowOn(Dispatchers.Default)
-    }
+            buyerDao.getAllBuyers().distinctUntilChanged()
+        ) { sales, items, payments, buyers ->
+            val buyer = buyers.find { it.id == buyerId } ?: return@combine null
+            buyer to (Triple(sales.filter { it.buyerId == buyerId && !it.isDeleted }, items, payments.filter { it.partyId == buyerId && it.partyType == "BUYER" && !it.isDeleted }))
+        }.map { data ->
+            if (data == null) return@map LedgerSummary("", "Unknown", 0.0, 0.0, 0.0)
+            val (buyer, triple) = data
+            val (sales, allItems, payments) = triple
+            
+            val entries = (sales.map { sale ->
+                val saleItems = allItems.filter { it.saleId == sale.id }
+                val deductions = billNumberRepository.getDeductionsByEntryIdSync(sale.id)
+                val details = LedgerEntryDetails(
+                    billNumber = sale.billNumber.ifBlank { sale.id.takeLast(6).uppercase() },
+                    farmerName = sale.farmerName,
+                    productName = sale.productName,
+                    category = "General",
+                    grade = sale.grade,
+                    quantity = sale.totalQuantity,
+                    unit = if (saleItems.isNotEmpty()) saleItems.first().unit else "KG",
+                    rate = if (sale.totalQuantity > 0) sale.totalAmount / sale.totalQuantity else 0.0,
+                    purchaseRate = if (sale.totalQuantity > 0) sale.totalPurchaseAmount / sale.totalQuantity else 0.0,
+                    ratePerKg = if (saleItems.isNotEmpty()) saleItems.first().saleRate else 0.0,
+                    grossAmount = sale.totalAmount,
+                    commissionAmount = sale.totalCommission, 
+                    transportCharges = sale.transportCharges,
+                    laborCharges = sale.laborCharges,
+                    packingCharges = sale.packingCharges,
+                    otherDeductions = sale.otherCharges,
+                    netAmount = sale.totalNetAmount,
+                    totalNetWeightKg = saleItems.sumOf { it.quantitySold },
+                    paymentMade = sale.paidAmount,
+                    pendingAmount = sale.pendingAmount,
+                    deductions = deductions,
+                    saleItems = saleItems
+                )
+                LedgerEntry(
+                    id = sale.id,
+                    title = "Purchase: ${sale.productName}",
+                    amount = sale.totalNetAmount,
+                    type = LedgerType.DEBIT,
+                    transactionType = TransactionType.SALE,
+                    date = sale.date,
+                    status = if (sale.pendingAmount == 0.0) LedgerStatus.PAID else if (sale.paidAmount > 0) LedgerStatus.PARTIAL else LedgerStatus.PENDING,
+                    details = details
+                )
+            } + payments.map { payment ->
+                LedgerEntry(
+                    id = payment.id,
+                    title = "Receipt: ${payment.paymentMode}",
+                    amount = payment.amount,
+                    type = LedgerType.CREDIT,
+                    transactionType = TransactionType.PAYMENT,
+                    date = payment.date,
+                    status = LedgerStatus.PAID,
+                    reference = payment.referenceNumber,
+                    details = LedgerEntryDetails(paymentMade = payment.amount, billNumber = payment.billNumber)
+                )
+            }).sortedBy { it.date }
 
-    private fun calculateBuyerSummary(
-        buyer: BuyerEntity,
-        allSales: List<SaleEntity>,
-        allSaleItems: List<SaleItemEntity>,
-        allPayments: List<PaymentEntity>,
-        allProducts: List<ProductEntity> = emptyList()
-    ): LedgerSummary {
-        val buyerSales = allSales.filter { it.buyerId == buyer.id && !it.isDeleted }
-        val buyerPayments = allPayments.filter { it.partyId == buyer.id && it.partyType == "BUYER" && !it.isDeleted }
+            var currentBalance = 0.0
+            val entriesWithBalance = entries.map {
+                currentBalance += if (it.type == LedgerType.DEBIT) it.amount else -it.amount
+                it.copy(balance = currentBalance)
+            }
 
-        val entries = (buyerSales.map { sale ->
-            val saleItems = allSaleItems.filter { it.saleId == sale.id }
-            val details = LedgerEntryDetails(
-                billNumber = sale.id.takeLast(6).uppercase(),
-                farmerName = sale.farmerName,
-                productName = sale.productName,
-                category = "General",
-                grade = sale.grade,
-                quantity = sale.totalQuantity,
-                unit = "KG", 
-                rate = if (sale.totalQuantity > 0) sale.totalAmount / sale.totalQuantity else 0.0, // Sale Rate
-                purchaseRate = if (sale.totalQuantity > 0) sale.totalPurchaseAmount / sale.totalQuantity else 0.0,
-                grossAmount = sale.totalAmount,
-                commissionAmount = sale.totalCommission, 
-                transportCharges = sale.transportCharges,
-                laborCharges = sale.laborCharges,
-                packingCharges = sale.packingCharges,
-                otherDeductions = sale.otherCharges,
-                netAmount = sale.totalNetAmount,
-                paymentMade = sale.paidAmount,
-                pendingAmount = sale.pendingAmount,
-                saleItems = saleItems
+            LedgerSummary(
+                partyId = buyer.id,
+                partyName = buyer.name,
+                totalDebit = sales.sumOf { it.totalNetAmount },
+                totalCredit = payments.sumOf { it.amount },
+                balance = buyer.pendingAmount,
+                advanceAmount = 0.0,
+                totalTransactions = entries.size,
+                lastTransactionDate = entries.lastOrNull()?.date ?: 0L,
+                entries = entriesWithBalance.reversed()
             )
-            LedgerEntry(
-                id = sale.id,
-                title = "Purchase: ${sale.productName}",
-                amount = sale.totalNetAmount,
-                type = LedgerType.DEBIT,
-                transactionType = TransactionType.SALE,
-                date = sale.date,
-                status = if (sale.pendingAmount == 0.0) LedgerStatus.PAID else if (sale.paidAmount > 0) LedgerStatus.PARTIAL else LedgerStatus.PENDING,
-                details = details
-            )
-        }
-+ buyerPayments.map { payment ->
-            val details = LedgerEntryDetails(
-                paymentMade = payment.amount
-            )
-            LedgerEntry(
-                id = payment.id,
-                title = "Receipt: ${payment.paymentMode}",
-                amount = payment.amount,
-                type = LedgerType.CREDIT,
-                transactionType = TransactionType.PAYMENT,
-                date = payment.date,
-                status = LedgerStatus.PAID,
-                reference = payment.referenceNumber,
-                details = details
-            )
-        }).sortedBy { it.date }
-
-        var currentBalance = 0.0
-        val entriesWithBalance = entries.map {
-            currentBalance += if (it.type == LedgerType.DEBIT) it.amount else -it.amount
-            it.copy(balance = currentBalance)
-        }
-
-        return LedgerSummary(
-            partyId = buyer.id,
-            partyName = buyer.name,
-            totalDebit = buyerSales.sumOf { it.totalNetAmount },
-            totalCredit = buyerPayments.sumOf { it.amount },
-            balance = buyer.pendingAmount,
-            advanceAmount = 0.0,
-            totalTransactions = entries.size,
-            lastTransactionDate = entries.lastOrNull()?.date ?: 0L,
-            entries = entriesWithBalance.reversed()
-        )
+        }.flowOn(Dispatchers.IO)
     }
 
     override fun getAllFarmerSummaries(): Flow<List<LedgerSummary>> {
-        return combine(
-            arrivalDao.getAllArrivals().distinctUntilChanged(),
-            paymentDao.getAllPayments().distinctUntilChanged(),
-            farmerDao.getAllFarmers().distinctUntilChanged()
-        ) { arrivals, payments, farmers ->
-            farmers.map { farmer ->
-                calculateFarmerSummary(farmer, arrivals, payments)
-            }
-        }.flowOn(Dispatchers.Default)
+        return farmerDao.getAllFarmers().flatMapLatest { farmers ->
+            if (farmers.isEmpty()) flowOf(emptyList())
+            else combine(farmers.map { getFarmerLedger(it.id) }) { it.toList() }
+        }
     }
 
     override fun getAllBuyerSummaries(): Flow<List<LedgerSummary>> {
-        return combine(
-            saleDao.getAllSales().distinctUntilChanged(),
-            saleDao.getAllSaleItems().distinctUntilChanged(),
-            paymentDao.getAllPayments().distinctUntilChanged(),
-            buyerDao.getAllBuyers().distinctUntilChanged(),
-            productDao.getAllProducts().distinctUntilChanged()
-        ) { sales, saleItems, payments, buyers, products ->
-            buyers.map { buyer ->
-                calculateBuyerSummary(buyer, sales, saleItems, payments, products)
-            }
-        }.flowOn(Dispatchers.Default)
+        return buyerDao.getAllBuyers().flatMapLatest { buyers ->
+            if (buyers.isEmpty()) flowOf(emptyList())
+            else combine(buyers.map { getBuyerLedger(it.id) }) { it.toList() }
+        }
     }
 }

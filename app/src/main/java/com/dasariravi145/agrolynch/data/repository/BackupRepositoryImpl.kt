@@ -1,164 +1,157 @@
 package com.dasariravi145.agrolynch.data.repository
 
 import android.content.Context
-import android.net.Uri
 import com.dasariravi145.agrolynch.data.local.dao.*
 import com.dasariravi145.agrolynch.data.local.entity.BackupEntity
 import com.dasariravi145.agrolynch.domain.repository.BackupRepository
-import com.dasariravi145.agrolynch.util.PdfGenerator
-import com.dasariravi145.agrolynch.util.Resource
+import com.dasariravi145.agrolynch.domain.repository.UserRepository
+import com.dasariravi145.agrolynch.util.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.tasks.await
+import timber.log.Timber
 import java.io.File
-import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
+import javax.inject.Singleton
+import dagger.hilt.android.qualifiers.ApplicationContext
 
+@Singleton
 class BackupRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val farmerDao: FarmerDao,
-    private val buyerDao: BuyerDao,
-    private val saleDao: SaleDao,
-    private val arrivalDao: ArrivalDao,
-    private val productDao: ProductDao,
-    private val expenseDao: ExpenseDao,
-    private val paymentDao: PaymentDao,
     private val backupDao: BackupDao,
-    private val storage: FirebaseStorage,
-    private val auth: FirebaseAuth
+    private val backupManager: BackupManager,
+    private val auth: FirebaseAuth,
+    private val userRepository: UserRepository,
+    private val premiumStateManager: PremiumStateManager
 ) : BackupRepository {
 
     override fun getBackupHistory(): Flow<List<BackupEntity>> = backupDao.getBackupHistory()
 
     override suspend fun createLocalBackup(reportType: String): Resource<File> {
-        return try {
-            val farmers = farmerDao.getAllFarmers().first()
-            val buyers = buyerDao.getAllBuyers().first()
-            val sales = saleDao.getAllSales().first()
-            val arrivals = arrivalDao.getAllArrivals().first()
-            val products = productDao.getAllProducts().first()
-            val expenses = expenseDao.getAllExpenses().first()
-            val payments = paymentDao.getAllPayments().first()
+        val result = backupManager.createLocalBackup()
+        if (result is Resource.Success) {
+            val file = result.data!!
+            val user = userRepository.getUserProfile().first()
+            val phoneNumber = auth.currentUser?.phoneNumber ?: user?.phoneNumber ?: ""
+            val userName = user?.name ?: "UnknownUser"
 
-            val pdfFile = PdfGenerator.generateBackupPDF(
-                context, farmers, buyers, sales, arrivals, products, expenses, payments, reportType
+            val backup = BackupEntity(
+                id = UUID.randomUUID().toString(),
+                fileName = file.name,
+                filePath = file.absolutePath,
+                size = file.length(),
+                type = "LOCAL",
+                reportType = reportType,
+                status = "SUCCESS",
+                timestamp = System.currentTimeMillis(),
+                phoneNumber = phoneNumber,
+                userName = userName
             )
-
-            if (pdfFile != null && pdfFile.exists()) {
-                val backup = BackupEntity(
-                    id = UUID.randomUUID().toString(),
-                    fileName = pdfFile.name,
-                    filePath = pdfFile.absolutePath,
-                    size = pdfFile.length(),
-                    type = "LOCAL",
-                    reportType = reportType,
-                    status = "SUCCESS"
-                )
-                backupDao.insertBackup(backup)
-                Resource.Success(pdfFile)
-            } else {
-                Resource.Error("Failed to generate PDF")
-            }
-        } catch (e: Exception) {
-            Resource.Error(e.message ?: "An error occurred during backup")
+            backupDao.insertBackup(backup)
         }
+        return result
     }
 
-    override suspend fun uploadBackupToCloud(file: File): Resource<Unit> {
-        val uid = auth.currentUser?.uid ?: return Resource.Error("User not logged in")
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val fileName = file.name
-        val storagePath = "cloud_backups/$uid/${timestamp}_$fileName"
-        
-        timber.log.Timber.d("Backup Started: File=${file.absolutePath}, Size=${file.length()}, Exists=${file.exists()}")
+    override suspend fun uploadBackupToCloud(file: File, reportType: String, localBackupId: String?): Resource<Unit> {
+        val uploadResult = backupManager.uploadBackupToFirebase(file)
+        if (uploadResult is Resource.Success) {
+            val resultData = uploadResult.data!!
+            val downloadUrl = resultData.downloadUrl
+            val storagePath = resultData.storagePath
+            val user = userRepository.getUserProfile().first()
+            val phoneNumber = auth.currentUser?.phoneNumber ?: user?.phoneNumber ?: ""
+            val userName = user?.name ?: "UnknownUser"
 
-        if (!file.exists()) {
-            timber.log.Timber.e("Backup File Not Found at: ${file.absolutePath}")
-            return Resource.Error("Backup file not found")
-        }
-
-        if (file.length() == 0L) {
-            timber.log.Timber.e("Backup File is Empty")
-            return Resource.Error("Backup file is empty")
-        }
-
-        return try {
-            val ref = storage.reference.child(storagePath)
-            timber.log.Timber.d("Upload Started to: $storagePath")
-            
-            // Wait for upload to complete
-            val uploadSnapshot = ref.putFile(Uri.fromFile(file)).await()
-            
-            if (uploadSnapshot.task.isSuccessful) {
-                timber.log.Timber.i("Upload Success: ${uploadSnapshot.bytesTransferred} bytes")
-                
-                // Robust download URL retrieval with retries for eventual consistency
-                var downloadUrl: String? = null
-                var lastError: Exception? = null
-                for (i in 1..3) {
-                    try {
-                        val uri = ref.downloadUrl.await()
-                        downloadUrl = uri.toString()
-                        break
-                    } catch (e: Exception) {
-                        lastError = e
-                        timber.log.Timber.w("Download URL attempt $i failed: ${e.message}. Retrying...")
-                        kotlinx.coroutines.delay(1000L * i)
-                    }
-                }
-
-                if (downloadUrl != null) {
-                    timber.log.Timber.d("Download URL Generated: $downloadUrl")
-
-                    val backup = BackupEntity(
-                        id = UUID.randomUUID().toString(),
-                        fileName = fileName,
-                        filePath = downloadUrl, // Store URL for cloud backups
-                        size = file.length(),
+            if (localBackupId != null) {
+                val existing = backupDao.getBackupByIdSync(localBackupId)
+                if (existing != null) {
+                    backupDao.insertBackup(existing.copy(
+                        filePath = downloadUrl,
+                        storagePath = storagePath,
                         type = "CLOUD",
-                        reportType = "MANUAL",
                         status = "SUCCESS"
-                    )
-                    backupDao.insertBackup(backup)
-                    Resource.Success(Unit)
-                } else {
-                    throw lastError ?: Exception("Could not generate download URL")
+                    ))
+                    return Resource.Success(Unit)
                 }
-            } else {
-                val error = uploadSnapshot.task.exception?.message ?: "Unknown upload error"
-                timber.log.Timber.e("Upload Failed: $error")
-                Resource.Error(error)
             }
-        } catch (e: Exception) {
-            val msg = e.message ?: "Cloud upload failed"
-            timber.log.Timber.e(e, "Upload Exception at path: $storagePath")
-            
-            if (msg.contains("Object does not exist", ignoreCase = true)) {
-                timber.log.Timber.e("CRITICAL: Firebase reports object missing immediately after upload. Ensure storage bucket and paths are correct.")
-            }
-            
-            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().apply {
-                recordException(e)
-                log("Backup Upload Failure Path: $storagePath")
-            }
-            Resource.Error(msg)
+
+            val backup = BackupEntity(
+                id = UUID.randomUUID().toString(),
+                fileName = file.name,
+                filePath = downloadUrl,
+                storagePath = storagePath,
+                size = file.length(),
+                type = "CLOUD",
+                reportType = reportType,
+                status = "SUCCESS",
+                timestamp = System.currentTimeMillis(),
+                phoneNumber = phoneNumber,
+                userName = userName
+            )
+            backupDao.insertBackup(backup)
+            return Resource.Success(Unit)
         }
+        return Resource.Error(uploadResult.message ?: "Cloud upload failed")
     }
 
     override suspend fun restoreFromCloud(backupId: String): Resource<Unit> {
-        // Implementation for restoring from cloud would typically involve
-        // downloading the backup and parsing it or restoring DB.
-        // Since we are backing up as PDF (for user readability as per prompt),
-        // restoration might mean showing the PDF or downloading it.
+        android.util.Log.d("BACKUP", "RESTORE_CLICKED: $backupId")
+        if (!premiumStateManager.getCachedPremiumStatus()) {
+            android.util.Log.e("BACKUP", "RESTORE_BLOCKED_FREE_USER")
+            return Resource.Error("Premium subscription required to restore cloud backup")
+        }
+        android.util.Log.d("BACKUP", "RESTORE_ALLOWED_PREMIUM_USER")
+
+        Timber.d("RESTORE_START: $backupId")
+        val backup = backupDao.getBackupByIdSync(backupId) ?: return Resource.Error("Backup record not found")
+        if (backup.type != "CLOUD") return Resource.Error("Not a cloud backup")
+
+        Timber.d("STORAGE_PATH: ${backup.storagePath}")
+        val downloadResult = backupManager.downloadBackupFromFirebase(backup.storagePath)
+        if (downloadResult is Resource.Success) {
+            Timber.d("DOWNLOAD_SUCCESS")
+            val file = downloadResult.data!!
+            return backupManager.restoreLocalBackup(file)
+        }
+        Timber.e("DOWNLOAD_FAILED: ${downloadResult.message}")
+        return Resource.Error(downloadResult.message ?: "Failed to download backup")
+    }
+
+    override suspend fun deleteBackup(backupId: String): Resource<Unit> {
+        val backup = backupDao.getBackupByIdSync(backupId)
+        if (backup != null && backup.type == "LOCAL") {
+            val file = File(backup.filePath)
+            if (file.exists()) {
+                file.delete()
+            }
+        }
+        backupDao.deleteBackup(backupId)
         return Resource.Success(Unit)
     }
 
-    override suspend fun deleteBackup(id: String): Resource<Unit> {
-        backupDao.deleteBackup(id)
-        return Resource.Success(Unit)
+    override suspend fun listCloudBackups(): Resource<List<String>> {
+        return backupManager.listCloudBackupsForCurrentUser()
+    }
+
+    override suspend fun restoreFromStoragePath(storagePath: String): Resource<Unit> {
+        android.util.Log.d("BACKUP", "RESTORE_CLICKED: $storagePath")
+        if (!premiumStateManager.getCachedPremiumStatus()) {
+            android.util.Log.e("BACKUP", "RESTORE_BLOCKED_FREE_USER")
+            return Resource.Error("Premium subscription required to restore cloud backup")
+        }
+        android.util.Log.d("BACKUP", "RESTORE_ALLOWED_PREMIUM_USER")
+        return backupManager.restoreSelectedCloudBackup(storagePath)
+    }
+
+    override suspend fun restoreLatestCloudBackup(): Resource<Unit> {
+        android.util.Log.d("BACKUP", "RESTORE_CLICKED: LATEST")
+        if (!premiumStateManager.getCachedPremiumStatus()) {
+            android.util.Log.e("BACKUP", "RESTORE_BLOCKED_FREE_USER")
+            return Resource.Error("Premium subscription required to restore cloud backup")
+        }
+        android.util.Log.d("BACKUP", "RESTORE_ALLOWED_PREMIUM_USER")
+        return backupManager.restoreLatestCloudBackup()
     }
 }

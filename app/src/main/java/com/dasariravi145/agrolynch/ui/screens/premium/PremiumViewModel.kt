@@ -25,7 +25,7 @@ class PremiumViewModel @Inject constructor(
 ) : ViewModel() {
 
     val isPremium = premiumStateManager.isPremium
-    val productDetails = billingManager.productDetails
+    val productDetailsList = billingManager.productDetailsList
     
     val subscriptionHistory = subscriptionDao.getAllSubscriptions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -41,24 +41,14 @@ class PremiumViewModel @Inject constructor(
         }
         viewModelScope.launch {
             billingManager.purchaseSuccess.collect {
-                syncPremiumStatus()
                 _uiState.value = PremiumUiState.Success
             }
         }
     }
 
-    private fun syncPremiumStatus() {
-        viewModelScope.launch {
-            val user = userRepository.getUserProfile().first()
-            user?.let { 
-                userRepository.saveProfile(it.copy(isPremium = true))
-            }
-        }
-    }
-
-    fun subscribe(activity: Activity) {
+    fun subscribe(activity: Activity, productDetails: com.android.billingclient.api.ProductDetails) {
         _uiState.value = PremiumUiState.Loading
-        billingManager.launchBillingFlow(activity)
+        billingManager.launchBillingFlow(activity, productDetails)
     }
 
     fun restorePurchases() {

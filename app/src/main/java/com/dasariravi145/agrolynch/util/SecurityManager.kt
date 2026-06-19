@@ -9,7 +9,7 @@ import javax.inject.Singleton
 
 @Singleton
 class SecurityManager @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext val context: Context
 ) {
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -30,8 +30,40 @@ class SecurityManager @Inject constructor(
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_LOCATION = "user_location"
         private const val KEY_IS_REGISTERED = "is_registered"
+        private const val KEY_PENDING_PROFILE_SYNC = "pending_profile_sync"
+        private const val KEY_IS_LOGGED_IN = "is_logged_in"
+        private const val KEY_USER_ID = "user_id"
+        private const val KEY_PHONE_NUMBER = "phone_number"
+        private const val KEY_PIN_CREATED = "pin_created"
+        private const val KEY_PROFILE_CREATED = "profile_created"
         private const val SESSION_TIMEOUT = 5 * 60 * 1000 // 5 minutes
     }
+
+    fun saveSession(uid: String, phone: String, name: String, location: String, pin: String) {
+        sharedPreferences.edit()
+            .putBoolean(KEY_IS_LOGGED_IN, true)
+            .putString(KEY_USER_ID, uid)
+            .putString(KEY_PHONE_NUMBER, phone)
+            .putString(KEY_USER_NAME, name)
+            .putString(KEY_USER_LOCATION, location)
+            .putString(KEY_APP_PIN, pin)
+            .putBoolean(KEY_PIN_CREATED, true)
+            .putBoolean(KEY_PROFILE_CREATED, true)
+            .putBoolean(KEY_IS_REGISTERED, true)
+            .apply()
+        timber.log.Timber.d("SESSION_SAVE_SUCCESS")
+        timber.log.Timber.d("PROFILE_CREATED_LOCAL_TRUE")
+    }
+
+    fun isLoggedIn(): Boolean = sharedPreferences.getBoolean(KEY_IS_LOGGED_IN, false)
+    fun isProfileCreated(): Boolean = sharedPreferences.getBoolean(KEY_PROFILE_CREATED, false)
+    fun isPinCreated(): Boolean = sharedPreferences.getBoolean(KEY_PIN_CREATED, false)
+
+    fun setPendingProfileSync(pending: Boolean) {
+        sharedPreferences.edit().putBoolean(KEY_PENDING_PROFILE_SYNC, pending).apply()
+    }
+
+    fun hasPendingProfileSync(): Boolean = sharedPreferences.getBoolean(KEY_PENDING_PROFILE_SYNC, false)
 
     fun saveRegistrationInfo(name: String, location: String, pin: String) {
         sharedPreferences.edit()

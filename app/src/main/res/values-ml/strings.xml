@@ -210,4 +210,46 @@
     <string name="enter_quantity">അളവ് രേഖപ്പെടുത്തുക</string>
     <string name="select_buyer">വാങ്ങുന്നയാളെ തിരഞ്ഞെടുക്കുക</string>
     <string name="mobile_number_error">ദയവായി സാധുവായ 10 അക്ക മൊബൈൽ നമ്പർ നൽകുക</string>
+    <string name="show_premium_offers">Premium ഓഫറുകൾ കാണിക്കുക</string>
+    <string name="show_premium_offers_sub">Premium ഫീച്ചറുകളെക്കുറിച്ചുള്ള അറിയിപ്പുകൾ നേടുക</string>
+    <string name="dont_show_again">വീണ്ടും കാണിക്കരുത്</string>
+
+    <!-- New Keys -->
+    <string name="calculation_summary">കണക്കുകൂട്ടൽ സംഗ്രഹം</string>
+    <string name="business_analytics">ബിസിനസ് അനലിറ്റിക്സ്</string>
+    <string name="sales_trend_7d">വിൽപന ട്രെൻഡ് (7 ദിവസം)</string>
+    <string name="top_farmers">പ്രധാന കർഷകർ</string>
+    <string name="top_buyers">പ്രധാന വ്യാപാരികൾ</string>
+    <string name="estimated_profit_trend">അഞ്ചു ലാഭ ട്രെൻഡ്</string>
+    <string name="receipt_preview">രസീത് പ്രിവ്യൂ</string>
+    <string name="share_pdf">PDF പങ്കിടുക (WhatsApp)</string>
+    <string name="grand_total">ആകെ തുക</string>
+    <string name="branding_assets">ബ്രാണ്ടിംഗ്</string>
+    <string name="business_details">ബിസിനസ് വിവരങ്ങൾ</string>
+    <string name="bill_settings">ബിൽ സെറ്റിംഗ്സ്</string>
+    <string name="invalid_pin">തെറ്റായ PIN</string>
+    <string name="daily_business_summary">ദിവസേനയുള്ള ബിസിനസ് സംഗ്രഹം</string>
+    <string name="profile_updated_success">പ്രൊഫൈൽ വിജയകരമായി അപ്‌ഡേറ്റ് ചെയ്തു!</string>
+    <string name="auth_failed">അംഗീകാരം പരാജയപ്പെട്ടു</string>
+    <string name="biometric_login">ബയോമെട്രിക് ലോഗിൻ</string>
+    <string name="gst_number_label">GST നമ്പർ (നിർബന്ധമില്ല)</string>
+    <string name="ad_free_experience">പരസ്യരഹിത അനുഭവം</string>
+    <string name="unlimited_ocr_scan">അപരിമിത OCR ബിൽ സ്കാനിംഗ്</string>
+    <string name="cloud_backup_restore">ക്ലൗഡ് ബാക്കപ്പ്</string>
+    <string name="export_reports">PDF &amp; Excel റിപ്പോർട്ടുകൾ എക്സ്പോർട്ട് ചെയ്യുക</string>
+    <string name="payment_details">പേയ്മെന്റ് വിവരങ്ങൾ</string>
+    <string name="local_backup_saved">ബാക്കപ്പ് സേവ് ചെയ്തു!</string>
+    <string name="cloud_backup_success">ക്ലൗഡ് ബാക്കപ്പ് വിജയിച്ചു!</string>
+    <string name="daily_summary">ദിവസേനയുള്ള സംഗ്രഹം</string>
+    <string name="payment_alerts">പേയ്മെന്റ് അലേർട്ടുകൾ</string>
+    <string name="buyer_name_label">വാങ്ങുന്നയാളുടെ പേര്</string>
+    <string name="verify_otp">OTP പരിശോധിക്കുക</string>
+    <string name="otp">OTP</string>
+    <string name="enter_otp">6 അക്ക കോഡ് നൽകുക</string>
+    <string name="verify">പരിശോധിക്കുക</string>
+    <string name="enter_pin">നിങ്ങളുടെ PIN നൽകുക</string>
+    <string name="edit_farmer">കർഷകനെ തിരുത്തുക</string>
+    <string name="save_farmer">കർഷകനെ സേവ് ചെയ്യുക</string>
+    <string name="edit_buyer">വ്യാപാരിയെ തിരുത്തുക</string>
+    <string name="save_buyer">വ്യാപാരിയെ സേവ് ചെയ്യുക</string>
 </resources>

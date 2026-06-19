@@ -1,179 +1,128 @@
 package com.dasariravi145.agrolynch.ui.navigation
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.dasariravi145.agrolynch.ui.screens.TransactionListScreen
-import com.dasariravi145.agrolynch.ui.screens.AddTransactionScreen
-import com.dasariravi145.agrolynch.ui.screens.SplashScreen
-import com.dasariravi145.agrolynch.ui.screens.auth.AuthEvent
-import com.dasariravi145.agrolynch.ui.screens.auth.AuthViewModel
-import com.dasariravi145.agrolynch.ui.screens.auth.ForgotPinScreen
-import com.dasariravi145.agrolynch.ui.screens.auth.LoginScreen
-import com.dasariravi145.agrolynch.ui.screens.auth.OtpScreen
-import com.dasariravi145.agrolynch.ui.screens.auth.RegistrationScreen
-import com.dasariravi145.agrolynch.ui.screens.arrival.NewArrivalScreen
+import androidx.navigation.navArgument
+import com.dasariravi145.agrolynch.ui.screens.*
+import com.dasariravi145.agrolynch.ui.screens.analytics.*
 import com.dasariravi145.agrolynch.ui.screens.arrival.ArrivalViewModel
-import com.dasariravi145.agrolynch.ui.screens.dashboard.DashboardScreen
-import com.dasariravi145.agrolynch.ui.screens.dashboard.DashboardViewModel
-import com.dasariravi145.agrolynch.ui.screens.farmer.AddEditFarmerScreen
-import com.dasariravi145.agrolynch.ui.screens.farmer.FarmerListScreen
-import com.dasariravi145.agrolynch.ui.screens.farmer.FarmerViewModel
-import com.dasariravi145.agrolynch.ui.screens.buyer.AddEditBuyerScreen
-import com.dasariravi145.agrolynch.ui.screens.buyer.BuyerListScreen
-import com.dasariravi145.agrolynch.ui.screens.buyer.BuyerViewModel
-import com.dasariravi145.agrolynch.ui.screens.product.AddEditProductScreen
-import com.dasariravi145.agrolynch.ui.screens.product.ProductListScreen
-import com.dasariravi145.agrolynch.ui.screens.product.ProductViewModel
-import com.dasariravi145.agrolynch.ui.screens.marketrate.MarketRateScreen
-import com.dasariravi145.agrolynch.ui.screens.marketrate.MarketRateViewModel
-import com.dasariravi145.agrolynch.ui.screens.LanguageSelectionScreen
-import com.dasariravi145.agrolynch.ui.screens.sale.SaleScreen
-import com.dasariravi145.agrolynch.ui.screens.sale.SaleViewModel
-import com.dasariravi145.agrolynch.ui.screens.payment.PaymentScreen
-import com.dasariravi145.agrolynch.ui.screens.payment.PaymentViewModel
-import com.dasariravi145.agrolynch.ui.screens.ledger.LedgerScreen
-import com.dasariravi145.agrolynch.ui.screens.ledger.LedgerDetailScreen
-import com.dasariravi145.agrolynch.ui.screens.ledger.LedgerViewModel
-import com.dasariravi145.agrolynch.ui.screens.receipt.ReceiptPreviewScreen
-import com.dasariravi145.agrolynch.ui.screens.receipt.ReceiptViewModel
-import com.dasariravi145.agrolynch.ui.screens.expense.ExpenseScreen
-import com.dasariravi145.agrolynch.ui.screens.expense.ExpenseViewModel
-import com.dasariravi145.agrolynch.ui.screens.analytics.AnalyticsScreen
-import com.dasariravi145.agrolynch.ui.screens.analytics.AnalyticsViewModel
-import com.dasariravi145.agrolynch.ui.screens.scan.*
-import com.dasariravi145.agrolynch.ui.screens.voice.VoiceEntryScreen
-import com.dasariravi145.agrolynch.ui.screens.voice.VoiceViewModel
-import com.dasariravi145.agrolynch.ui.screens.security.SecurityScreen
-import com.dasariravi145.agrolynch.ui.screens.security.SecurityViewModel
+import com.dasariravi145.agrolynch.ui.screens.arrival.NewArrivalScreen
+import com.dasariravi145.agrolynch.ui.screens.auth.*
 import com.dasariravi145.agrolynch.ui.screens.backup.BackupScreen
 import com.dasariravi145.agrolynch.ui.screens.backup.BackupViewModel
+import com.dasariravi145.agrolynch.ui.screens.buyer.*
+import com.dasariravi145.agrolynch.ui.screens.dashboard.*
+import com.dasariravi145.agrolynch.ui.screens.expense.ExpenseScreen
+import com.dasariravi145.agrolynch.ui.screens.expense.ExpenseViewModel
+import com.dasariravi145.agrolynch.ui.screens.farmer.*
+import com.dasariravi145.agrolynch.ui.screens.ledger.*
+import com.dasariravi145.agrolynch.ui.screens.marketrate.MarketRateScreen
+import com.dasariravi145.agrolynch.ui.screens.marketrate.MarketRateViewModel
+import com.dasariravi145.agrolynch.ui.screens.payment.*
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumScreen
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumViewModel
-import com.dasariravi145.agrolynch.ui.screens.premium.PremiumUpgradePopup
-import com.dasariravi145.agrolynch.ui.screens.settings.*
+import com.dasariravi145.agrolynch.ui.screens.product.*
+import com.dasariravi145.agrolynch.ui.screens.receipt.*
 import com.dasariravi145.agrolynch.ui.screens.report.*
-import com.dasariravi145.agrolynch.domain.model.ReceiptData
-import androidx.navigation.NavType
-import androidx.navigation.navArgument
+import com.dasariravi145.agrolynch.ui.screens.scan.BillScanScreen
+import com.dasariravi145.agrolynch.ui.screens.scan.BillScanViewModel
+import com.dasariravi145.agrolynch.ui.screens.scan.ScanTarget
+import com.dasariravi145.agrolynch.ui.screens.scanner.FarmerBillScannerScreen
+import com.dasariravi145.agrolynch.ui.screens.scanner.ScannerViewModel
+import com.dasariravi145.agrolynch.ui.screens.developer.DeveloperOptionsScreen
+import com.dasariravi145.agrolynch.ui.screens.security.SecurityScreen
+import com.dasariravi145.agrolynch.ui.screens.security.SecurityViewModel
+import com.dasariravi145.agrolynch.ui.screens.settings.*
+import com.dasariravi145.agrolynch.ui.screens.voice.VoiceEntryScreen
+import com.dasariravi145.agrolynch.ui.screens.voice.VoiceNavigationEvent
+import com.dasariravi145.agrolynch.ui.screens.voice.VoiceViewModel
+import com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileScreen
+import com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileViewModel
 import timber.log.Timber
 
 @Composable
-fun SetupNavGraph(navController: NavHostController) {
-    Timber.d("NavGraph: SetupNavGraph initialized")
-    // Store receipt data for preview
-    var currentReceiptData by remember { mutableStateOf<ReceiptData?>(null) }
+fun SetupNavGraph(
+    navController: NavHostController,
+    startDestination: String = Screen.Splash.route
+) {
+    val dashboardViewModel: DashboardViewModel = hiltViewModel()
+    val isPremium by dashboardViewModel.isPremium.collectAsState(initial = false)
     
-    // Share AuthViewModel across Splash, Login, and Otp screens
-    val authViewModel: AuthViewModel = hiltViewModel()
-    val premiumViewModel: PremiumViewModel = hiltViewModel()
-    val isPremium by premiumViewModel.isPremium.collectAsStateWithLifecycle()
+    // Store receipt data for preview
+    var currentReceiptData by remember { mutableStateOf<com.dasariravi145.agrolynch.domain.model.ReceiptData?>(null) }
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Splash.route
+        startDestination = startDestination
     ) {
         composable(route = Screen.Splash.route) {
-            Timber.d("NavGraph: Screen.Splash")
-            val state by authViewModel.state.collectAsStateWithLifecycle()
+            val authViewModel: AuthViewModel = hiltViewModel()
             SplashScreen(
                 viewModel = authViewModel,
-                onNavigate = { isLoggedIn, isLangSelected, hasPin ->
-                    if (isLoggedIn) {
-                        navController.safeNavigate(Screen.Security.route) {
-                            popUpTo(Screen.Splash.route) { inclusive = true }
-                        }
-                    } else if (!isLangSelected) {
-                        navController.safeNavigate(Screen.LanguageSelection.route) {
-                            popUpTo(Screen.Splash.route) { inclusive = true }
-                        }
-                    } else if (hasPin) {
-                        navController.safeNavigate(Screen.Security.route) {
-                            popUpTo(Screen.Splash.route) { inclusive = true }
-                        }
-                    } else {
-                        navController.safeNavigate(Screen.Login.route) {
-                            popUpTo(Screen.Splash.route) { inclusive = true }
-                        }
+                onNavigate = { isLoggedIn, isLangSelected, hasProfile ->
+                    val route = when {
+                        !isLangSelected -> Screen.LanguageSelection.route
+                        !isLoggedIn -> Screen.Login.route
+                        !hasProfile -> Screen.Register.route
+                        else -> Screen.Security.route
+                    }
+                    Timber.d("APP_START_NAVIGATION: $route")
+                    navController.navigate(route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 }
             )
         }
         composable(route = Screen.LanguageSelection.route) {
-            val context = androidx.compose.ui.platform.LocalContext.current
-            LanguageSelectionScreen(
-                onLanguageSelected = { code ->
-                    // Restart activity to apply language changes
-                    val intent = android.content.Intent(context, com.dasariravi145.agrolynch.MainActivity::class.java)
-                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    context.startActivity(intent)
-                }
-            )
-        }
-        composable(route = Screen.Security.route) {
-            Timber.d("NavGraph: Screen.Security")
-            SecurityScreen(
-                viewModel = authViewModel,
-                onAuthenticated = {
-                    navController.safeNavigate(Screen.Dashboard.route) {
-                        popUpTo(Screen.Security.route) { inclusive = true }
-                    }
-                },
-                onForgotPin = {
-                    navController.safeNavigate(Screen.ForgotPin.route)
-                }
-            )
-        }
-        composable(route = Screen.ForgotPin.route) {
-            ForgotPinScreen(
-                viewModel = authViewModel,
-                onOtpSent = {
-                    navController.navigate(Screen.Otp.route)
-                },
-                onBack = { navController.popBackStack() }
-            )
+            LanguageSelectionScreen(onLanguageSelected = {
+                navController.navigate(Screen.Login.route)
+            })
         }
         composable(route = Screen.Login.route) {
+            val authViewModel: AuthViewModel = hiltViewModel()
             LoginScreen(
                 viewModel = authViewModel,
                 onOtpSent = {
-                    navController.navigate(Screen.Otp.route)
+                    val verificationId = authViewModel.state.value.verificationId ?: ""
+                    val phone = authViewModel.state.value.phoneNumber ?: ""
+                    navController.navigate("otp/$verificationId/$phone")
                 }
             )
         }
-        composable(route = Screen.Otp.route) {
-            val state by authViewModel.state.collectAsStateWithLifecycle()
+        composable(
+            route = "otp/{verificationId}/{phone}",
+            arguments = listOf(
+                navArgument("verificationId") { type = NavType.StringType },
+                navArgument("phone") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val authViewModel: AuthViewModel = hiltViewModel()
             OtpScreen(
                 viewModel = authViewModel,
                 onVerified = {
-                    if (state.isRegistered) {
-                        navController.safeNavigate(Screen.Dashboard.route) {
-                            popUpTo(Screen.Login.route) { inclusive = true }
-                        }
+                    val isForgotPin = authViewModel.state.value.isForgotPinFlow
+                    val pinExists = authViewModel.state.value.isRegistered
+                    
+                    val route = if (isForgotPin) {
+                        Screen.Register.route
+                    } else if (pinExists) {
+                        Screen.Dashboard.route
                     } else {
-                        navController.safeNavigate(Screen.Register.route) {
-                            popUpTo(Screen.Login.route) { inclusive = true }
-                        }
+                        Screen.Register.route
+                    }
+
+                    navController.navigate(route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 }
             )
         }
         composable(route = Screen.Register.route) {
+            val authViewModel: AuthViewModel = hiltViewModel()
             RegistrationScreen(
                 viewModel = authViewModel,
                 onRegistered = {
@@ -184,88 +133,42 @@ fun SetupNavGraph(navController: NavHostController) {
             )
         }
         composable(route = Screen.Dashboard.route) {
-            Timber.d("NavGraph: Screen.Dashboard")
-            val dashboardViewModel: DashboardViewModel = hiltViewModel()
-            
-            // Show popup immediately after registration if required
-            LaunchedEffect(Unit) {
-                if (dashboardViewModel.shouldShowPopupAfterRegistration()) {
-                    dashboardViewModel.markPopupSeenAfterRegistration()
-                    // The dashboardViewModel.checkPremiumPopup() in init will handle setting _showPremiumPopup to true
-                }
-            }
-
             DashboardScreen(
                 viewModel = dashboardViewModel,
                 isPremium = isPremium,
-                onUpgradeClick = { navController.safeNavigate(Screen.Premium.route) },
-                onAddTransaction = {
-                    navController.safeNavigate(Screen.NewArrival.route)
-                },
-                onViewTransactions = {
-                    navController.safeNavigate(Screen.TransactionList.route)
-                },
-                onViewFarmers = {
-                    navController.safeNavigate(Screen.FarmerList.route)
-                },
-                onViewBuyers = {
-                    navController.safeNavigate(Screen.BuyerList.route)
-                },
-                onViewProducts = {
-                    navController.safeNavigate(Screen.ProductList.route)
-                },
-                onViewMarketRates = {
-                    navController.safeNavigate(Screen.MarketRate.route)
-                },
-                onViewSales = {
-                    navController.safeNavigate(Screen.Sale.route)
-                },
-                onViewPayments = {
-                    navController.safeNavigate(Screen.Payment.route)
-                },
-                onViewLedger = {
-                    navController.safeNavigate(Screen.Ledger.route)
-                },
-                onViewExpenses = {
-                    navController.safeNavigate(Screen.Expense.route)
-                },
-                onViewAnalytics = {
-                    navController.safeNavigate(Screen.Analytics.route)
-                },
-                onViewReports = {
-                    navController.safeNavigate(Screen.ReportsDashboard.route)
-                },
-                onViewBillScan = {
-                    navController.safeNavigate(Screen.BillScan.route)
-                },
-                onViewVoiceEntry = {
-                    navController.safeNavigate(Screen.VoiceEntry.route)
-                },
-                onViewSecurity = {
-                    navController.safeNavigate(Screen.Security.route)
-                },
-                onViewBackup = {
-                    navController.safeNavigate(Screen.Backup.route)
-                },
-                onViewSettings = {
-                    navController.safeNavigate(Screen.Settings.route)
-                },
+                onUpgradeClick = { navController.navigate(Screen.Premium.route) },
+                onAddTransaction = { navController.navigate(Screen.NewArrival.route) },
+                onViewTransactions = { navController.navigate(Screen.TransactionList.route) },
+                onViewFarmers = { navController.navigate(Screen.FarmerList.route) },
+                onViewBuyers = { navController.navigate(Screen.BuyerList.route) },
+                onViewProducts = { navController.navigate(Screen.ProductList.route) },
+                onViewMarketRates = { navController.navigate(Screen.MarketRate.route) },
+                onViewSales = { navController.navigate(Screen.Sale.route) },
+                onViewPayments = { navController.navigate(Screen.Payment.route) },
+                onViewLedger = { navController.navigate(Screen.Ledger.route) },
+                onViewExpenses = { navController.navigate(Screen.Expense.route) },
+                onViewAnalytics = { navController.navigate(Screen.Analytics.route) },
+                onViewReports = { navController.navigate(Screen.ReportsDashboard.route) },
+                onViewBillScan = { navController.navigate(Screen.BillScan.route) },
+                onViewSecurity = { navController.navigate(Screen.Security.route) },
+                onViewBackup = { navController.navigate(Screen.Backup.route) },
+                onViewSettings = { navController.navigate(Screen.Settings.route) },
+                onViewCompanyProfile = { navController.navigate(Screen.CompanyProfile.route) },
                 onLogout = {
-                    authViewModel.onEvent(AuthEvent.Logout)
-                    navController.safeNavigate(Screen.Security.route) {
+                    dashboardViewModel.onLogout() 
+                    navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.Dashboard.route) { inclusive = true }
                     }
                 }
             )
         }
         composable(route = Screen.TransactionList.route) {
-            Timber.d("NavGraph: Screen.TransactionList")
+            val transactionViewModel: TransactionViewModel = hiltViewModel()
             TransactionListScreen(
-                onAddClick = {
-                    navController.safeNavigate(Screen.AddTransaction.passId())
-                },
+                viewModel = transactionViewModel,
+                onAddClick = { navController.navigate(Screen.AddTransaction.passId()) },
                 onTransactionClick = { id ->
-                    navController.safeNavigate(Screen.AddTransaction.passId(id))
+                    navController.navigate(Screen.AddTransaction.passId(id))
                 }
             )
         }
@@ -273,12 +176,12 @@ fun SetupNavGraph(navController: NavHostController) {
             route = Screen.AddTransaction.route,
             arguments = listOf(navArgument("transactionId") { type = NavType.StringType })
         ) { backStackEntry ->
+            val transactionViewModel: TransactionViewModel = hiltViewModel()
             val transactionId = backStackEntry.arguments?.getString("transactionId")
             AddTransactionScreen(
                 transactionId = if (transactionId == "new") null else transactionId,
-                onBack = {
-                    navController.popBackStack()
-                }
+                onBack = { navController.popBackStack() },
+                viewModel = transactionViewModel
             )
         }
         composable(
@@ -288,9 +191,20 @@ fun SetupNavGraph(navController: NavHostController) {
                 navArgument("amount") { defaultValue = 0f; type = NavType.FloatType },
                 navArgument("date") { defaultValue = 0L; type = NavType.LongType },
                 navArgument("farmer") { defaultValue = ""; type = NavType.StringType },
+                navArgument("phone") { defaultValue = ""; type = NavType.StringType },
+                navArgument("village") { defaultValue = ""; type = NavType.StringType },
                 navArgument("product") { defaultValue = ""; type = NavType.StringType },
+                navArgument("category") { defaultValue = ""; type = NavType.StringType },
+                navArgument("grade") { defaultValue = ""; type = NavType.StringType },
                 navArgument("qty") { defaultValue = 0f; type = NavType.FloatType },
-                navArgument("rate") { defaultValue = 0f; type = NavType.FloatType }
+                navArgument("rate") { defaultValue = 0f; type = NavType.FloatType },
+                navArgument("unit") { defaultValue = "KG"; type = NavType.StringType },
+                navArgument("boxes") { defaultValue = 0; type = NavType.IntType },
+                navArgument("weightTon") { defaultValue = 0f; type = NavType.FloatType },
+                navArgument("emptyWtBox") { defaultValue = 0f; type = NavType.FloatType },
+                navArgument("spoilage") { defaultValue = 0f; type = NavType.FloatType },
+                navArgument("comm") { defaultValue = 5f; type = NavType.FloatType },
+                navArgument("deductions") { defaultValue = ""; type = NavType.StringType }
             )
         ) { backStackEntry ->
             val arrivalViewModel: ArrivalViewModel = hiltViewModel()
@@ -298,9 +212,20 @@ fun SetupNavGraph(navController: NavHostController) {
             val amount = backStackEntry.arguments?.getFloat("amount")?.toDouble() ?: 0.0
             val date = backStackEntry.arguments?.getLong("date") ?: 0L
             val farmer = backStackEntry.arguments?.getString("farmer") ?: ""
+            val phone = backStackEntry.arguments?.getString("phone") ?: ""
+            val village = backStackEntry.arguments?.getString("village") ?: ""
             val product = backStackEntry.arguments?.getString("product") ?: ""
+            val category = backStackEntry.arguments?.getString("category") ?: ""
+            val grade = backStackEntry.arguments?.getString("grade") ?: ""
             val qty = backStackEntry.arguments?.getFloat("qty")?.toDouble() ?: 0.0
             val rate = backStackEntry.arguments?.getFloat("rate")?.toDouble() ?: 0.0
+            val unit = backStackEntry.arguments?.getString("unit") ?: "KG"
+            val boxes = backStackEntry.arguments?.getInt("boxes") ?: 0
+            val weightTon = backStackEntry.arguments?.getFloat("weightTon")?.toDouble() ?: 0.0
+            val emptyWtBox = backStackEntry.arguments?.getFloat("emptyWtBox")?.toDouble() ?: 0.0
+            val spoilage = backStackEntry.arguments?.getFloat("spoilage")?.toDouble() ?: 0.0
+            val comm = backStackEntry.arguments?.getFloat("comm")?.toDouble() ?: 5.0
+            val deductionsStr = backStackEntry.arguments?.getString("deductions") ?: ""
 
             NewArrivalScreen(
                 viewModel = arrivalViewModel,
@@ -308,29 +233,36 @@ fun SetupNavGraph(navController: NavHostController) {
                 ocrAmount = amount,
                 ocrDate = date,
                 ocrFarmer = farmer,
+                ocrPhone = phone,
+                ocrVillage = village,
                 ocrProduct = product,
+                ocrCategory = category,
+                ocrGrade = grade,
                 ocrQty = qty,
                 ocrRate = rate,
-                onBack = { navController.popBackStack() }
+                ocrUnit = unit,
+                ocrNumBoxes = boxes,
+                ocrWeightTon = weightTon,
+                ocrEmptyBoxWeight = emptyWtBox,
+                ocrSpoilagePercent = spoilage,
+                ocrComm = comm,
+                ocrDeductions = deductionsStr,
+                onBack = { navController.popBackStack() },
+                onVoiceEntryClick = { navController.navigate(Screen.VoiceEntry.route) },
+                onScanBillClick = { navController.navigate(Screen.FarmerBillScanner.route) }
             )
         }
         composable(route = Screen.FarmerList.route) {
-            Timber.d("NavGraph: Navigating to FarmerList")
             val farmerViewModel: FarmerViewModel = hiltViewModel()
             FarmerListScreen(
                 viewModel = farmerViewModel,
-                onAddClick = { 
-                    Timber.d("NavGraph: FarmerList -> AddFarmer")
-                    navController.safeNavigate(Screen.AddEditFarmer.passId()) 
+                isPremium = isPremium,
+                onUpgradeClick = { navController.navigate(Screen.Premium.route) },
+                onAddClick = { navController.navigate(Screen.AddEditFarmer.passId()) },
+                onFarmerClick = { id ->
+                    navController.navigate(Screen.AddEditFarmer.passId(id))
                 },
-                onFarmerClick = { id -> 
-                    Timber.d("NavGraph: FarmerList -> EditFarmer($id)")
-                    navController.safeNavigate(Screen.AddEditFarmer.passId(id)) 
-                },
-                onBackClick = { 
-                    Timber.d("NavGraph: FarmerList -> Back")
-                    navController.popBackStack() 
-                }
+                onBackClick = { navController.popBackStack() }
             )
         }
         composable(
@@ -342,16 +274,20 @@ fun SetupNavGraph(navController: NavHostController) {
             AddEditFarmerScreen(
                 viewModel = farmerViewModel,
                 farmerId = if (farmerId == "new") null else farmerId,
+                isPremium = isPremium,
                 onBack = { navController.popBackStack() }
             )
         }
         composable(route = Screen.BuyerList.route) {
-            Timber.i("NavGraph: Navigating to BuyerList")
             val buyerViewModel: BuyerViewModel = hiltViewModel()
             BuyerListScreen(
                 viewModel = buyerViewModel,
-                onAddClick = { navController.safeNavigate(Screen.AddEditBuyer.passId()) },
-                onBuyerClick = { id -> navController.safeNavigate(Screen.AddEditBuyer.passId(id)) },
+                isPremium = isPremium,
+                onUpgradeClick = { navController.navigate(Screen.Premium.route) },
+                onAddClick = { navController.navigate(Screen.AddEditBuyer.passId()) },
+                onBuyerClick = { id ->
+                    navController.navigate(Screen.AddEditBuyer.passId(id))
+                },
                 onBackClick = { navController.popBackStack() }
             )
         }
@@ -359,22 +295,23 @@ fun SetupNavGraph(navController: NavHostController) {
             route = Screen.AddEditBuyer.route,
             arguments = listOf(navArgument("buyerId") { type = NavType.StringType })
         ) { backStackEntry ->
-            Timber.i("NavGraph: Navigating to AddEditBuyer")
             val buyerViewModel: BuyerViewModel = hiltViewModel()
             val buyerId = backStackEntry.arguments?.getString("buyerId")
             AddEditBuyerScreen(
                 viewModel = buyerViewModel,
                 buyerId = if (buyerId == "new") null else buyerId,
+                isPremium = isPremium,
                 onBack = { navController.popBackStack() }
             )
         }
         composable(route = Screen.ProductList.route) {
-            Timber.i("NavGraph: Navigating to ProductList")
             val productViewModel: ProductViewModel = hiltViewModel()
             ProductListScreen(
                 viewModel = productViewModel,
-                onAddClick = { navController.safeNavigate(Screen.AddEditProduct.passId()) },
-                onProductClick = { id -> navController.safeNavigate(Screen.AddEditProduct.passId(id)) },
+                onAddClick = { navController.navigate(Screen.AddEditProduct.passId()) },
+                onProductClick = { id ->
+                    navController.navigate(Screen.AddEditProduct.passId(id))
+                },
                 onBackClick = { navController.popBackStack() }
             )
         }
@@ -406,11 +343,11 @@ fun SetupNavGraph(navController: NavHostController) {
                 navArgument("buyer") { defaultValue = ""; type = NavType.StringType },
                 navArgument("product") { defaultValue = ""; type = NavType.StringType },
                 navArgument("qty") { defaultValue = 0f; type = NavType.FloatType },
-                navArgument("rate") { defaultValue = 0f; type = NavType.FloatType }
+                navArgument("rate") { defaultValue = 0f; type = NavType.FloatType },
+                navArgument("deductions") { defaultValue = ""; type = NavType.StringType }
             )
         ) { backStackEntry ->
-            Timber.i("NavGraph: Navigating to Sale")
-            val saleViewModel: SaleViewModel = hiltViewModel()
+            val saleViewModel: com.dasariravi145.agrolynch.ui.screens.sale.SaleViewModel = hiltViewModel()
             val billNo = backStackEntry.arguments?.getString("billNo") ?: ""
             val amount = backStackEntry.arguments?.getFloat("amount")?.toDouble() ?: 0.0
             val date = backStackEntry.arguments?.getLong("date") ?: 0L
@@ -418,8 +355,9 @@ fun SetupNavGraph(navController: NavHostController) {
             val product = backStackEntry.arguments?.getString("product") ?: ""
             val qty = backStackEntry.arguments?.getFloat("qty")?.toDouble() ?: 0.0
             val rate = backStackEntry.arguments?.getFloat("rate")?.toDouble() ?: 0.0
+            val deductions = backStackEntry.arguments?.getString("deductions") ?: ""
 
-            SaleScreen(
+            com.dasariravi145.agrolynch.ui.screens.sale.SaleScreen(
                 viewModel = saleViewModel,
                 ocrBillNo = billNo,
                 ocrAmount = amount,
@@ -428,6 +366,7 @@ fun SetupNavGraph(navController: NavHostController) {
                 ocrProduct = product,
                 ocrQty = qty,
                 ocrRate = rate,
+                ocrDeductions = deductions,
                 onBackClick = { navController.popBackStack() }
             )
         }
@@ -441,7 +380,6 @@ fun SetupNavGraph(navController: NavHostController) {
                 navArgument("mode") { defaultValue = ""; type = NavType.StringType }
             )
         ) { backStackEntry ->
-            Timber.i("NavGraph: Navigating to Payment")
             val paymentViewModel: PaymentViewModel = hiltViewModel()
             val billNo = backStackEntry.arguments?.getString("billNo") ?: ""
             val amount = backStackEntry.arguments?.getFloat("amount")?.toDouble() ?: 0.0
@@ -460,13 +398,11 @@ fun SetupNavGraph(navController: NavHostController) {
             )
         }
         composable(route = Screen.Ledger.route) {
-            Timber.i("NavGraph: Navigating to Ledger")
             val ledgerViewModel: LedgerViewModel = hiltViewModel()
             LedgerScreen(
                 viewModel = ledgerViewModel,
                 onSummaryClick = { id, type ->
-                    Timber.d("NavGraph: Ledger -> Detail($id, $type)")
-                    navController.safeNavigate(Screen.LedgerDetail.passArgs(id, type))
+                    navController.navigate(Screen.LedgerDetail.passArgs(id, type))
                 },
                 onBackClick = { navController.popBackStack() }
             )
@@ -489,22 +425,16 @@ fun SetupNavGraph(navController: NavHostController) {
             )
         }
         composable(route = Screen.ReceiptPreview.route) {
-            Timber.d("NavGraph: Screen.ReceiptPreview")
             val receiptViewModel: ReceiptViewModel = hiltViewModel()
             if (currentReceiptData != null) {
                 ReceiptPreviewScreen(
                     data = currentReceiptData!!,
-                    viewModel = receiptViewModel,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onUpgradeClick = { navController.navigate(Screen.Premium.route) },
+                    viewModel = receiptViewModel
                 )
             } else {
-                Timber.w("NavGraph: currentReceiptData is null in ReceiptPreview. Popping back.")
-                LaunchedEffect(Unit) {
-                    navController.popBackStack()
-                }
-                Box(modifier = Modifier.fillMaxSize()) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
+                LaunchedEffect(Unit) { navController.popBackStack() }
             }
         }
         composable(route = Screen.Expense.route) {
@@ -527,10 +457,10 @@ fun SetupNavGraph(navController: NavHostController) {
                 viewModel = billScanViewModel,
                 isPremium = isPremium,
                 onUpgradeClick = { navController.navigate(Screen.Premium.route) },
-                onNavigateToEntry = { target, billNo, amount, date, farmer, buyer, party, product, qty, rate, mode ->
+                onNavigateToEntry = { target, billNo, amount, date, farmer, phone, village, buyer, party, product, category, grade, qty, rate, mode, unit, boxes, weightTon, emptyWt, spoilage, deductions ->
                     val route = when(target) {
-                        ScanTarget.STOCK_ENTRY -> Screen.NewArrival.passOcr(billNo, amount, date, farmer, product, qty, rate)
-                        ScanTarget.SALE_ENTRY -> Screen.Sale.passOcr(billNo, amount, date, buyer, product, qty, rate)
+                        ScanTarget.STOCK_ENTRY -> Screen.NewArrival.passOcr(billNo, amount, date, farmer, phone, village, product, category, grade, qty, rate, unit, boxes, weightTon, emptyWt, spoilage, 5.0, deductions)
+                        ScanTarget.SALE_ENTRY -> Screen.Sale.passOcr(billNo, amount, date, buyer, product, qty, rate, deductions)
                         ScanTarget.PAYMENT, ScanTarget.CHEQUE -> Screen.Payment.passOcr(billNo, amount, date, party, mode)
                         ScanTarget.EXPENSE -> Screen.Expense.route
                     }
@@ -541,20 +471,74 @@ fun SetupNavGraph(navController: NavHostController) {
                 onBackClick = { navController.popBackStack() }
             )
         }
+        composable(route = Screen.FarmerBillScanner.route) {
+            val scannerViewModel: ScannerViewModel = hiltViewModel()
+            val arrivalViewModel: ArrivalViewModel = hiltViewModel()
+            FarmerBillScannerScreen(
+                viewModel = scannerViewModel,
+                arrivalViewModel = arrivalViewModel,
+                onBack = { navController.popBackStack() },
+                onSaveSuccess = { 
+                    navController.popBackStack()
+                }
+            )
+        }
         composable(route = Screen.VoiceEntry.route) {
             val voiceViewModel: VoiceViewModel = hiltViewModel()
             VoiceEntryScreen(
                 viewModel = voiceViewModel,
+                onNavigateToArrival = { draft ->
+                    val route = Screen.NewArrival.passOcr(
+                        farmer = draft.farmerName, 
+                        phone = draft.phone,
+                        village = draft.village,
+                        product = draft.productName, 
+                        category = draft.category,
+                        grade = draft.grade, 
+                        qty = draft.quantity, 
+                        unit = draft.unitType, 
+                        rate = draft.rate, 
+                        spoilage = draft.waste,
+                        comm = draft.commissionPercent,
+                        deductions = "" // Deductions not yet handled in step-by-step but fields are there
+                    )
+                    navController.navigate(route) {
+                        popUpTo(Screen.VoiceEntry.route) { inclusive = true }
+                    }
+                },
                 onBackClick = { navController.popBackStack() }
             )
         }
+        composable(route = Screen.Security.route) {
+            val authViewModel: AuthViewModel = hiltViewModel()
+            SecurityScreen(
+                viewModel = authViewModel,
+                onAuthenticated = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Security.route) { inclusive = true }
+                    }
+                },
+                onForgotPin = { navController.navigate(Screen.ForgotPin.route) }
+            )
+        }
+        composable(route = Screen.ForgotPin.route) {
+            val authViewModel: AuthViewModel = hiltViewModel()
+            ForgotPinScreen(
+                viewModel = authViewModel,
+                onOtpSent = {
+                    val verificationId = authViewModel.state.value.verificationId ?: ""
+                    val phone = authViewModel.state.value.phoneNumber ?: ""
+                    navController.navigate("otp/$verificationId/$phone")
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
         composable(route = Screen.Backup.route) {
-            Timber.d("NavGraph: Screen.Backup")
             val backupViewModel: BackupViewModel = hiltViewModel()
             BackupScreen(
                 viewModel = backupViewModel,
                 isPremium = isPremium,
-                onUpgradeClick = { navController.safeNavigate(Screen.Premium.route) },
+                onUpgradeClick = { navController.navigate(Screen.Premium.route) },
                 onBackClick = { navController.popBackStack() }
             )
         }
@@ -565,47 +549,57 @@ fun SetupNavGraph(navController: NavHostController) {
                 onBack = { navController.popBackStack() }
             )
         }
-        
         composable(route = Screen.Settings.route) {
             val settingsViewModel: SettingsViewModel = hiltViewModel()
-            val context = androidx.compose.ui.platform.LocalContext.current
             SettingsScreen(
                 viewModel = settingsViewModel,
                 onBackClick = { navController.popBackStack() },
                 onViewProfile = { navController.navigate(Screen.Profile.route) },
                 onViewCompanyProfile = { navController.navigate(Screen.CompanyProfile.route) },
+                onViewBillSettings = { navController.navigate(Screen.BillSettings.route) },
                 onViewBackup = { navController.navigate(Screen.Backup.route) },
                 onViewSubscription = { navController.navigate(Screen.Premium.route) },
-                onLanguageChanged = {
-                    val intent = android.content.Intent(context, com.dasariravi145.agrolynch.MainActivity::class.java)
-                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    context.startActivity(intent)
-                },
+                onViewDeveloperOptions = { navController.navigate(Screen.DeveloperOptions.route) },
+                onLanguageChanged = { /* Restart activity if needed */ },
                 onLogout = {
-                    authViewModel.onEvent(AuthEvent.Logout)
                     navController.navigate(Screen.Login.route) {
-                        popUpTo(Screen.Dashboard.route) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             )
         }
-
-        composable(route = Screen.CompanyProfile.route) {
-            val companyViewModel: CompanyViewModel = hiltViewModel()
-            CompanyProfileScreen(
-                viewModel = companyViewModel,
+        composable(route = Screen.BillSettings.route) {
+            val billSettingsViewModel: com.dasariravi145.agrolynch.ui.screens.settings.BillSettingsViewModel = hiltViewModel()
+            BillSettingsScreen(
+                viewModel = billSettingsViewModel,
                 onBack = { navController.popBackStack() }
             )
         }
-
         composable(route = Screen.Profile.route) {
-            val profileViewModel: ProfileViewModel = hiltViewModel()
-            ProfileScreen(
-                viewModel = profileViewModel,
-                onBackClick = { navController.popBackStack() }
+            val profileViewModel = hiltViewModel<com.dasariravi145.agrolynch.ui.screens.settings.ProfileViewModel>()
+            ProfileScreen(viewModel = profileViewModel, onBackClick = { navController.popBackStack() })
+        }
+        composable(route = Screen.CompanyProfile.route) {
+            val companyViewModel: com.dasariravi145.agrolynch.ui.screens.settings.CompanyViewModel = hiltViewModel()
+            CompanyProfileScreen(
+                viewModel = companyViewModel,
+                onBack = { navController.popBackStack() },
+                onEditTemplate = { navController.navigate(Screen.TemplateEditor.route) },
+                onDesignTemplate = { _ ->
+                    navController.navigate(Screen.InvoiceProfileSetup.route)
+                }
             )
         }
-
+        composable(route = Screen.TemplateEditor.route) {
+            val editorViewModel: com.dasariravi145.agrolynch.ui.screens.settings.TemplateEditorViewModel = hiltViewModel()
+            val companyViewModel: com.dasariravi145.agrolynch.ui.screens.settings.CompanyViewModel = hiltViewModel()
+            val profile by companyViewModel.profile.collectAsState()
+            TemplateEditorScreen(
+                viewModel = editorViewModel,
+                templateImageUrl = profile?.customTemplatePath,
+                onBack = { navController.popBackStack() }
+            )
+        }
         composable(route = Screen.ReportsDashboard.route) {
             val reportViewModel: ReportViewModel = hiltViewModel()
             ReportsDashboardScreen(
@@ -618,84 +612,60 @@ fun SetupNavGraph(navController: NavHostController) {
                 onNavigateToFarmerReport = { navController.navigate(Screen.FarmerReport.route) },
                 onNavigateToBuyerReport = { navController.navigate(Screen.BuyerReport.route) },
                 onNavigateToExpenseReport = { navController.navigate(Screen.ExpenseReport.route) },
-                onNavigateToOutstandingReport = { navController.navigate(Screen.AgingReport.route) },
+                onNavigateToOutstandingReport = { navController.navigate(Screen.OutstandingReport.route) },
                 onNavigateToProductPerformance = { navController.navigate(Screen.ProductPerformance.route) }
             )
         }
-
         composable(route = Screen.StockReport.route) {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Screen.ReportsDashboard.route) }
-            val reportViewModel: ReportViewModel = hiltViewModel(parentEntry)
-            StockReportScreen(
-                viewModel = reportViewModel,
-                onBackClick = { navController.popBackStack() }
-            )
+            val reportViewModel: ReportViewModel = hiltViewModel()
+            StockReportScreen(viewModel = reportViewModel, onBackClick = { navController.popBackStack() })
         }
-
         composable(route = Screen.DailySalesReport.route) {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Screen.ReportsDashboard.route) }
-            val reportViewModel: ReportViewModel = hiltViewModel(parentEntry)
-            DailySalesReportScreen(
-                viewModel = reportViewModel,
-                onBackClick = { navController.popBackStack() }
-            )
+            val reportViewModel: ReportViewModel = hiltViewModel()
+            DailySalesReportScreen(viewModel = reportViewModel, onBackClick = { navController.popBackStack() })
         }
-
-        composable(route = Screen.ProductPerformance.route) {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Screen.ReportsDashboard.route) }
-            val reportViewModel: ReportViewModel = hiltViewModel(parentEntry)
-            ProductReportScreen(
-                viewModel = reportViewModel,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(route = Screen.AgingReport.route) {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Screen.ReportsDashboard.route) }
-            val reportViewModel: ReportViewModel = hiltViewModel(parentEntry)
-            OutstandingAgingScreen(
-                viewModel = reportViewModel,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(route = Screen.OutstandingReport.route) {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Screen.ReportsDashboard.route) }
-            val reportViewModel: ReportViewModel = hiltViewModel(parentEntry)
-            OutstandingReportScreen(
-                viewModel = reportViewModel,
-                onBackClick = { navController.popBackStack() }
-            )
-        }
-
         composable(route = Screen.MonthlySalesReport.route) {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Screen.ReportsDashboard.route) }
-            val reportViewModel: ReportViewModel = hiltViewModel(parentEntry)
+            val reportViewModel: ReportViewModel = hiltViewModel()
             MonthlySalesReportScreen(viewModel = reportViewModel, onBack = { navController.popBackStack() })
         }
-
         composable(route = Screen.CommissionReport.route) {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Screen.ReportsDashboard.route) }
-            val reportViewModel: ReportViewModel = hiltViewModel(parentEntry)
+            val reportViewModel: ReportViewModel = hiltViewModel()
             CommissionReportScreen(viewModel = reportViewModel, onBack = { navController.popBackStack() })
         }
-
         composable(route = Screen.FarmerReport.route) {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Screen.ReportsDashboard.route) }
-            val reportViewModel: ReportViewModel = hiltViewModel(parentEntry)
+            val reportViewModel: ReportViewModel = hiltViewModel()
             FarmerReportScreen(viewModel = reportViewModel, onBack = { navController.popBackStack() })
         }
-
         composable(route = Screen.BuyerReport.route) {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Screen.ReportsDashboard.route) }
-            val reportViewModel: ReportViewModel = hiltViewModel(parentEntry)
+            val reportViewModel: ReportViewModel = hiltViewModel()
             BuyerReportScreen(viewModel = reportViewModel, onBack = { navController.popBackStack() })
         }
-
         composable(route = Screen.ExpenseReport.route) {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Screen.ReportsDashboard.route) }
-            val reportViewModel: ReportViewModel = hiltViewModel(parentEntry)
+            val reportViewModel: ReportViewModel = hiltViewModel()
             ExpenseReportScreen(viewModel = reportViewModel, onBack = { navController.popBackStack() })
+        }
+        composable(route = Screen.OutstandingReport.route) {
+            val reportViewModel: ReportViewModel = hiltViewModel()
+            OutstandingAgingScreen(viewModel = reportViewModel, onBack = { navController.popBackStack() })
+        }
+        composable(route = Screen.ProductPerformance.route) {
+            val reportViewModel: ReportViewModel = hiltViewModel()
+            ProductReportScreen(viewModel = reportViewModel, onBack = { navController.popBackStack() })
+        }
+        composable(route = Screen.AgingReport.route) {
+            val reportViewModel: ReportViewModel = hiltViewModel()
+            OutstandingAgingScreen(viewModel = reportViewModel, onBack = { navController.popBackStack() })
+        }
+        composable(route = Screen.DeveloperOptions.route) {
+            val developerViewModel: com.dasariravi145.agrolynch.ui.screens.developer.DeveloperViewModel = hiltViewModel()
+            DeveloperOptionsScreen(viewModel = developerViewModel, onBack = { navController.popBackStack() })
+        }
+        composable(route = Screen.InvoiceProfileSetup.route) {
+            val profileViewModel: InvoiceProfileViewModel = hiltViewModel()
+            InvoiceProfileScreen(
+                viewModel = profileViewModel,
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }

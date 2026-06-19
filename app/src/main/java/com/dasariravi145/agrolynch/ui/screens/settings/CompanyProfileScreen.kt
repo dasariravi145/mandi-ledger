@@ -9,7 +9,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -29,20 +28,29 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
-import timber.log.Timber
+import com.dasariravi145.agrolynch.domain.model.BillTemplateType
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CompanyProfileScreen(
     viewModel: CompanyViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onEditTemplate: () -> Unit,
+    onDesignTemplate: (String) -> Unit
 ) {
     val profile by viewModel.profile.collectAsState()
+    val isPremium by viewModel.isPremium.collectAsState()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     var companyName by remember { mutableStateOf("") }
+    var tagline by remember { mutableStateOf("") }
     var proprietorName by remember { mutableStateOf("") }
     var mobile1 by remember { mutableStateOf("") }
     var mobile2 by remember { mutableStateOf("") }
@@ -50,13 +58,23 @@ fun CompanyProfileScreen(
     var village by remember { mutableStateOf("") }
     var district by remember { mutableStateOf("") }
     var state by remember { mutableStateOf("") }
+    var pincode by remember { mutableStateOf("") }
     var gstNumber by remember { mutableStateOf("") }
-    var licenseNumber by remember { mutableStateOf("") }
+    var marketName by remember { mutableStateOf("") }
+    var city by remember { mutableStateOf("") }
+    var upiId by remember { mutableStateOf("") }
     var billPrefix by remember { mutableStateOf("") }
+    var defaultTemplate by remember { mutableStateOf("GK_FRUITS_CLASSIC") }
+
+    var mobile1Error by remember { mutableStateOf<String?>(null) }
+    var mobile2Error by remember { mutableStateOf<String?>(null) }
+
+    val currentTemplate = remember(defaultTemplate) { BillTemplateType.fromId(defaultTemplate) }
 
     LaunchedEffect(profile) {
         profile?.let {
             companyName = it.companyName
+            tagline = it.tagline
             proprietorName = it.proprietorName
             mobile1 = it.mobile1
             mobile2 = it.mobile2
@@ -64,21 +82,55 @@ fun CompanyProfileScreen(
             village = it.village
             district = it.district
             state = it.state
+            pincode = it.pincode
             gstNumber = it.gstNumber
-            licenseNumber = it.licenseNumber
+            marketName = it.marketName
+            city = it.city
+            upiId = it.upiId
             billPrefix = it.billPrefix
+            defaultTemplate = it.defaultTemplate
         }
     }
 
     LaunchedEffect(Unit) {
-        viewModel.message.collect { snackbarHostState.showSnackbar(it) }
+        viewModel.message.collect { msg ->
+            val finalMsg = if (msg == "profile_updated_success") context.getString(R.string.profile_updated_success) else msg
+            snackbarHostState.showSnackbar(finalMsg)
+        }
+    }
+
+    fun validate(): Boolean {
+        var isValid = true
+        if (mobile1.length != 10) {
+            mobile1Error = "Mobile Number must be exactly 10 digits"
+            isValid = false
+        } else {
+            mobile1Error = null
+        }
+
+        if (mobile2.isNotEmpty() && mobile2.length != 10) {
+            mobile2Error = "Alternate Mobile Number must be exactly 10 digits"
+            isValid = false
+        } else if (mobile2.isNotEmpty() && mobile1 == mobile2) {
+            mobile2Error = "Mobile 1 and Mobile 2 cannot be the same"
+            isValid = false
+        } else {
+            mobile2Error = null
+        }
+
+        if ((currentTemplate == BillTemplateType.DIAMOND_BUSINESS_ELITE || currentTemplate == BillTemplateType.EXECUTIVE_GLASS_STYLE) && gstNumber.isBlank()) {
+            scope.launch { snackbarHostState.showSnackbar("GSTIN is required for ${currentTemplate.displayName}") }
+            isValid = false
+        }
+
+        return isValid
     }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Company Profile & Branding") },
+                title = { Text("Professional Bill Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -86,20 +138,31 @@ fun CompanyProfileScreen(
                 },
                 actions = {
                     TextButton(onClick = {
-                        val updated = (profile ?: CompanyProfileEntity()).copy(
-                            companyName = companyName,
-                            proprietorName = proprietorName,
-                            mobile1 = mobile1,
-                            mobile2 = mobile2,
-                            address = address,
-                            village = village,
-                            district = district,
-                            state = state,
-                            gstNumber = gstNumber,
-                            licenseNumber = licenseNumber,
-                            billPrefix = billPrefix
-                        )
-                        viewModel.updateProfile(updated)
+                        if (validate()) {
+                            val updated = (profile ?: CompanyProfileEntity()).copy(
+                                companyName = companyName,
+                                tagline = tagline,
+                                proprietorName = proprietorName,
+                                mobile1 = mobile1,
+                                mobile2 = mobile2,
+                                address = address,
+                                village = village,
+                                district = district,
+                                state = state,
+                                pincode = pincode,
+                                gstNumber = gstNumber,
+                                marketName = marketName,
+                                city = city,
+                                upiId = upiId,
+                                billPrefix = billPrefix,
+                                defaultTemplate = defaultTemplate
+                            )
+                            viewModel.updateProfile(updated)
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Please fix validation errors before saving")
+                            }
+                        }
                     }) {
                         Text("SAVE", fontWeight = FontWeight.Bold)
                     }
@@ -115,44 +178,105 @@ fun CompanyProfileScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Branding Section
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Branding Assets / బ్రాండింగ్", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(16.dp))
-                    
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        AssetPicker(label = "Company Logo", path = profile?.logoPath) { viewModel.saveAssetLocally(context, it, "logo") }
-                        AssetPicker(label = "God Image", path = profile?.godImagePath) { viewModel.saveAssetLocally(context, it, "god") }
+            // 1. Professional Setup Entry
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onDesignTemplate("CURRENT") },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AutoFixHigh, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Professional Invoice Setup", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
+                        Text("Click here to design your invoice with logo, signature and themes", fontSize = 12.sp)
                     }
-                    Spacer(Modifier.height(16.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        AssetPicker(label = "Signature", path = profile?.signaturePath) { viewModel.saveAssetLocally(context, it, "signature") }
-                        AssetPicker(label = "Stamp", path = profile?.stampPath) { viewModel.saveAssetLocally(context, it, "stamp") }
-                    }
+                    Icon(Icons.Default.ChevronRight, null)
                 }
             }
 
-            // Business Details
-            SectionHeader("Business Details / వ్యాపార వివరాలు")
-            OutlinedTextField(value = companyName, onValueChange = { companyName = it }, label = { Text("Company Name") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = proprietorName, onValueChange = { proprietorName = it }, label = { Text("Proprietor Name") }, modifier = Modifier.fillMaxWidth())
+            SectionHeader("Business Details")
+            OutlinedTextField(value = companyName, onValueChange = { companyName = it }, label = { Text(stringResource(R.string.company_name)) }, modifier = Modifier.fillMaxWidth())
             
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = mobile1, onValueChange = { mobile1 = it }, label = { Text("Mobile 1") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
-                OutlinedTextField(value = mobile2, onValueChange = { mobile2 = it }, label = { Text("Mobile 2") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+            // Dynamic Tagline Label
+            val taglineLabel = when(currentTemplate) {
+                BillTemplateType.ROYAL_HERITAGE_MANDI -> "Royal Footer Text"
+                BillTemplateType.PREMIUM_FRUIT_GALLERY -> "Footer Thank You Text"
+                BillTemplateType.DIAMOND_BUSINESS_ELITE -> "Business Tagline"
+                else -> "Company Tagline"
+            }
+            if (currentTemplate != BillTemplateType.COMPACT_THERMAL_PRINT) {
+                OutlinedTextField(value = tagline, onValueChange = { tagline = it }, label = { Text(taglineLabel) }, modifier = Modifier.fillMaxWidth())
             }
 
-            OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Address / షాపు నంబర్") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = proprietorName, onValueChange = { proprietorName = it }, label = { Text(stringResource(R.string.proprietor_name)) }, modifier = Modifier.fillMaxWidth())
             
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = village, onValueChange = { village = it }, label = { Text("Village/Mandi") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = marketName, onValueChange = { marketName = it }, label = { Text("Market Name") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = city, onValueChange = { city = it }, label = { Text("City") }, modifier = Modifier.weight(1f))
+            }
+            
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = mobile1,
+                    onValueChange = { 
+                        val digits = it.trim().filter { char -> char.isDigit() }
+                        if (digits.length <= 10) {
+                            mobile1 = digits
+                            if (digits.length == 10) mobile1Error = null
+                        }
+                    },
+                    label = { Text(stringResource(R.string.mobile_1)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    isError = mobile1Error != null,
+                    supportingText = { mobile1Error?.let { Text(it) } }
+                )
+                OutlinedTextField(
+                    value = mobile2,
+                    onValueChange = { 
+                        val digits = it.trim().filter { char -> char.isDigit() }
+                        if (digits.length <= 10) {
+                            mobile2 = digits
+                            if (digits.length == 10 || digits.isEmpty()) mobile2Error = null
+                        }
+                    },
+                    label = { Text(stringResource(R.string.mobile_2)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    isError = mobile2Error != null,
+                    supportingText = { mobile2Error?.let { Text(it) } }
+                )
+            }
+
+            OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text(stringResource(R.string.address)) }, modifier = Modifier.fillMaxWidth())
+            
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = village, onValueChange = { village = it }, label = { Text(stringResource(R.string.village)) }, modifier = Modifier.weight(1f))
                 OutlinedTextField(value = district, onValueChange = { district = it }, label = { Text("District") }, modifier = Modifier.weight(1f))
             }
+            
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = state, onValueChange = { state = it }, label = { Text("State") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(
+                    value = pincode,
+                    onValueChange = { if(it.length <= 6) pincode = it },
+                    label = { Text("Pincode") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+            }
+
+            // GST is required for Diamond Elite and Executive Glass
+            val isGstRequired = currentTemplate == BillTemplateType.DIAMOND_BUSINESS_ELITE || currentTemplate == BillTemplateType.EXECUTIVE_GLASS_STYLE
+            val gstLabel = if(isGstRequired) "GSTIN *" else "GSTIN (Optional)"
+            OutlinedTextField(value = gstNumber, onValueChange = { gstNumber = it }, label = { Text(gstLabel) }, modifier = Modifier.fillMaxWidth())
+            
+            OutlinedTextField(value = upiId, onValueChange = { upiId = it }, label = { Text("UPI ID (for payments)") }, modifier = Modifier.fillMaxWidth())
 
             // Bill Settings
-            SectionHeader("Bill Settings / బిల్ సెట్టింగులు")
-            OutlinedTextField(value = billPrefix, onValueChange = { billPrefix = it }, label = { Text("Bill Prefix (e.g. SHOP1)") }, modifier = Modifier.fillMaxWidth())
+            SectionHeader(stringResource(R.string.bill_settings))
+            OutlinedTextField(value = billPrefix, onValueChange = { billPrefix = it }, label = { Text(stringResource(R.string.bill_prefix)) }, modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -160,17 +284,17 @@ fun CompanyProfileScreen(
 }
 
 @Composable
-fun AssetPicker(label: String, path: String?, onUriSelected: (Uri) -> Unit) {
+fun AssetPicker(label: String, path: String?, helperText: String? = null, onUriSelected: (Uri) -> Unit) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { onUriSelected(it) }
     }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(120.dp)) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(140.dp)) {
         Box(
             modifier = Modifier
                 .size(80.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color.FaintGray())
+                .background(Color(0xFFF3F4F6))
                 .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
                 .clickable { launcher.launch("image/*") },
             contentAlignment = Alignment.Center
@@ -182,13 +306,14 @@ fun AssetPicker(label: String, path: String?, onUriSelected: (Uri) -> Unit) {
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text(label, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+        Text(label, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        if (helperText != null) {
+            Text(helperText, fontSize = 8.sp, color = Color.Gray.copy(alpha = 0.7f), textAlign = TextAlign.Center, lineHeight = 10.sp)
+        }
     }
 }
 
 @Composable
-fun SectionHeader(title: String) {
+private fun SectionHeader(title: String) {
     Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 8.dp))
 }
-
-fun Color.Companion.FaintGray() = Color(0xFFF3F4F6)

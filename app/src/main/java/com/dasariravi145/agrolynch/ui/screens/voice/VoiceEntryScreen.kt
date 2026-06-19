@@ -7,12 +7,9 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -25,21 +22,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
-import java.util.Locale
+import com.dasariravi145.agrolynch.domain.model.FarmerArrivalDraft
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoiceEntryScreen(
     viewModel: VoiceViewModel,
+    onNavigateToArrival: (FarmerArrivalDraft) -> Unit,
     onBackClick: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     var showPremiumDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.navigationEvent.collect { event ->
+            if (event is VoiceNavigationEvent.NavigateToArrival) {
+                onNavigateToArrival(event.draft)
+            }
+        }
+    }
 
     LaunchedEffect(state.isPremium) {
         if (!state.isPremium) {
@@ -50,7 +57,7 @@ fun VoiceEntryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Voice Stock Entry") },
+                title = { Text(stringResource(R.string.voice_entry), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -64,27 +71,46 @@ fun VoiceEntryScreen(
             )
         }
     ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+            
+            LanguageSelector(viewModel, state.selectedLanguage)
+
             AnimatedContent(
                 targetState = state.step,
                 transitionSpec = {
                     fadeIn() + slideInHorizontally { it } togetherWith fadeOut() + slideOutHorizontally { -it }
                 },
-                label = "VoiceStepAnimation"
+                label = "VoiceStepAnimation",
+                modifier = Modifier.weight(1f)
             ) { step ->
-                when (step) {
-                    VoiceStep.LANGUAGE_SELECTION -> LanguageSelectionStep(viewModel)
-                    VoiceStep.INTERACTIVE_QUESTIONS -> InteractiveStep(viewModel, state)
-                    VoiceStep.EDITABLE_FORM -> EditableFormStep(viewModel, state)
-                    VoiceStep.SUCCESS -> SuccessStep {
-                        viewModel.reset()
-                        onBackClick()
-                    }
+                if (step == VoiceStep.LANGUAGE_SELECTION) {
+                    LanguageSelectionPlaceholder()
+                } else {
+                    InteractiveStep(viewModel, state)
                 }
             }
+            
+            VoiceChecklist(state.draft)
+            
+            if (state.draft.farmerName.isNotEmpty() && state.draft.productName.isNotEmpty()) {
+                Button(
+                    onClick = { viewModel.forceComplete() },
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+                ) {
+                    Icon(Icons.Default.Check, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Review & Save")
+                }
+            } else {
+                Spacer(Modifier.height(16.dp))
+            }
+        }
 
-            if (state.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        if (state.isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
             }
         }
     }
@@ -98,26 +124,36 @@ fun VoiceEntryScreen(
 }
 
 @Composable
-fun LanguageSelectionStep(viewModel: VoiceViewModel) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Select Language / భాషను ఎంచుకోండి", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(viewModel.languages) { lang ->
-                Surface(
-                    onClick = { viewModel.selectLanguage(lang) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(lang.name, fontSize = 18.sp, fontWeight = FontWeight.Medium)
-                        Spacer(Modifier.weight(1f))
-                        Icon(Icons.Default.ChevronRight, null)
-                    }
-                }
+fun LanguageSelector(viewModel: VoiceViewModel, selected: VoiceLanguage?) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+        ) {
+            Icon(Icons.Default.Language, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Language: ${selected?.name ?: "Select..."}")
+            Spacer(Modifier.weight(1f))
+            Icon(Icons.Default.ArrowDropDown, null)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.fillMaxWidth(0.85f)) {
+            viewModel.languages.forEach { lang ->
+                DropdownMenuItem(
+                    text = { Text(lang.name) },
+                    onClick = { viewModel.selectLanguage(lang); expanded = false }
+                )
             }
         }
+    }
+}
+
+@Composable
+fun LanguageSelectionPlaceholder() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("Please select a language to start", color = Color.Gray)
     }
 }
 
@@ -131,21 +167,23 @@ fun InteractiveStep(viewModel: VoiceViewModel, state: VoiceState) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier.fillMaxWidth().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = viewModel.getCurrentQuestion(),
-            fontSize = 28.sp,
-            fontWeight = FontWeight.ExtraBold,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 32.dp)
+            textAlign = TextAlign.Center,
+            modifier = Modifier.height(60.dp)
         )
+
+        Spacer(Modifier.height(24.dp))
 
         Box(
             modifier = Modifier
-                .size(140.dp)
+                .size(120.dp)
                 .background(
                     color = if (state.isListening) Color.Red.copy(alpha = 0.1f) else MaterialTheme.colorScheme.secondaryContainer,
                     shape = CircleShape
@@ -159,132 +197,88 @@ fun InteractiveStep(viewModel: VoiceViewModel, state: VoiceState) {
             Icon(
                 imageVector = if (state.isListening) Icons.Default.Stop else Icons.Default.Mic,
                 contentDescription = "Mic",
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier.size(48.dp),
                 tint = if (state.isListening) Color.Red else MaterialTheme.colorScheme.primary
             )
         }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
 
         if (state.spokenText.isNotEmpty()) {
-            Text("Captured: \"${state.spokenText}\"", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-            Badge(containerColor = if(state.confidence > 0.7) Color(0xFF2E7D32) else Color.Red) {
-                Text("Confidence: ${(state.confidence * 100).toInt()}%", color = Color.White)
-            }
+            Text(
+                "Captured: \"${state.spokenText}\"", 
+                style = MaterialTheme.typography.bodyLarge, 
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2E7D32)
+            )
         }
-    }
-}
-
-@Composable
-fun EditableFormStep(viewModel: VoiceViewModel, state: VoiceState) {
-    var session by remember { mutableStateOf(state.session) }
-    var showConfirmDialog by remember { mutableStateOf(false) }
-
-    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Verify & Complete Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp))
-
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("FARMER DETAILS", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                OutlinedTextField(value = session.farmerName, onValueChange = { session = session.copy(farmerName = it) }, label = { Text("Farmer Name *") }, modifier = Modifier.fillMaxWidth())
-                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = session.farmerPhone, 
-                        onValueChange = { 
-                            if (it.length <= 10 && it.all { char -> char.isDigit() }) {
-                                session = session.copy(farmerPhone = it) 
-                            }
-                        }, 
-                        label = { Text("Phone") }, 
-                        modifier = Modifier.weight(1f), 
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-                    )
-                    OutlinedTextField(value = session.farmerAddress, onValueChange = { session = session.copy(farmerAddress = it) }, label = { Text("Address/Village") }, modifier = Modifier.weight(1f))
-                }
-
-                HorizontalDivider()
-                Text("PRODUCT DETAILS", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                OutlinedTextField(value = session.productName, onValueChange = { session = session.copy(productName = it) }, label = { Text("Product Name *") }, modifier = Modifier.fillMaxWidth())
-                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = session.productCategory, onValueChange = { session = session.copy(productCategory = it) }, label = { Text("Category *") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = session.grade, onValueChange = { session = session.copy(grade = it) }, label = { Text("Grade *") }, modifier = Modifier.weight(1f))
-                }
-
-                HorizontalDivider()
-                Text("QUANTITY & RATES", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = session.quantity.toString(), onValueChange = { session = session.copy(quantity = it.toDoubleOrNull() ?: 0.0) }, label = { Text("Quantity (KG) *") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                    OutlinedTextField(value = session.spoilage.toString(), onValueChange = { session = session.copy(spoilage = it.toDoubleOrNull() ?: 0.0) }, label = { Text("Damage / Soot") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                }
-                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = session.rate.toString(), onValueChange = { session = session.copy(rate = it.toDoubleOrNull() ?: 0.0) }, label = { Text("Rate *") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                    OutlinedTextField(value = session.amount.toString(), onValueChange = { session = session.copy(amount = it.toDoubleOrNull() ?: 0.0) }, label = { Text("Voice Amt (Ref)") }, modifier = Modifier.weight(1f), readOnly = true)
-                }
-
-                HorizontalDivider()
-                Text("CHARGES", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = session.commission.toString(), onValueChange = { session = session.copy(commission = it.toDoubleOrNull() ?: 5.0) }, label = { Text("Comm %") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                    OutlinedTextField(value = session.labor.toString(), onValueChange = { session = session.copy(labor = it.toDoubleOrNull() ?: 0.0) }, label = { Text("Labor") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                }
-            }
+        
+        state.error?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, textAlign = TextAlign.Center)
         }
 
         Spacer(Modifier.height(24.dp))
 
-        Button(
-            onClick = { showConfirmDialog = true },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-            enabled = session.farmerName.isNotEmpty() && session.productName.isNotEmpty() && session.quantity > 0
-        ) {
-            Text("Review & Save", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            OutlinedButton(onClick = { viewModel.skipCurrentStep() }, shape = RoundedCornerShape(8.dp)) {
+                Text("Skip")
+            }
+            Button(onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }, shape = RoundedCornerShape(8.dp)) {
+                Text(if (state.spokenText.isEmpty()) "Speak" else "Speak Again")
+            }
         }
         
-        Spacer(Modifier.height(40.dp))
-    }
-
-    if (showConfirmDialog) {
-        val netAmt = (session.quantity * session.rate) - (session.quantity * session.rate * session.commission / 100) - session.transport - session.labor - session.packing
-        AlertDialog(
-            onDismissRequest = { showConfirmDialog = false },
-            title = { Text("Confirm and Save?") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Farmer: ${session.farmerName}")
-                    Text("Product: ${session.productName} (${session.grade})")
-                    Text("Qty: ${session.quantity} ${session.unit}")
-                    Text("Net Payable: ₹${String.format(Locale.US, "%.2f", netAmt)}")
-                }
-            },
-            confirmButton = {
-                Button(onClick = { 
-                    viewModel.updateSession(session)
-                    viewModel.saveEntry()
-                    showConfirmDialog = false 
-                }) { Text("Confirm Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showConfirmDialog = false }) { Text("Edit") }
+        Spacer(Modifier.height(16.dp))
+        
+        TextButton(onClick = { viewModel.forceComplete() }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Edit Manually", color = Color.Gray)
             }
-        )
+        }
     }
 }
 
 @Composable
-fun SuccessStep(onDone: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+fun VoiceChecklist(draft: FarmerArrivalDraft) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
     ) {
-        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(100.dp))
-        Spacer(Modifier.height(16.dp))
-        Text("Success!", fontSize = 24.sp, fontWeight = FontWeight.Black)
-        Text("Stock entry saved successfully.")
-        Spacer(Modifier.height(32.dp))
-        Button(onClick = onDone) { Text("Done") }
+        Column(
+            Modifier.padding(12.dp).verticalScroll(rememberScrollState()), 
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text("Progress Checklist", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black, color = Color.Gray)
+            HorizontalDivider(Modifier.padding(bottom = 4.dp), thickness = 0.5.dp)
+            
+            ChecklistItem("Farmer Name", draft.farmerName)
+            ChecklistItem("Phone", draft.phone)
+            ChecklistItem("Village", draft.village)
+            ChecklistItem("Product", draft.productName)
+            ChecklistItem("Grade", draft.grade)
+            ChecklistItem("Unit", draft.unitType)
+            ChecklistItem("Quantity", if (draft.quantity > 0) draft.quantity.toString() else "")
+            ChecklistItem("Rate", if (draft.rate > 0) "₹${draft.rate}" else "")
+        }
+    }
+}
+
+@Composable
+fun ChecklistItem(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = Color.DarkGray)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (value.isNotBlank() && value != "0.0") {
+                Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(16.dp))
+            } else {
+                Text("Pending", style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
+            }
+        }
     }
 }

@@ -3,6 +3,7 @@ package com.dasariravi145.agrolynch.ui.screens.backup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -21,6 +22,9 @@ import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import java.text.SimpleDateFormat
 import java.util.*
 import java.io.File
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Formatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,14 +36,31 @@ fun BackupScreen(
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
     val backupHistory by viewModel.backupHistory.collectAsState()
+    val cloudBackups by viewModel.cloudBackups.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showPremiumLockedDialog by remember { mutableStateOf(false) }
+    var premiumLockedMessage by remember { mutableStateOf("") }
+    
+    LaunchedEffect(Unit) {
+        viewModel.fetchCloudBackups()
+    }
     
     val dateFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(isPremium) {
+        android.util.Log.d("BACKUP", "BACKUP_PREMIUM_STATUS: $isPremium")
+    }
+
     LaunchedEffect(Unit) {
-        viewModel.message.collect {
-            snackbarHostState.showSnackbar(it)
+        viewModel.message.collect { msg ->
+            val finalMsg = when(msg) {
+                "local_backup_saved" -> context.getString(R.string.local_backup_saved)
+                "backup_complete_success" -> "Cloud Synced"
+                "restore_success" -> "Data restored successfully! Please restart the app for full effect."
+                else -> msg
+            }
+            snackbarHostState.showSnackbar(finalMsg)
         }
     }
 
@@ -47,7 +68,7 @@ fun BackupScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Backup & Reports / బ్యాకప్") },
+                title = { Text(stringResource(R.string.backup_reports)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -69,7 +90,7 @@ fun BackupScreen(
 
             item {
                 Text(
-                    text = "Generate Backup Reports (PDF)",
+                    text = "Backup Operations",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -79,66 +100,59 @@ fun BackupScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     BackupBox(
                         title = "Manual",
-                        icon = Icons.Default.PictureAsPdf,
+                        icon = Icons.Default.Backup,
                         color = Color(0xFF16A34A),
                         modifier = Modifier.weight(1f),
-                        onClick = { viewModel.createLocalBackup("MANUAL") }
+                        onClick = { 
+                            if (isPremium) viewModel.performManualBackup() 
+                            else viewModel.createLocalBackup("MANUAL")
+                        }
                     )
                     BackupBox(
                         title = "Weekly",
-                        icon = Icons.Default.DateRange,
-                        color = Color(0xFF2563EB),
+                        icon = if (isPremium) Icons.Default.DateRange else Icons.Default.Lock,
+                        color = if (isPremium) Color(0xFF2563EB) else Color.Gray,
                         modifier = Modifier.weight(1f),
-                        onClick = { viewModel.createLocalBackup("WEEKLY") }
+                        onClick = { 
+                            if (isPremium) viewModel.createLocalBackup("WEEKLY") 
+                            else {
+                                premiumLockedMessage = "Weekly automatic backups require a Premium Subscription."
+                                showPremiumLockedDialog = true
+                            }
+                        }
                     )
                     BackupBox(
                         title = "Monthly",
-                        icon = Icons.Default.CalendarMonth,
-                        color = Color(0xFF7C3AED),
+                        icon = if (isPremium) Icons.Default.CalendarMonth else Icons.Default.Lock,
+                        color = if (isPremium) Color(0xFF7C3AED) else Color.Gray,
                         modifier = Modifier.weight(1f),
-                        onClick = { viewModel.createLocalBackup("MONTHLY") }
+                        onClick = { 
+                            if (isPremium) viewModel.createLocalBackup("MONTHLY") 
+                            else {
+                                premiumLockedMessage = "Monthly automatic backups require a Premium Subscription."
+                                showPremiumLockedDialog = true
+                            }
+                        }
                     )
                 }
             }
 
             item {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                Text(
-                    text = "Cloud Backup (Premium)",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            item {
-                BackupActionCard(
-                    title = "Upload Last Backup to Cloud",
-                    icon = Icons.Default.CloudUpload,
-                    description = "Secure your data on Firebase servers.",
-                    isPremium = isPremium,
-                    isLoading = isLoading,
-                    onClick = {
-                        if (isPremium) {
-                            val lastLocal = backupHistory.find { it.type == "LOCAL" }
-                            if (lastLocal != null) {
-                                viewModel.uploadToCloud(File(lastLocal.filePath))
-                            } else {
-                                viewModel.createLocalBackup("MANUAL")
-                            }
-                        } else {
-                            showPremiumLockedDialog = true
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.backup_sync),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (isPremium) {
+                        TextButton(onClick = { viewModel.restoreLatestCloud() }) {
+                            Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Restore Latest", fontSize = 12.sp)
                         }
                     }
-                )
-            }
-
-            item {
-                Text(
-                    text = "Backup History",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                }
             }
 
             if (backupHistory.isEmpty()) {
@@ -152,20 +166,90 @@ fun BackupScreen(
             items(backupHistory) { backup ->
                 BackupHistoryItem(
                     backup = backup,
-                    onDelete = { viewModel.deleteBackup(backup.id) }
+                    isPremium = isPremium,
+                    onDelete = { viewModel.deleteBackup(backup.id) },
+                    onRestore = { 
+                        if (isPremium) viewModel.restoreBackup(backup.id)
+                        else {
+                            premiumLockedMessage = "Premium subscription required to restore cloud backup."
+                            showPremiumLockedDialog = true
+                        }
+                    },
+                    onUpload = {
+                        if (isPremium) {
+                            viewModel.uploadToCloud(File(backup.filePath), backup.reportType, backup.id)
+                        } else {
+                            premiumLockedMessage = "Cloud upload is a premium feature."
+                            showPremiumLockedDialog = true
+                        }
+                    }
                 )
+            }
+
+            if (isPremium && cloudBackups.isNotEmpty()) {
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Text(
+                        text = "Remote Cloud Backups",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                items(cloudBackups) { path ->
+                    CloudBackupItem(
+                        path = path,
+                        isPremium = isPremium,
+                        onRestore = { 
+                            if (isPremium) viewModel.restoreFromStoragePath(path)
+                            else {
+                                premiumLockedMessage = "Premium subscription required to restore cloud backup."
+                                showPremiumLockedDialog = true
+                            }
+                        }
+                    )
+                }
             }
         }
     }
 
     if (showPremiumLockedDialog) {
         PremiumFeatureLockedDialog(
+            message = premiumLockedMessage.ifEmpty { "This feature requires a Premium Subscription." },
             onDismiss = { showPremiumLockedDialog = false },
             onUpgradeClick = {
                 showPremiumLockedDialog = false
                 onUpgradeClick()
             }
         )
+    }
+    
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    }
+}
+
+@Composable
+fun CloudBackupItem(path: String, isPremium: Boolean, onRestore: () -> Unit) {
+    val fileName = path.substringAfterLast("/")
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Cloud, contentDescription = null, tint = Color(0xFF16A34A))
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(text = fileName, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            TextButton(onClick = onRestore) {
+                Text(if (isPremium) "Restore" else "Restore Premium")
+            }
+        }
     }
 }
 
@@ -191,69 +275,81 @@ fun BackupBox(title: String, icon: ImageVector, color: Color, modifier: Modifier
 }
 
 @Composable
-fun BackupHistoryItem(backup: BackupEntity, onDelete: () -> Unit) {
+fun BackupHistoryItem(backup: BackupEntity, isPremium: Boolean, onDelete: () -> Unit, onRestore: () -> Unit, onUpload: () -> Unit) {
     val dateFormat = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                if (backup.type == "CLOUD") Icons.Default.CloudDone else Icons.Default.InsertDriveFile,
-                contentDescription = null,
-                tint = if (backup.type == "CLOUD") Color(0xFF2563EB) else Color.Gray
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = backup.fileName, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 1)
-                Text(
-                    text = "${backup.reportType} | ${dateFormat.format(Date(backup.timestamp))}",
-                    fontSize = 12.sp,
-                    color = Color.Gray
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    if (backup.type == "CLOUD") Icons.Default.CloudDone else Icons.Default.InsertDriveFile,
+                    contentDescription = null,
+                    tint = if (backup.type == "CLOUD") Color(0xFF16A34A) else Color.Gray
                 )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = backup.fileName, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                        Spacer(Modifier.width(8.dp))
+                        
+                        Surface(
+                            color = if (backup.type == "CLOUD") Color(0xFFE8F5E9) else Color(0xFFE3F2FD),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = backup.type,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (backup.type == "CLOUD") Color(0xFF2E7D32) else Color(0xFF1565C0)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "${backup.reportType} | ${dateFormat.format(Date(backup.timestamp))} | ${Formatter.formatFileSize(backup.size)}",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+                }
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-            }
-        }
-    }
-}
-
-@Composable
-fun BackupActionCard(
-    title: String,
-    icon: ImageVector,
-    description: String,
-    isLoading: Boolean,
-    isPremium: Boolean,
-    onClick: () -> Unit
-) {
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick,
-        enabled = !isLoading
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(32.dp), tint = if (isPremium) Color(0xFF16A34A) else Color.Gray)
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    if (!isPremium) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(Icons.Default.Lock, contentDescription = "Premium", modifier = Modifier.size(14.dp), tint = Color.Gray)
+            
+            HorizontalDivider(Modifier.padding(vertical = 8.dp), thickness = 0.5.dp, color = Color.LightGray.copy(alpha = 0.3f))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (backup.type == "CLOUD") {
+                    TextButton(
+                        onClick = onRestore,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(if (isPremium) Icons.Default.SettingsBackupRestore else Icons.Default.Lock, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (isPremium) "Restore Data" else "Restore Premium", fontSize = 12.sp)
+                    }
+                } else {
+                    TextButton(
+                        onClick = onUpload,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(Icons.Default.CloudUpload, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Upload to Cloud", fontSize = 12.sp)
                     }
                 }
-                Text(text = description, fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
-            }
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
             }
         }
     }

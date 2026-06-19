@@ -48,9 +48,14 @@ class ProductRepositoryImpl @Inject constructor(
                             ref.putFile(imageUri).await()
                             imageUrl = ref.downloadUrl.await().toString()
                         }
-                        val productWithImage = product.copy(imageUrl = imageUrl)
-                        productDao.insertProduct(productWithImage)
-                        firestore.collection("users").document(uid).collection("products").document(product.id).set(productWithImage).await()
+                        val productMap = product.javaClass.declaredFields.associate { field ->
+                            field.isAccessible = true
+                            field.name to field.get(product)
+                        }.toMutableMap()
+                        productMap["imageUrl"] = imageUrl
+                        productMap["ownerUserId"] = uid
+                        
+                        firestore.collection("users").document(uid).collection("products").document(product.id).set(productMap).await()
                         productDao.markAsSynced(product.id)
                     } catch (e: Exception) {
                         // Synced later by SyncWorker
@@ -84,7 +89,13 @@ class ProductRepositoryImpl @Inject constructor(
                         if (imageUrl != updatedProduct.imageUrl) {
                             productDao.updateProduct(finalProduct)
                         }
-                        firestore.collection("users").document(uid).collection("products").document(product.id).set(finalProduct).await()
+                        val productMap = finalProduct.javaClass.declaredFields.associate { field ->
+                            field.isAccessible = true
+                            field.name to field.get(finalProduct)
+                        }.toMutableMap()
+                        productMap["ownerUserId"] = uid
+                        
+                        firestore.collection("users").document(uid).collection("products").document(product.id).set(productMap).await()
                         productDao.markAsSynced(product.id)
                     } catch (e: Exception) {
                         // Synced later by SyncWorker
@@ -120,7 +131,12 @@ class ProductRepositoryImpl @Inject constructor(
         return try {
             val unsyncedProducts = productDao.getUnsyncedProducts()
             for (product in unsyncedProducts) {
-                firestore.collection("users").document(uid).collection("products").document(product.id).set(product).await()
+                val productMap = product.javaClass.declaredFields.associate { field ->
+                    field.isAccessible = true
+                    field.name to field.get(product)
+                }.toMutableMap()
+                productMap["ownerUserId"] = uid
+                firestore.collection("users").document(uid).collection("products").document(product.id).set(productMap).await()
                 productDao.markAsSynced(product.id)
             }
             Resource.Success(Unit)

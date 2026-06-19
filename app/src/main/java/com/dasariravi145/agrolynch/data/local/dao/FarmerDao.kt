@@ -15,6 +15,9 @@ interface FarmerDao {
     @Query("SELECT * FROM farmers WHERE id = :id")
     suspend fun getFarmerById(id: String): FarmerEntity?
 
+    @Query("SELECT * FROM farmers")
+    suspend fun getFarmersList(): List<FarmerEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFarmer(farmer: FarmerEntity)
 

@@ -3,7 +3,9 @@ package com.dasariravi145.agrolynch.di
 import android.content.Context
 import androidx.room.Room
 import com.dasariravi145.agrolynch.data.local.AgroLynchDatabase
-import com.dasariravi145.agrolynch.data.local.dao.TransactionDao
+import com.dasariravi145.agrolynch.data.local.dao.*
+import com.dasariravi145.agrolynch.data.repository.*
+import com.dasariravi145.agrolynch.domain.repository.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
@@ -29,7 +31,7 @@ object AppModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AgroLynchDatabase {
-        return Room.databaseBuilder(
+        val builder = Room.databaseBuilder(
             context,
             AgroLynchDatabase::class.java,
             "agrolynch_db"
@@ -51,9 +53,34 @@ object AppModule {
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_27_28,
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_28_29,
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_29_30,
-            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_30_31
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_30_31,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_31_32,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_32_33,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_33_34,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_34_35,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_35_36,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_36_37,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_37_38,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_38_39,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_39_40,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_40_41,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_41_42,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_42_43,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_43_44,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_44_45,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_45_46,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_46_47,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_47_48,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_48_49,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_49_50
         )
-        .build()
+
+        if (com.dasariravi145.agrolynch.BuildConfig.DEBUG) {
+            builder.fallbackToDestructiveMigration(true)
+            android.util.Log.d("ROOM_DB", "Database initializing with fallbackToDestructiveMigration in DEBUG mode")
+        }
+
+        return builder.build()
     }
 
     @Provides
@@ -148,8 +175,47 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideCompanyProfileDao(db: AgroLynchDatabase): com.dasariravi145.agrolynch.data.local.dao.CompanyProfileDao {
+    fun provideCompanyProfileDao(db: AgroLynchDatabase): CompanyProfileDao {
         return db.companyProfileDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideBillNumberSeriesDao(db: AgroLynchDatabase): BillNumberSeriesDao {
+        return db.billNumberSeriesDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideEntryDeductionDao(db: AgroLynchDatabase): EntryDeductionDao {
+        return db.entryDeductionDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideTemplatePositionDao(db: AgroLynchDatabase): TemplatePositionDao {
+        return db.templatePositionDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideInvoiceLayoutDao(db: AgroLynchDatabase): InvoiceLayoutDao {
+        return db.invoiceLayoutDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideInvoiceWizardDao(db: AgroLynchDatabase): InvoiceWizardDao {
+        return db.invoiceWizardDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideBillNumberRepository(
+        seriesDao: BillNumberSeriesDao,
+        deductionDao: EntryDeductionDao
+    ): BillNumberRepository {
+        return BillNumberRepositoryImpl(seriesDao, deductionDao)
     }
 
     @Provides
@@ -174,5 +240,13 @@ object AppModule {
     @Singleton
     fun provideFirebaseMessaging(): FirebaseMessaging {
         return FirebaseMessaging.getInstance()
+    }
+
+    @Provides
+    @Singleton
+    fun provideGson(): com.google.gson.Gson {
+        return com.google.gson.GsonBuilder()
+            .setPrettyPrinting()
+            .create()
     }
 }

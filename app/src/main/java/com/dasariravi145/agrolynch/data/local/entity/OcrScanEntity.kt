@@ -19,5 +19,15 @@ data class OcrScanEntity(
     val ocrText: String = "",
     val imageUrl: String? = null,
     val transactionType: String = "", // STOCK_ENTRY, SALE_ENTRY, PAYMENT
+    val farmerName: String = "",
+    val productName: String = "",
+    val productGrade: String = "",
+    val unit: String = "KG",
+    val numberOfBoxes: Int = 0,
+    val totalWeightTon: Double = 0.0,
+    val emptyBoxWeightPerBox: Double = 0.0,
+    val totalEmptyBoxWeightKg: Double = 0.0,
+    val spoilagePercentage: Double = 0.0,
+    val rate: Double = 0.0,
     val createdAt: Long = System.currentTimeMillis()
 )

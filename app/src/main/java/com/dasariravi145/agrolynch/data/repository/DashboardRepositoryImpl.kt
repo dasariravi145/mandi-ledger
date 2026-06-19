@@ -44,7 +44,10 @@ class DashboardRepositoryImpl @Inject constructor(
             dashboardDao.getTotalArrivalsNetFlow().distinctUntilChanged(),
             dashboardDao.getTotalFarmerPaymentsFlow().distinctUntilChanged(),
             dashboardDao.getTotalTransactionsAmountFlow().distinctUntilChanged(),
-            transactionDao.getRecentTransactions(10).distinctUntilChanged()
+            transactionDao.getRecentTransactions(10).distinctUntilChanged(),
+            dashboardDao.getTodaySalesListFlow(todayStart, todayEnd).distinctUntilChanged(),
+            dashboardDao.getTodaySaleItemsListFlow(todayStart, todayEnd).distinctUntilChanged(),
+            dashboardDao.getTodayPaymentsListFlow(todayStart, todayEnd).distinctUntilChanged()
         ) { flows ->
             val todaySales = (flows[0] as? Double) ?: 0.0
             val todaySalesMargin = (flows[1] as? Double) ?: 0.0
@@ -63,13 +66,35 @@ class DashboardRepositoryImpl @Inject constructor(
             @Suppress("UNCHECKED_CAST")
             val recent = (flows[10] as? List<com.dasariravi145.agrolynch.data.local.entity.TransactionEntity>) ?: emptyList()
 
+            @Suppress("UNCHECKED_CAST")
+            val todaySalesList = (flows[11] as? List<com.dasariravi145.agrolynch.data.local.entity.SaleEntity>) ?: emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val todayItemsList = (flows[12] as? List<com.dasariravi145.agrolynch.data.local.entity.SaleItemEntity>) ?: emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val todayPaymentsList = (flows[13] as? List<com.dasariravi145.agrolynch.data.local.entity.PaymentEntity>) ?: emptyList()
+
+            timber.log.Timber.d("Dashboard Today Sales Query Started")
+            timber.log.Timber.d("Today Sale Master Count: ${todaySalesList.size}")
+            timber.log.Timber.d("Today Sale Item Count: ${todayItemsList.size}")
+            timber.log.Timber.d("Included Sale IDs: ${todaySalesList.joinToString { it.id }}")
+            timber.log.Timber.d("Included Sale Amounts: ${todaySalesList.joinToString { it.totalAmount.toString() }}")
+            
+            val collectionPayments = todayPaymentsList.filter { it.partyType == "BUYER" }
+            val farmerPayments = todayPaymentsList.filter { it.partyType == "FARMER" }
+            
+            timber.log.Timber.d("Excluded Payment Amounts (Farmer): ${farmerPayments.sumOf { it.amount }}")
+            timber.log.Timber.d("Excluded Collection Amounts (Buyer): ${collectionPayments.sumOf { it.amount }}")
+            timber.log.Timber.d("Calculated Today Sales: $todaySales")
+
             val buyerPending = totalSalesNet - totalBuyerPayments
             val farmerPending = (totalArrivalsNet + totalLegacyTrans) - totalFarmerPayments
             
             // FIXED: Today Commission must only include stock entry commission (arrivals)
             val todayCommission = todayArrivalsComm
             
-            val totalCommission = totalSalesMargin + totalArrivalsComm
+            // FIXED: Total Commission must only include stock entry commission (arrivals)
+            // DO NOT include totalSalesMargin here
+            val totalCommission = totalArrivalsComm
 
             timber.log.Timber.d("Calculated Today Commission: $todayCommission (Stock Entry Only)")
 

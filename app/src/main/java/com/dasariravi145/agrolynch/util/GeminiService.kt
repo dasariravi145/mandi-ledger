@@ -53,7 +53,8 @@ object GeminiService {
                 {
                     "billNumber": "string", "date": "DD/MM/YYYY", "farmerName": "string", "productName": "string",
                     "category": "Fruit/Vegetable", "grade": "string", "quantity": 0.0, "damageOrSoot": 0.0,
-                    "rate": 0.0, "grossAmount": 0.0, "netAmount": 0.0, "low_confidence_fields": [], "confidence": 0.8
+                    "rate": 0.0, // Rate per KG. If bill has Rate per Ton, divide by 1000.
+                    "grossAmount": 0.0, "netAmount": 0.0, "low_confidence_fields": [], "confidence": 0.8
                 }
                 Focus on: Farmer Name, Product, Quantity, and Rate.
             """.trimIndent()
@@ -61,7 +62,8 @@ object GeminiService {
                 Fields for Buyer Sale Bill:
                 {
                     "billNumber": "string", "date": "DD/MM/YYYY", "buyerName": "string", "productName": "string",
-                    "quantity": 0.0, "saleRate": 0.0, "amount": 0.0, "low_confidence_fields": [], "confidence": 0.8
+                    "quantity": 0.0, "saleRate": 0.0, // Sale Rate per KG. If bill has Rate per Ton, divide by 1000.
+                    "amount": 0.0, "low_confidence_fields": [], "confidence": 0.8
                 }
                 Focus on: Buyer Name, Product, Quantity, and Sale Rate.
             """.trimIndent()

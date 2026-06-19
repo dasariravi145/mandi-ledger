@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Formatter
 import com.dasariravi145.agrolynch.data.local.entity.MarketRateEntity
 import com.dasariravi145.agrolynch.data.local.entity.ProductEntity
 import java.text.SimpleDateFormat
@@ -151,7 +152,7 @@ fun MarketRateItem(
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "₹${rate.minRate} - ₹${rate.maxRate}",
+                    text = "₹${Formatter.formatCurrency(rate.minRate)} - ₹${Formatter.formatCurrency(rate.maxRate)}",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary

@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Formatter
 import com.dasariravi145.agrolynch.data.local.entity.ExpenseEntity
 import java.text.SimpleDateFormat
 import java.util.*
@@ -115,7 +116,7 @@ fun ExpenseSummaryCard(total: Double) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = stringResource(R.string.today_total_expenses), fontSize = 14.sp)
-            Text(text = "₹$total", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Text(text = "₹${Formatter.formatCurrency(total)}", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
         }
     }
 }
@@ -143,7 +144,7 @@ fun ExpenseItem(
                 }
                 Text(text = dateFormat.format(Date(expense.date)), fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
             }
-            Text(text = "₹${expense.amount}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+            Text(text = "₹${Formatter.formatCurrency(expense.amount)}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
         }
     }
 }

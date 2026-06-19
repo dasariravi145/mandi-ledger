@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.dasariravi145.agrolynch.util.Formatter
 import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,8 +40,8 @@ fun TransactionListScreen(
             ) { transaction ->
                 ListItem(
                     headlineContent = { Text(transaction.farmerName) },
-                    supportingContent = { Text("${transaction.productName.ifEmpty { transaction.fruitType }} - ${transaction.quantity} units") },
-                    trailingContent = { Text("₹${transaction.totalAmount}") },
+                    supportingContent = { Text("${transaction.productName.ifEmpty { transaction.fruitType }} - ${Formatter.formatWeight(transaction.quantity)} units") },
+                    trailingContent = { Text("₹${Formatter.formatCurrency(transaction.totalAmount)}") },
                     modifier = Modifier.clickable { 
                         Timber.d("TransactionListScreen: Transaction clicked: ${transaction.id}")
                         onTransactionClick(transaction.id) 

@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface OcrScanDao {
+    @Query("SELECT * FROM ocr_scans")
+    suspend fun getAllScansList(): List<OcrScanEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertScan(scan: OcrScanEntity)
 

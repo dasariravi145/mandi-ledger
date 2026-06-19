@@ -33,7 +33,8 @@ class SyncRepositoryImpl @Inject constructor(
     private val arrivalDao: ArrivalDao,
     private val saleDao: SaleDao,
     private val paymentDao: PaymentDao,
-    private val ocrScanDao: OcrScanDao
+    private val ocrScanDao: OcrScanDao,
+    private val expenseDao: ExpenseDao
 ) : SyncRepository {
 
     private val userId: String?
@@ -52,6 +53,7 @@ class SyncRepositoryImpl @Inject constructor(
             syncSales(uid)
             syncPayments(uid)
             syncOcrScans(uid)
+            syncExpenses(uid)
             timber.log.Timber.i("Full Sync: Completed in %dms", System.currentTimeMillis() - startTime)
             Resource.Success(Unit)
         } catch (e: Exception) {
@@ -68,10 +70,10 @@ class SyncRepositoryImpl @Inject constructor(
                 name = farmer.name,
                 phone = farmer.mobileNumber,
                 village = farmer.village,
-                createdAt = 0L, // Should ideally be in Entity
+                createdAt = 0L, 
                 updatedAt = farmer.lastUpdated
             )
-            firestore.collection("farmers").document(farmer.id).set(firestoreFarmer).await()
+            firestore.collection("users").document(uid).collection("farmers").document(farmer.id).set(firestoreFarmer).await()
         }
     }
 
@@ -87,7 +89,7 @@ class SyncRepositoryImpl @Inject constructor(
                 createdAt = 0L,
                 updatedAt = buyer.lastUpdated
             )
-            firestore.collection("buyers").document(buyer.id).set(firestoreBuyer).await()
+            firestore.collection("users").document(uid).collection("buyers").document(buyer.id).set(firestoreBuyer).await()
         }
     }
 
@@ -100,11 +102,11 @@ class SyncRepositoryImpl @Inject constructor(
                 productName = product.name,
                 category = product.category,
                 grade = product.availableGrades.joinToString(","),
-                unit = "", // Assuming unit is handled elsewhere or needed in Entity
+                unit = "", 
                 createdAt = 0L,
                 updatedAt = System.currentTimeMillis()
             )
-            firestore.collection("products").document(product.id).set(firestoreProduct).await()
+            firestore.collection("users").document(uid).collection("products").document(product.id).set(firestoreProduct).await()
         }
     }
 
@@ -120,13 +122,13 @@ class SyncRepositoryImpl @Inject constructor(
                 grade = arrival.grade,
                 quantity = arrival.quantity,
                 rate = arrival.purchaseRate,
-                laborCharges = 0.0, // Not in ArrivalEntity currently
+                laborCharges = 0.0, 
                 transportCharges = 0.0,
                 grossAmount = arrival.grossAmount,
                 netAmount = arrival.netAmount,
                 createdAt = arrival.date
             )
-            firestore.collection("stock_entries").document(arrival.id).set(firestoreStock).await()
+            firestore.collection("users").document(uid).collection("arrivals").document(arrival.id).set(firestoreStock).await()
         }
     }
 
@@ -138,10 +140,10 @@ class SyncRepositoryImpl @Inject constructor(
                 ownerUserId = uid,
                 buyerId = sale.buyerId,
                 productId = sale.productId,
-                category = "General", // Placeholder
+                category = "General", 
                 grade = sale.grade,
                 quantity = sale.totalQuantity,
-                rate = 0.0, // Should be calculated or in Entity
+                rate = 0.0, 
                 grossAmount = sale.totalAmount,
                 commissionAmount = sale.totalCommission,
                 laborCharges = sale.laborCharges,
@@ -149,7 +151,7 @@ class SyncRepositoryImpl @Inject constructor(
                 netAmount = sale.totalNetAmount,
                 createdAt = sale.date
             )
-            firestore.collection("sales").document(sale.id).set(firestoreSale).await()
+            firestore.collection("users").document(uid).collection("sales").document(sale.id).set(firestoreSale).await()
         }
     }
 
@@ -166,7 +168,7 @@ class SyncRepositoryImpl @Inject constructor(
                 remarks = payment.notes,
                 createdAt = payment.date
             )
-            firestore.collection("payments").document(payment.id).set(firestorePayment).await()
+            firestore.collection("users").document(uid).collection("payments").document(payment.id).set(firestorePayment).await()
         }
     }
 
@@ -184,7 +186,24 @@ class SyncRepositoryImpl @Inject constructor(
                 scanType = scan.transactionType,
                 createdAt = scan.createdAt
             )
-            firestore.collection("ocr_scans").document(scan.scanId).set(firestoreOcr).await()
+            firestore.collection("users").document(uid).collection("ocr_scans").document(scan.scanId).set(firestoreOcr).await()
+        }
+    }
+
+    private suspend fun syncExpenses(uid: String) {
+        val expenses = expenseDao.getAllExpenses().first()
+        expenses.forEach { expense ->
+            val firestoreExpense = FirestoreExpense(
+                expenseId = expense.id,
+                ownerUserId = uid,
+                category = expense.type,
+                amount = expense.amount,
+                description = expense.description,
+                date = expense.date,
+                lastUpdated = expense.lastUpdated,
+                isDeleted = expense.isDeleted
+            )
+            firestore.collection("users").document(uid).collection("expenses").document(expense.id).set(firestoreExpense).await()
         }
     }
 
@@ -194,7 +213,7 @@ class SyncRepositoryImpl @Inject constructor(
         return@withContext try {
             val startTime = System.currentTimeMillis()
             // Restore Farmers
-            val farmerDocs = firestore.collection("farmers").whereEqualTo("ownerUserId", uid).get().await()
+            val farmerDocs = firestore.collection("users").document(uid).collection("farmers").get().await()
             farmerDocs.documents.forEach { doc ->
                 val firestoreFarmer = doc.toObject(FirestoreFarmer::class.java)
                 firestoreFarmer?.let {
@@ -210,7 +229,7 @@ class SyncRepositoryImpl @Inject constructor(
             }
 
             // Restore Buyers
-            val buyerDocs = firestore.collection("buyers").whereEqualTo("ownerUserId", uid).get().await()
+            val buyerDocs = firestore.collection("users").document(uid).collection("buyers").get().await()
             buyerDocs.documents.forEach { doc ->
                 val firestoreBuyer = doc.toObject(FirestoreBuyer::class.java)
                 firestoreBuyer?.let {
@@ -226,7 +245,7 @@ class SyncRepositoryImpl @Inject constructor(
             }
 
             // Restore Products
-            val productDocs = firestore.collection("products").whereEqualTo("ownerUserId", uid).get().await()
+            val productDocs = firestore.collection("users").document(uid).collection("products").get().await()
             productDocs.documents.forEach { doc ->
                 val firestoreProduct = doc.toObject(FirestoreProduct::class.java)
                 firestoreProduct?.let {
@@ -240,10 +259,8 @@ class SyncRepositoryImpl @Inject constructor(
                 }
             }
 
-            // Similarly for Arrivals, Sales, Payments, and OCR scans...
-            
             // Restore Arrivals
-            val arrivalDocs = firestore.collection("stock_entries").whereEqualTo("ownerUserId", uid).get().await()
+            val arrivalDocs = firestore.collection("users").document(uid).collection("arrivals").get().await()
             arrivalDocs.documents.forEach { doc ->
                 val it = doc.toObject(FirestoreStockEntry::class.java)
                 it?.let {
@@ -254,7 +271,7 @@ class SyncRepositoryImpl @Inject constructor(
                         productCategory = it.category,
                         grade = it.grade,
                         quantity = it.quantity,
-                        remainingQuantity = it.quantity, // Reset for safety or fetch correct value
+                        remainingQuantity = it.quantity, 
                         purchaseRate = it.rate,
                         grossAmount = it.grossAmount,
                         netAmount = it.netAmount,
@@ -265,7 +282,7 @@ class SyncRepositoryImpl @Inject constructor(
             }
 
             // Restore Sales
-            val saleDocs = firestore.collection("sales").whereEqualTo("ownerUserId", uid).get().await()
+            val saleDocs = firestore.collection("users").document(uid).collection("sales").get().await()
             saleDocs.documents.forEach { doc ->
                 val it = doc.toObject(FirestoreSale::class.java)
                 it?.let {
@@ -289,7 +306,7 @@ class SyncRepositoryImpl @Inject constructor(
             }
 
             // Restore Payments
-            val paymentDocs = firestore.collection("payments").whereEqualTo("ownerUserId", uid).get().await()
+            val paymentDocs = firestore.collection("users").document(uid).collection("payments").get().await()
             paymentDocs.documents.forEach { doc ->
                 val it = doc.toObject(FirestorePayment::class.java)
                 it?.let {
@@ -305,6 +322,42 @@ class SyncRepositoryImpl @Inject constructor(
                     ))
                 }
             }
+
+            // Restore OCR Scans
+            val ocrDocs = firestore.collection("users").document(uid).collection("ocr_scans").get().await()
+            ocrDocs.documents.forEach { doc ->
+                val it = doc.toObject(FirestoreOcrScan::class.java)
+                it?.let {
+                    ocrScanDao.insertScan(com.dasariravi145.agrolynch.data.local.entity.OcrScanEntity(
+                        scanId = it.scanId,
+                        billNumber = it.billNumber,
+                        billDate = it.billDate,
+                        amount = it.amount,
+                        ocrText = it.ocrText,
+                        imageUrl = it.imageUrl,
+                        transactionType = it.scanType,
+                        createdAt = it.createdAt
+                    ))
+                }
+            }
+
+            // Restore Expenses
+            val expenseDocs = firestore.collection("users").document(uid).collection("expenses").get().await()
+            expenseDocs.documents.forEach { doc ->
+                val it = doc.toObject(FirestoreExpense::class.java)
+                it?.let {
+                    expenseDao.insertExpense(com.dasariravi145.agrolynch.data.local.entity.ExpenseEntity(
+                        id = it.expenseId,
+                        type = it.category,
+                        amount = it.amount,
+                        description = it.description,
+                        date = it.date,
+                        lastUpdated = it.lastUpdated,
+                        isDeleted = it.isDeleted,
+                        isSynced = true
+                    ))
+                }
+            }
             
             timber.log.Timber.i("Restore All Data: Completed in %dms", System.currentTimeMillis() - startTime)
             Resource.Success(Unit)
@@ -314,7 +367,7 @@ class SyncRepositoryImpl @Inject constructor(
     }
 
     override suspend fun uploadFile(file: File, remotePath: String): Resource<String> {
-        val uid = userId ?: return Resource.Error("User not logged in")
+        val uid = userId ?: return Resource.Error("User not logged in. Please login again.")
         if (!premiumStateManager.isPremium.first()) return Resource.Error("Premium subscription required for cloud storage")
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())

@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,6 +25,7 @@ class BillingManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val premiumStateManager: PremiumStateManager,
     private val subscriptionDao: SubscriptionDao,
+    private val userRepository: com.dasariravi145.agrolynch.domain.repository.UserRepository,
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore
 ) : PurchasesUpdatedListener {
@@ -34,8 +37,8 @@ class BillingManager @Inject constructor(
         .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
         .build()
 
-    private val _productDetails = MutableStateFlow<ProductDetails?>(null)
-    val productDetails = _productDetails.asStateFlow()
+    private val _productDetailsList = MutableStateFlow<List<ProductDetails>>(emptyList())
+    val productDetailsList = _productDetailsList.asStateFlow()
 
     private val _billingError = MutableSharedFlow<String>()
     val billingError = _billingError.asSharedFlow()
@@ -51,18 +54,22 @@ class BillingManager @Inject constructor(
     }
 
     fun startBillingConnection() {
+        Log.d("BillingManager", "Connecting to Google Play...")
         billingClient.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                    Log.i("BillingManager", "BILLING_CONNECTED")
                     reconnectCount = 0
-                    queryPremiumProduct()
+                    queryPremiumProducts()
                     refreshSubscriptionStatus()
                 } else {
+                    Log.e("BillingManager", "Billing setup failed: ${billingResult.debugMessage}")
                     handleBillingError(billingResult)
                 }
             }
 
             override fun onBillingServiceDisconnected() {
+                Log.w("BillingManager", "Billing service disconnected")
                 if (reconnectCount < maxReconnectCount) {
                     reconnectCount++
                     startBillingConnection()
@@ -71,10 +78,22 @@ class BillingManager @Inject constructor(
         })
     }
 
-    private fun queryPremiumProduct() {
+    private fun queryPremiumProducts() {
         val productList = listOf(
             QueryProductDetailsParams.Product.newBuilder()
-                .setProductId("premium_yearly")
+                .setProductId("premium_1_month")
+                .setProductType(BillingClient.ProductType.SUBS)
+                .build(),
+            QueryProductDetailsParams.Product.newBuilder()
+                .setProductId("premium_3_months")
+                .setProductType(BillingClient.ProductType.SUBS)
+                .build(),
+            QueryProductDetailsParams.Product.newBuilder()
+                .setProductId("premium_6_months")
+                .setProductType(BillingClient.ProductType.SUBS)
+                .build(),
+            QueryProductDetailsParams.Product.newBuilder()
+                .setProductId("premium_1_year")
                 .setProductType(BillingClient.ProductType.SUBS)
                 .build()
         )
@@ -83,27 +102,38 @@ class BillingManager @Inject constructor(
 
         billingClient.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                _productDetails.value = productDetailsList.find { it.productId == "premium_yearly" }
-                Log.d("BillingManager", "Product details loaded: ${_productDetails.value}")
+                if (productDetailsList.isEmpty()) {
+                    Log.e("BillingManager", "PRODUCT_NOT_FOUND: No products returned from Play Store")
+                } else {
+                    Log.i("BillingManager", "PRODUCTS_LOADED: ${productDetailsList.size} plans found")
+                }
+                _productDetailsList.value = productDetailsList
             } else {
                 Log.e("BillingManager", "Failed to query products: ${billingResult.debugMessage}")
             }
         }
     }
 
-    fun launchBillingFlow(activity: Activity) {
-        val details = _productDetails.value
-        if (details == null) {
-            scope.launch { _billingError.emit("Product details not available. Please try again.") }
-            queryPremiumProduct() // Try fetching again
+    fun launchBillingFlow(activity: Activity, productDetails: ProductDetails) {
+        Log.i("BillingManager", "SUBSCRIBE_CLICKED: ${productDetails.productId}")
+        
+        if (!billingClient.isReady) {
+            Log.e("BillingManager", "BillingClient not ready. Reconnecting...")
+            startBillingConnection()
+            scope.launch { _billingError.emit("Google Play Billing not ready. Please try again in a moment.") }
+            return
+        }
+
+        val offerToken = productDetails.subscriptionOfferDetails?.get(0)?.offerToken ?: ""
+        if (offerToken.isEmpty() && productDetails.productType == BillingClient.ProductType.SUBS) {
+            Log.e("BillingManager", "PRODUCT_NOT_FOUND: No offer token found for subscription ${productDetails.productId}")
+            scope.launch { _billingError.emit("Premium plan not available. Please check Play Console product setup.") }
             return
         }
         
-        val offerToken = details.subscriptionOfferDetails?.get(0)?.offerToken ?: ""
-        
         val productDetailsParamsList = listOf(
             BillingFlowParams.ProductDetailsParams.newBuilder()
-                .setProductDetails(details)
+                .setProductDetails(productDetails)
                 .setOfferToken(offerToken)
                 .build()
         )
@@ -112,6 +142,7 @@ class BillingManager @Inject constructor(
             .setProductDetailsParamsList(productDetailsParamsList)
             .build()
 
+        Log.i("BillingManager", "BILLING_FLOW_STARTED: ${productDetails.productId}")
         billingClient.launchBillingFlow(activity, billingFlowParams)
     }
 
@@ -121,8 +152,9 @@ class BillingManager @Inject constructor(
                 handlePurchase(purchase)
             }
         } else if (billingResult.responseCode == BillingClient.BillingResponseCode.USER_CANCELED) {
-            // User cancelled
+            Log.w("BillingManager", "PURCHASE_FAILED: User cancelled")
         } else {
+            Log.e("BillingManager", "PURCHASE_FAILED: ${billingResult.debugMessage} (Code: ${billingResult.responseCode})")
             handleBillingError(billingResult)
         }
     }
@@ -150,21 +182,69 @@ class BillingManager @Inject constructor(
             val uid = auth.currentUser?.uid ?: "unknown"
             val uEmail = auth.currentUser?.email ?: auth.currentUser?.phoneNumber ?: "User"
             
+            val productId = purchase.products.firstOrNull() ?: ""
+            val plan = com.dasariravi145.agrolynch.domain.model.PREMIUM_PLANS.find { it.productId == productId }
+            
+            val details = _productDetailsList.value.find { it.productId == productId }
+            val formattedPrice = details?.subscriptionOfferDetails?.get(0)?.pricingPhases?.pricingPhaseList?.get(0)?.formattedPrice 
+                ?: plan?.formattedPrice ?: "₹0"
+            
+            val durationDays = plan?.durationDays ?: 30
+            val expiryTime = purchase.purchaseTime + (durationDays.toLong() * 24 * 60 * 60 * 1000)
+
             val subscription = SubscriptionEntity(
-                transactionId = purchase.purchaseToken, // Using purchaseToken as unique ID
+                transactionId = purchase.purchaseToken,
                 userId = uid,
                 userName = uEmail,
-                planName = "Premium Yearly",
-                amount = _productDetails.value?.subscriptionOfferDetails?.get(0)?.pricingPhases?.pricingPhaseList?.get(0)?.formattedPrice ?: "₹999",
+                planName = plan?.name ?: "Premium Plan",
+                amount = formattedPrice,
                 status = "ACTIVE",
                 purchaseDate = purchase.purchaseTime,
-                expiryDate = purchase.purchaseTime + (365L * 24 * 60 * 60 * 1000), // Approx 1 year
-                orderId = purchase.orderId ?: ""
+                expiryDate = expiryTime,
+                orderId = purchase.orderId ?: "",
+                productId = productId
             )
             
             subscriptionDao.insertSubscription(subscription)
-            premiumStateManager.updatePremiumStatus(true)
+            premiumStateManager.updatePremiumStatus(true, expiryTime)
             
+            // Update local user profile
+            try {
+                val localUser = userRepository.getUserProfile().first()
+                localUser?.let {
+                    userRepository.saveProfile(it.copy(
+                        isPremium = true,
+                        premiumPlan = plan?.name ?: "Premium",
+                        premiumStartDate = purchase.purchaseTime,
+                        premiumExpiryDate = expiryTime,
+                        purchaseToken = purchase.purchaseToken,
+                        productId = productId,
+                        lastUpdatedAt = System.currentTimeMillis()
+                    ))
+                }
+            } catch (e: Exception) {
+                Log.e("BillingManager", "Failed to update local user profile: ${e.message}")
+            }
+
+            // Update User Profile with extensive details in Firestore
+            try {
+                firestore.runTransaction { transaction ->
+                    val userRef = firestore.collection("users").document(uid)
+                    transaction.update(userRef, mapOf(
+                        "isPremium" to true,
+                        "premiumPlan" to (plan?.name ?: "Premium"),
+                        "premiumStartDate" to purchase.purchaseTime,
+                        "premiumExpiryDate" to expiryTime,
+                        "premiumExpiry" to expiryTime, // compatibility
+                        "purchaseToken" to purchase.purchaseToken,
+                        "productId" to productId,
+                        "lastUpdatedAt" to System.currentTimeMillis()
+                    ))
+                }.await()
+            } catch (e: Exception) {
+                Log.e("BillingManager", "Failed to sync user premium status: ${e.message}")
+            }
+
             // Sync to Firestore
             try {
                 firestore.collection("users").document(uid)
@@ -174,6 +254,7 @@ class BillingManager @Inject constructor(
                 Log.e("BillingManager", "Failed to sync subscription: ${e.message}")
             }
             
+            Log.i("BillingManager", "PURCHASE_SUCCESS: $productId")
             _purchaseSuccess.emit(Unit)
         }
     }
@@ -185,15 +266,26 @@ class BillingManager @Inject constructor(
 
         billingClient.queryPurchasesAsync(params) { billingResult, purchases ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                val hasPremium = purchases.any { purchase ->
-                    purchase.products.contains("premium_yearly") && purchase.purchaseState == Purchase.PurchaseState.PURCHASED
+                val validProductIds = listOf("premium_1_month", "premium_3_months", "premium_6_months", "premium_1_year")
+                val activePurchases = purchases.filter { purchase ->
+                    purchase.products.any { it in validProductIds } && 
+                    purchase.purchaseState == Purchase.PurchaseState.PURCHASED
                 }
-                premiumStateManager.updatePremiumStatus(hasPremium)
                 
-                // If they have premium, ensure it's in local DB
+                val hasPremium = activePurchases.isNotEmpty()
+                
                 if (hasPremium) {
-                    val purchase = purchases.find { it.products.contains("premium_yearly") }
-                    purchase?.let { handlePurchase(it) }
+                    val purchase = activePurchases.first()
+                    // Re-calculate expiry if needed or just trust the latest purchase
+                    // For simplicity, we just mark as premium. handlePurchase will update details if not already done.
+                    premiumStateManager.updatePremiumStatus(true)
+                    handlePurchase(purchase)
+                } else {
+                    // Check if locally expired
+                    val expiry = premiumStateManager.getExpiryTime()
+                    if (expiry > 0 && System.currentTimeMillis() > expiry) {
+                        premiumStateManager.updatePremiumStatus(false)
+                    }
                 }
             }
         }

@@ -10,6 +10,7 @@ import com.dasariravi145.agrolynch.domain.repository.CompanyRepository
 import com.dasariravi145.agrolynch.domain.repository.SyncRepository
 import com.dasariravi145.agrolynch.util.PremiumStateManager
 import com.dasariravi145.agrolynch.util.ReportExportService
+import com.dasariravi145.agrolynch.util.LedgerExportService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -41,7 +42,8 @@ class ReportViewModel @Inject constructor(
     private val companyRepository: CompanyRepository,
     private val syncRepository: SyncRepository,
     private val premiumStateManager: PremiumStateManager,
-    private val exportService: ReportExportService
+    private val exportService: ReportExportService,
+    private val ledgerExportService: LedgerExportService
 ) : ViewModel() {
 
     init {
@@ -115,17 +117,6 @@ class ReportViewModel @Inject constructor(
                 if (file != null && file.exists() && file.length() > 0) {
                     Timber.d("REPORT_EXPORT: Export successful. File path: ${file.absolutePath}. Size: ${file.length()} bytes")
                     
-                    // Background cloud upload for premium users
-                    if (format == ExportFormat.PDF) {
-                        viewModelScope.launch {
-                            try {
-                                syncRepository.uploadFile(file, "reports/$reportName")
-                            } catch (e: Exception) {
-                                Timber.e(e, "Cloud backup failed for report")
-                                // We don't fail the local export if cloud upload fails
-                            }
-                        }
-                    }
                     _exportStatus.emit("SUCCESS:${file.absolutePath}")
                 } else {
                     val reason = if (file == null) "PDF generation returned null" 
@@ -142,21 +133,130 @@ class ReportViewModel @Inject constructor(
         }
     }
 
+    fun printArrival(context: Context, items: List<DetailedArrivalReportModel>) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                val profile = companyProfile.value ?: CompanyProfileEntity()
+                
+                val arrivals = items.map { item ->
+                    com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity(
+                        id = item.id,
+                        farmerName = item.farmerName,
+                        productName = item.productName,
+                        grade = item.grade,
+                        quantity = item.quantity,
+                        unit = item.unit,
+                        purchaseRate = item.rate,
+                        ratePerKg = item.rate,
+                        grossAmount = item.grossAmount,
+                        commissionPercent = item.commissionPercent,
+                        commissionAmount = item.commissionAmount,
+                        otherDeductions = item.otherDeductions,
+                        netAmount = item.netAmount,
+                        billNumber = item.billNumber,
+                        finalNetWeightKg = item.finalNetWeightKg,
+                        date = item.date
+                    )
+                }
+
+                val file = ledgerExportService.exportArrivalToPdf(context, profile, arrivals, emptyList())
+                if (file != null && file.exists()) {
+                    _exportStatus.emit("SUCCESS:${file.absolutePath}")
+                } else {
+                    _exportStatus.emit("FAILED: PDF generation failed")
+                }
+            } catch (e: Exception) {
+                _exportStatus.emit("FAILED: ${e.message}")
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun printSale(context: Context, items: List<DetailedSaleReportModel>) {
+        viewModelScope.launch {
+            try {
+                if (items.isEmpty()) return@launch
+                _isLoading.value = true
+                val profile = companyProfile.value ?: CompanyProfileEntity()
+                
+                val first = items.first()
+                val sale = com.dasariravi145.agrolynch.data.local.entity.SaleEntity(
+                    id = first.saleId,
+                    buyerName = first.buyerName,
+                    totalAmount = items.sumOf { it.saleAmount },
+                    totalNetAmount = items.sumOf { it.totalAmount },
+                    laborCharges = items.sumOf { it.laborCharges },
+                    transportCharges = items.sumOf { it.transportCharges },
+                    billNumber = first.billNumber,
+                    date = first.date
+                )
+                
+                val saleItems = items.map { item ->
+                    com.dasariravi145.agrolynch.data.local.entity.SaleItemEntity(
+                        productName = item.productName,
+                        grade = item.grade,
+                        quantitySold = item.quantity,
+                        inputQuantity = item.inputQuantity,
+                        unit = item.unit,
+                        saleRate = item.rate,
+                        saleAmount = item.saleAmount
+                    )
+                }
+
+                val file = ledgerExportService.exportSaleToPdf(context, profile, sale, saleItems, emptyList())
+                if (file != null && file.exists()) {
+                    _exportStatus.emit("SUCCESS:${file.absolutePath}")
+                } else {
+                    _exportStatus.emit("FAILED: PDF generation failed")
+                }
+            } catch (e: Exception) {
+                _exportStatus.emit("FAILED: ${e.message}")
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     val summaryTotals: StateFlow<Map<String, Double>> = filters.flatMapLatest { (start, end) ->
+        Timber.d("REPORT_OVERVIEW_REFRESH_STARTED: Range $start to $end")
         combine(
             reportRepository.getTotalSales(start, end),
             reportRepository.getTotalPurchases(start, end),
             reportRepository.getTotalCommission(start, end),
             reportRepository.getBuyerPendingTotal(),
-            reportRepository.getFarmerPendingTotal()
-        ) { sales, purchases, comm, bPending, fPending ->
-            mapOf(
-                "Sales" to (sales ?: 0.0),
-                "Purchases" to (purchases ?: 0.0),
-                "Commission" to (comm ?: 0.0),
-                "BuyerPending" to (bPending ?: 0.0),
-                "FarmerPending" to (fPending ?: 0.0)
+            reportRepository.getFarmerPendingTotal(),
+            reportRepository.getArrivalCount(),
+            reportRepository.getSaleCount(),
+            reportRepository.getPaymentCount()
+        ) { args ->
+            val sales = args[0] as? Double ?: 0.0
+            val purchases = args[1] as? Double ?: 0.0
+            val comm = args[2] as? Double ?: 0.0
+            val bPending = args[3] as? Double ?: 0.0
+            val fPending = args[4] as? Double ?: 0.0
+            val aCount = args[5] as? Int ?: 0
+            val sCount = args[6] as? Int ?: 0
+            val pCount = args[7] as? Int ?: 0
+            
+            Timber.d("REPORT_TOTAL_SALES: $sales")
+            Timber.d("REPORT_COMMISSION: $comm")
+            Timber.d("REPORT_BUYER_BALANCE: $bPending")
+            Timber.d("REPORT_FARMER_BALANCE: $fPending")
+            Timber.d("arrivalCount: $aCount")
+            Timber.d("saleCount: $sCount")
+            Timber.d("paymentCount: $pCount")
+            
+            val overview = mapOf(
+                "Total Sales" to sales,
+                "Purchases" to purchases,
+                "Total Commission" to comm,
+                "Buyer Pending" to bPending,
+                "Farmer Pending" to fPending
             )
+            Timber.d("Final Business Overview State: $overview")
+            overview
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 

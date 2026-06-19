@@ -3,6 +3,7 @@ package com.dasariravi145.agrolynch.ui.screens.auth
 import android.app.Activity
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.ui.components.AuthLogo
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -52,8 +53,12 @@ fun ForgotPinScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            AuthLogo()
+            
+            Spacer(modifier = Modifier.height(32.dp))
+
             Text(
-                text = stringResource(R.string.forgot_pin_q),
+                text = stringResource(R.string.reset_pin),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -64,21 +69,33 @@ fun ForgotPinScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
             
+            if (state.isLoading && state.loadingMessage != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = state.loadingMessage!!,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+            
             Spacer(modifier = Modifier.height(32.dp))
 
             Button(
                 onClick = { 
                     if (phoneNumber.isNotEmpty()) {
-                        viewModel.onEvent(AuthEvent.SendOtp(phoneNumber, activity))
+                        viewModel.onEvent(AuthEvent.SendOtp(phoneNumber, activity, isForgotPin = true))
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isLoading && phoneNumber.isNotEmpty()
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                enabled = !state.isLoading && phoneNumber.isNotEmpty(),
+                shape = MaterialTheme.shapes.large,
+                colors = ButtonDefaults.buttonColors(containerColor = androidx.compose.ui.graphics.Color(0xFF16A34A))
             ) {
                 if (state.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    CircularProgressIndicator(color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(24.dp))
                 } else {
-                    Text(stringResource(R.string.send_otp))
+                    Text(stringResource(R.string.send_otp), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

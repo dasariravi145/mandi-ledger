@@ -16,10 +16,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.util.Formatter
 import com.dasariravi145.agrolynch.data.local.dao.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -48,24 +52,45 @@ fun ReportLayout(
     val snackbarHostState = remember { SnackbarHostState() }
     
     var showPremiumDialog by remember { mutableStateOf(false) }
+    var pendingFileForAction by remember { mutableStateOf<File?>(null) }
 
     LaunchedEffect(exportStatus) {
         if (exportStatus == "PREMIUM_REQUIRED") {
             showPremiumDialog = true
         } else if (exportStatus.startsWith("SUCCESS:")) {
             val filePath = exportStatus.removePrefix("SUCCESS:")
-            val file = File(filePath)
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = context.contentResolver.getType(uri) ?: "*/*"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(shareIntent, "Share Report"))
+            pendingFileForAction = File(filePath)
         } else if (exportStatus.startsWith("FAILED:")) {
             snackbarHostState.showSnackbar(exportStatus.removePrefix("FAILED:"))
         }
+    }
+
+    if (pendingFileForAction != null) {
+        AlertDialog(
+            onDismissRequest = { pendingFileForAction = null },
+            title = { Text("Report Generated") },
+            text = { Text("Would you like to Print or Share this report?") },
+            confirmButton = {
+                Button(onClick = { 
+                    com.dasariravi145.agrolynch.util.PdfGenerator.printPdf(context, pendingFileForAction!!)
+                    pendingFileForAction = null
+                }) {
+                    Icon(Icons.Default.Print, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Print")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    com.dasariravi145.agrolynch.util.PdfGenerator.sharePdf(context, pendingFileForAction!!)
+                    pendingFileForAction = null
+                }) {
+                    Icon(Icons.Default.Share, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Share")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -208,7 +233,7 @@ fun FarmerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
     }
 
     ReportLayout(
-        title = "Farmer Transaction Report",
+        title = stringResource(R.string.farmer_reports),
         viewModel = viewModel,
         onBack = onBack,
         data = filtered
@@ -216,27 +241,76 @@ fun FarmerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
         Column(Modifier.padding(padding)) {
             val totalVal = filtered.sumOf { it.netAmount }
             val totalPending = filtered.sumOf { it.pendingAmount }
-            SummaryReportHeader("Net Amount", totalVal, "Total Pending", totalPending)
+            SummaryReportHeader(stringResource(R.string.net_payable), totalVal, stringResource(R.string.pending), totalPending)
+            
+            val grouped = remember(filtered) {
+                filtered.groupBy { it.billNumber }
+            }
             
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(filtered) { item ->
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Column(Modifier.padding(16.dp)) {
-                            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                                Text(item.farmerName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray)
-                            }
-                            Text("${item.productName} (${item.grade})", fontSize = 13.sp, color = Color.DarkGray)
-                            Text("${item.quantity} ${item.unit} @ ₹${item.rate}", fontSize = 12.sp, color = Color.Gray)
-                            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
-                            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                                Column {
-                                    Text("Gross: ₹${String.format("%.0f", item.grossAmount)}", fontSize = 11.sp)
-                                    Text("Comm: ₹${String.format("%.0f", item.commissionAmount)} (${item.commissionPercent}%)", fontSize = 11.sp, color = Color.Red)
+                grouped.forEach { (billNo, billItems) ->
+                    item {
+                        val firstItem = billItems.first()
+                        val totalGross = billItems.sumOf { it.grossAmount }
+                        val totalComm = billItems.sumOf { it.commissionAmount }
+                        val totalOther = billItems.sumOf { it.otherDeductions }
+                        val totalNet = billItems.sumOf { it.netAmount }
+
+                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                            Column(Modifier.padding(16.dp)) {
+                                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                                    Column {
+                                        Text(firstItem.farmerName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        if (billNo.isNotBlank()) {
+                                            Text("Bill: $billNo", fontSize = 10.sp, color = Color.Gray)
+                                        }
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(onClick = { viewModel.printArrival(context, billItems) }, modifier = Modifier.size(32.dp)) {
+                                            Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(formatDate(firstItem.date), fontSize = 11.sp, color = Color.Gray)
+                                    }
                                 }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text("Net Payable", fontSize = 10.sp, color = Color.Gray)
-                                    Text("₹${String.format("%.2f", item.netAmount)}", fontWeight = FontWeight.ExtraBold, color = Color(0xFF2E7D32))
+                                
+                                Spacer(Modifier.height(8.dp))
+                                
+                                if (billItems.size > 1) {
+                                    // Multi-grade table
+                                    Row(Modifier.fillMaxWidth().background(Color(0xFFF9FAFB)).padding(4.dp)) {
+                                        Text("Grade", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text("Net KG", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                        Text("Rate/KG", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                        Text("Amount", Modifier.weight(1.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                    }
+                                    billItems.forEach { item ->
+                                        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
+                                            Text(item.grade, Modifier.weight(1f), fontSize = 10.sp)
+                                            Text(Formatter.formatWeight(item.finalNetWeightKg), Modifier.weight(1f), fontSize = 10.sp, textAlign = TextAlign.End)
+                                            Text("₹${Formatter.formatWeight(item.rate)}", Modifier.weight(1f), fontSize = 10.sp, textAlign = TextAlign.End)
+                                            Text("₹${Formatter.formatCurrency(item.grossAmount)}", Modifier.weight(1.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                        }
+                                    }
+                                    HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                                } else {
+                                    Text("${firstItem.productName} (${firstItem.grade})", fontSize = 13.sp, color = Color.DarkGray)
+                                    Text("${Formatter.formatWeight(firstItem.quantity)} ${firstItem.unit} @ ₹${Formatter.formatCurrency(firstItem.rate)}", fontSize = 12.sp, color = Color.Gray)
+                                    HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                                }
+                                
+                                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                                    Column {
+                                        Text("${stringResource(R.string.gross_amount)}: ₹${Formatter.formatCurrency(totalGross)}", fontSize = 11.sp)
+                                        Text("${stringResource(R.string.commission)}: ₹${Formatter.formatCurrency(totalComm)}", fontSize = 11.sp, color = Color.Red)
+                                        if (totalOther > 0) {
+                                            Text("${stringResource(R.string.other_deductions)}: ₹${Formatter.formatCurrency(totalOther)}", fontSize = 11.sp, color = Color.Red)
+                                        }
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(stringResource(R.string.net_payable), fontSize = 10.sp, color = Color.Gray)
+                                        Text("₹${Formatter.formatCurrency(totalNet)}", fontWeight = FontWeight.ExtraBold, color = Color(0xFF2E7D32))
+                                    }
                                 }
                             }
                         }
@@ -258,7 +332,7 @@ fun BuyerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
     }
 
     ReportLayout(
-        title = "Buyer Sales Report",
+        title = stringResource(R.string.buyer_reports),
         viewModel = viewModel,
         onBack = onBack,
         data = filtered
@@ -266,27 +340,71 @@ fun BuyerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
         Column(Modifier.padding(padding)) {
             val totalSales = filtered.sumOf { it.saleAmount }
             val totalPending = filtered.sumOf { it.pendingAmount }
-            SummaryReportHeader("Total Sales", totalSales, "Collection Due", totalPending)
+            SummaryReportHeader(stringResource(R.string.total_sales), totalSales, stringResource(R.string.pending), totalPending)
+            
+            val grouped = remember(filtered) {
+                filtered.groupBy { it.billNumber }
+            }
             
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(filtered) { item ->
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Column(Modifier.padding(16.dp)) {
-                            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                                Text(item.buyerName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray)
-                            }
-                            Text("${item.productName} (${item.grade})", fontSize = 13.sp, color = Color.DarkGray)
-                            Text("${item.quantity} ${item.unit} @ ₹${item.rate}", fontSize = 12.sp, color = Color.Gray)
-                            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
-                            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                                Column {
-                                    Text("Labor: ₹${String.format("%.0f", item.laborCharges)}", fontSize = 11.sp)
-                                    Text("Transport: ₹${String.format("%.0f", item.transportCharges)}", fontSize = 11.sp)
+                grouped.forEach { (billNo, billItems) ->
+                    item {
+                        val firstItem = billItems.first()
+                        val totalNet = billItems.sumOf { it.totalAmount }
+                        val totalLabor = billItems.sumOf { it.laborCharges }
+                        val totalTrans = billItems.sumOf { it.transportCharges }
+
+                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                            Column(Modifier.padding(16.dp)) {
+                                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                                    Column {
+                                        Text(firstItem.buyerName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        if (billNo.isNotBlank()) {
+                                            Text("Invoice: $billNo", fontSize = 10.sp, color = Color.Gray)
+                                        }
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(onClick = { viewModel.printSale(context, billItems) }, modifier = Modifier.size(32.dp)) {
+                                            Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(formatDate(firstItem.date), fontSize = 11.sp, color = Color.Gray)
+                                    }
                                 }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text("Total Amount", fontSize = 10.sp, color = Color.Gray)
-                                    Text("₹${String.format("%.2f", item.totalAmount)}", fontWeight = FontWeight.ExtraBold, color = Color(0xFF1565C0))
+                                
+                                Spacer(Modifier.height(8.dp))
+                                
+                                if (billItems.size > 1) {
+                                    Row(Modifier.fillMaxWidth().background(Color(0xFFF9FAFB)).padding(4.dp)) {
+                                        Text("Item / Grade", Modifier.weight(1.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text("Qty", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                        Text("Rate", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                        Text("Amount", Modifier.weight(1.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                    }
+                                    billItems.forEach { item ->
+                                        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
+                                            Text("${item.productName} (${item.grade})", Modifier.weight(1.5f), fontSize = 10.sp)
+                                            Text(Formatter.formatWeight(item.quantity), Modifier.weight(1f), fontSize = 10.sp, textAlign = TextAlign.End)
+                                            Text("₹${Formatter.formatWeight(item.rate)}", Modifier.weight(1f), fontSize = 10.sp, textAlign = TextAlign.End)
+                                            Text("₹${Formatter.formatCurrency(item.saleAmount)}", Modifier.weight(1.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                        }
+                                    }
+                                    HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                                } else {
+                                    Text("${firstItem.productName} (${firstItem.grade})", fontSize = 13.sp, color = Color.DarkGray)
+                                    Text("${Formatter.formatWeight(firstItem.quantity)} ${firstItem.unit} @ ₹${Formatter.formatCurrency(firstItem.rate)}", fontSize = 12.sp, color = Color.Gray)
+                                    HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                                }
+
+                                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                                    Column {
+                                        Text("${stringResource(R.string.labor_charges)}: ₹${Formatter.formatCurrency(totalLabor)}", fontSize = 11.sp)
+                                        Text("${stringResource(R.string.transport)}: ₹${Formatter.formatCurrency(totalTrans)}", fontSize = 11.sp)
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(stringResource(R.string.total_amount), fontSize = 10.sp, color = Color.Gray)
+                                        Text("₹${Formatter.formatCurrency(totalNet)}", fontWeight = FontWeight.ExtraBold, color = Color(0xFF1565C0))
+                                    }
                                 }
                             }
                         }
@@ -308,7 +426,7 @@ fun ProductReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
     }
 
     ReportLayout(
-        title = "Product Performance",
+        title = stringResource(R.string.product_stats),
         viewModel = viewModel,
         onBack = onBack,
         data = filtered
@@ -323,16 +441,16 @@ fun ProductReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                         }
                         Spacer(Modifier.height(12.dp))
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                            SummaryStatSmall("Arrivals", "${item.totalArrivals}")
-                            SummaryStatSmall("Sold", "${item.totalSold}")
-                            SummaryStatSmall("Stock", "${item.currentStock}", Color.Red)
+                            SummaryStatSmall(stringResource(R.string.arrivals), Formatter.formatWeight(item.totalArrivals))
+                            SummaryStatSmall(stringResource(R.string.sold), Formatter.formatWeight(item.totalSold))
+                            SummaryStatSmall(stringResource(R.string.stock_label), Formatter.formatWeight(item.currentStock), Color.Red)
                         }
                         Spacer(Modifier.height(8.dp))
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                            SummaryStatSmall("Avg Buy", "₹${String.format("%.1f", item.avgPurchaseRate)}")
-                            SummaryStatSmall("Avg Sale", "₹${String.format("%.1f", item.avgSaleRate)}")
+                            SummaryStatSmall(stringResource(R.string.avg_buy), "₹${Formatter.formatCurrency(item.avgPurchaseRate)}")
+                            SummaryStatSmall(stringResource(R.string.avg_sale), "₹${Formatter.formatCurrency(item.avgSaleRate)}")
                             val profit = item.avgSaleRate - item.avgPurchaseRate
-                            SummaryStatSmall("Margin", "₹${String.format("%.1f", profit)}", Color(0xFF1565C0))
+                            SummaryStatSmall(stringResource(R.string.margin), "₹${Formatter.formatCurrency(profit)}", Color(0xFF1565C0))
                         }
                     }
                 }
@@ -352,14 +470,14 @@ fun OutstandingAgingScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
     }
 
     ReportLayout(
-        title = "Outstanding & Aging",
+        title = stringResource(R.string.pending_aging),
         viewModel = viewModel,
         onBack = onBack,
         data = filtered
     ) { padding ->
         Column(Modifier.padding(padding)) {
             val totalPending = filtered.sumOf { it.pendingAmount }
-            SummaryReportHeader("Total Pending", totalPending, "Average Age", filtered.map { it.daysPending }.average().takeIf { !it.isNaN() } ?: 0.0)
+            SummaryReportHeader(stringResource(R.string.total_pending), totalPending, stringResource(R.string.avg_age), filtered.map { it.daysPending }.average().takeIf { !it.isNaN() } ?: 0.0)
             
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(filtered) { item ->
@@ -369,17 +487,17 @@ fun OutstandingAgingScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                                 Text(item.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 Text(item.type, fontSize = 10.sp, color = if (item.type == "BUYER") Color(0xFF1565C0) else Color(0xFFD97706))
                                 if (item.lastPaymentDate != null) {
-                                    Text("Last Pmt: ${formatDate(item.lastPaymentDate)}", fontSize = 11.sp, color = Color.Gray)
+                                    Text("${stringResource(R.string.last_pmt)}: ${formatDate(item.lastPaymentDate)}", fontSize = 11.sp, color = Color.Gray)
                                 }
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text("₹${String.format("%.0f", item.pendingAmount)}", fontWeight = FontWeight.Black, color = Color.Red, fontSize = 18.sp)
+                                Text("₹${Formatter.formatCurrency(item.pendingAmount)}", fontWeight = FontWeight.Black, color = Color.Red, fontSize = 18.sp)
                                 val ageColor = when {
                                     item.daysPending > 30 -> Color.Red
                                     item.daysPending > 7 -> Color(0xFFD97706)
                                     else -> Color(0xFF2E7D32)
                                 }
-                                Text("${item.daysPending} days old", fontSize = 12.sp, color = ageColor, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.days_old, item.daysPending), fontSize = 12.sp, color = ageColor, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -396,21 +514,20 @@ fun CommissionReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
     
     val filtered = remember(data, state.searchQuery) {
         data.filter { 
-            it.buyerName.contains(state.searchQuery, true) || 
             it.farmerName.contains(state.searchQuery, true) ||
             it.productName.contains(state.searchQuery, true)
         }
     }
 
     ReportLayout(
-        title = "Commission Earnings",
+        title = stringResource(R.string.commission),
         viewModel = viewModel,
         onBack = onBack,
         data = filtered
     ) { padding ->
         Column(Modifier.padding(padding)) {
             val totalCommission = filtered.sumOf { it.commissionAmount }
-            SummaryReportHeader("Total Earnings", totalCommission, "Records", filtered.size.toDouble())
+            SummaryReportHeader(stringResource(R.string.earned_amt, ""), totalCommission, "Records", filtered.size.toDouble())
             
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(filtered) { item ->
@@ -418,8 +535,9 @@ fun CommissionReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                         Column(Modifier.padding(16.dp)) {
                             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                                 Column {
-                                    Text("Commission Earned", fontSize = 12.sp, color = Color.Gray)
-                                    Text("₹${String.format("%.2f", item.commissionAmount)}", fontWeight = FontWeight.Black, color = Color(0xFFD97706), fontSize = 20.sp)
+                                    Text(stringResource(R.string.commission_earned_label), fontSize = 12.sp, color = Color.Gray)
+                                    Text("₹${Formatter.formatCurrency(item.commissionAmount)}", fontWeight = FontWeight.Black, color = Color(0xFFD97706), fontSize = 20.sp)
+                                    Text(item.farmerName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 }
                                 Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray)
                             }
@@ -428,14 +546,14 @@ fun CommissionReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                             
                             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                                 Column(Modifier.weight(1f)) {
-                                    LabelValueText("Buyer Name", item.buyerName)
+                                    LabelValueText(stringResource(R.string.item_category), "${item.productName} / ${item.category}")
                                     Spacer(Modifier.height(8.dp))
-                                    LabelValueText("Farmer Name", item.farmerName)
+                                    LabelValueText(stringResource(R.string.grade_label), item.grade)
                                 }
                                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                                    LabelValueText("Product / Grade", "${item.productName} (${item.grade})", Alignment.End)
+                                    LabelValueText(stringResource(R.string.net_total_qty), "${Formatter.formatWeight(item.netQuantity)} / ${Formatter.formatWeight(item.quantity)}", Alignment.End)
                                     Spacer(Modifier.height(8.dp))
-                                    LabelValueText("Qty", "${item.quantity} KG", Alignment.End)
+                                    LabelValueText(stringResource(R.string.rate), "₹${Formatter.formatCurrency(item.rate)}", Alignment.End)
                                 }
                             }
                             
@@ -451,16 +569,16 @@ fun CommissionReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column {
-                                        Text("Sale Amount", fontSize = 10.sp, color = Color.Gray)
-                                        Text("₹${String.format("%.2f", item.saleAmount)}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.gross_amount), fontSize = 10.sp, color = Color.Gray)
+                                        Text("₹${Formatter.formatCurrency(item.grossAmount)}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                     }
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text("Comm. %", fontSize = 10.sp, color = Color.Gray)
-                                        Text("${String.format("%.1f", item.commissionPercent)}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                                        Text("${Formatter.formatWeight(item.commissionPercent)}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                                     }
                                     Column(horizontalAlignment = Alignment.End) {
-                                        Text("Comm. Earned", fontSize = 10.sp, color = Color.Gray)
-                                        Text("₹${String.format("%.2f", item.commissionAmount)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706))
+                                        Text(stringResource(R.string.comm_amount), fontSize = 10.sp, color = Color.Gray)
+                                        Text("₹${Formatter.formatCurrency(item.commissionAmount)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706))
                                     }
                                 }
                             }
@@ -510,8 +628,8 @@ fun PaymentReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                                 Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text("₹${String.format("%.0f", item.amount)}", fontWeight = FontWeight.Black, color = Color(0xFF2E7D32), fontSize = 18.sp)
-                                Text("Bal: ₹${String.format("%.0f", item.remainingBalance)}", fontSize = 11.sp, color = Color.Gray)
+                                Text("₹${Formatter.formatCurrency(item.amount)}", fontWeight = FontWeight.Black, color = Color(0xFF2E7D32), fontSize = 18.sp)
+                                Text("Bal: ₹${Formatter.formatCurrency(item.remainingBalance)}", fontSize = 11.sp, color = Color.Gray)
                             }
                         }
                     }
@@ -549,13 +667,15 @@ fun SummaryReportHeader(label1: String, val1: Double, label2: String, val2: Doub
         Row(Modifier.padding(16.dp).fillMaxWidth(), Arrangement.SpaceBetween) {
             Column {
                 Text(label1, color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
-                Text("₹${String.format("%.0f", val1)}", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                Text("₹${Formatter.formatCurrency(val1)}", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(label2, color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
-                val displayVal = if (label2.contains("Age")) String.format("%.0f Days", val2) 
-                                 else if (label2.contains("Records") || label2.contains("Count")) String.format("%.0f", val2)
-                                 else "₹${String.format("%.0f", val2)}"
+                val displayVal = if (label2.contains("Age") || label2.contains("రోజులు") || label2.contains("दिन") || label2.contains("நாட்கள்") || label2.contains("ದಿನಗಳು")) 
+                                    "${Formatter.formatWeight(val2)} Days" 
+                                 else if (label2.contains("Records") || label2.contains("Count") || label2.contains("నమోదులు") || label2.contains("ದಾಖಲೆಗಳು")) 
+                                    Formatter.formatWeight(val2)
+                                 else "₹${Formatter.formatCurrency(val2)}"
                 Text(displayVal, color = Color(0xFFFFEB3B), fontSize = 18.sp, fontWeight = FontWeight.Black)
             }
         }

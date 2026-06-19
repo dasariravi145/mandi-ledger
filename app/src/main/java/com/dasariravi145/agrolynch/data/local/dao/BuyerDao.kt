@@ -12,6 +12,9 @@ interface BuyerDao {
     @Query("SELECT * FROM buyers WHERE id = :id")
     suspend fun getBuyerById(id: String): BuyerEntity?
 
+    @Query("SELECT * FROM buyers")
+    suspend fun getBuyersList(): List<BuyerEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBuyer(buyer: BuyerEntity)
 

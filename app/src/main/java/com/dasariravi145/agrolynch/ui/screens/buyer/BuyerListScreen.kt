@@ -12,18 +12,22 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.BuyerEntity
+import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BuyerListScreen(
     viewModel: BuyerViewModel,
+    isPremium: Boolean = false,
+    onUpgradeClick: () -> Unit = {},
     onAddClick: () -> Unit,
     onBuyerClick: (String) -> Unit,
     onBackClick: () -> Unit
@@ -31,6 +35,8 @@ fun BuyerListScreen(
     Timber.d("BuyerListScreen: Initializing...")
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val buyers by viewModel.filteredBuyers.collectAsStateWithLifecycle()
+
+    var showPremiumDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -87,19 +93,42 @@ fun BuyerListScreen(
                         items = buyers,
                         key = { it.id }
                     ) { buyer ->
-                        BuyerItem(buyer = buyer, onClick = { 
-                            Timber.d("BuyerListScreen: Buyer clicked: ${buyer.id}")
-                            onBuyerClick(buyer.id) 
-                        })
+                        BuyerItem(
+                            buyer = buyer,
+                            isPremium = isPremium,
+                            onPremiumRequired = { showPremiumDialog = true },
+                            onClick = { 
+                                Timber.d("BuyerListScreen: Buyer clicked: ${buyer.id}")
+                                onBuyerClick(buyer.id) 
+                            }
+                        )
                     }
                 }
             }
         }
     }
+
+    if (showPremiumDialog) {
+        PremiumFeatureLockedDialog(
+            title = "Premium Feature",
+            message = "Upgrade to Premium to instantly call and chat with Farmers, Buyers & Traders.",
+            onDismiss = { showPremiumDialog = false },
+            onUpgradeClick = {
+                showPremiumDialog = false
+                onUpgradeClick()
+            }
+        )
+    }
 }
 
 @Composable
-fun BuyerItem(buyer: BuyerEntity, onClick: () -> Unit) {
+fun BuyerItem(
+    buyer: BuyerEntity,
+    isPremium: Boolean,
+    onPremiumRequired: () -> Unit,
+    onClick: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -124,12 +153,52 @@ fun BuyerItem(buyer: BuyerEntity, onClick: () -> Unit) {
                     Text(text = "GST: ${buyer.gstNumber}", fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary)
                 }
             }
-            Text(
-                text = buyer.mobileNumber,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary
-            )
+            
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = buyer.mobileNumber,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    IconButton(
+                        onClick = { 
+                            if (isPremium) {
+                                com.dasariravi145.agrolynch.util.CommunicationUtils.makeCall(context, buyer.mobileNumber)
+                            } else {
+                                onPremiumRequired()
+                            }
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Call,
+                            contentDescription = "Call",
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = { 
+                            if (isPremium) {
+                                com.dasariravi145.agrolynch.util.CommunicationUtils.openWhatsApp(context, buyer.mobileNumber)
+                            } else {
+                                onPremiumRequired()
+                            }
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Chat,
+                            contentDescription = "WhatsApp",
+                            tint = Color(0xFF25D366),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }

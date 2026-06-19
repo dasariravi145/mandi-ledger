@@ -9,7 +9,7 @@ import com.dasariravi145.agrolynch.data.local.dao.PaymentDao
 import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import com.dasariravi145.agrolynch.data.local.entity.PaymentEntity
 import com.dasariravi145.agrolynch.domain.repository.PaymentRepository
-import com.dasariravi145.agrolynch.util.PdfGenerator
+import com.dasariravi145.agrolynch.util.pdf.TemplateInvoicePdfService
 import com.dasariravi145.agrolynch.util.Resource
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -26,6 +26,7 @@ class PaymentRepositoryImpl @Inject constructor(
     private val database: AgroLynchDatabase,
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth,
+    private val pdfService: TemplateInvoicePdfService,
     @ApplicationContext private val context: Context
 ) : PaymentRepository {
 
@@ -79,8 +80,21 @@ class PaymentRepositoryImpl @Inject constructor(
                     repositoryScope.launch {
                         try {
                             val batch = firestore.batch()
-                            batch.set(firestore.collection("users").document(uid).collection("payments").document(updatedPayment.id), updatedPayment)
-                            batch.set(firestore.collection("users").document(uid).collection("farmers").document(updatedFarmer.id), updatedFarmer)
+                            
+                            val paymentMap = updatedPayment.javaClass.declaredFields.associate { field ->
+                                field.isAccessible = true
+                                field.name to field.get(updatedPayment)
+                            }.toMutableMap()
+                            paymentMap["ownerUserId"] = uid
+                            
+                            val farmerMap = updatedFarmer.javaClass.declaredFields.associate { field ->
+                                field.isAccessible = true
+                                field.name to field.get(updatedFarmer)
+                            }.toMutableMap()
+                            farmerMap["ownerUserId"] = uid
+
+                            batch.set(firestore.collection("users").document(uid).collection("payments").document(updatedPayment.id), paymentMap)
+                            batch.set(firestore.collection("users").document(uid).collection("farmers").document(updatedFarmer.id), farmerMap)
                             batch.commit().await()
                             paymentDao.markAsSynced(updatedPayment.id)
                             farmerDao.markAsSynced(updatedFarmer.id)
@@ -109,8 +123,21 @@ class PaymentRepositoryImpl @Inject constructor(
                     repositoryScope.launch {
                         try {
                             val batch = firestore.batch()
-                            batch.set(firestore.collection("users").document(uid).collection("payments").document(updatedPayment.id), updatedPayment)
-                            batch.set(firestore.collection("users").document(uid).collection("buyers").document(updatedBuyer.id), updatedBuyer)
+                            
+                            val paymentMap = updatedPayment.javaClass.declaredFields.associate { field ->
+                                field.isAccessible = true
+                                field.name to field.get(updatedPayment)
+                            }.toMutableMap()
+                            paymentMap["ownerUserId"] = uid
+                            
+                            val buyerMap = updatedBuyer.javaClass.declaredFields.associate { field ->
+                                field.isAccessible = true
+                                field.name to field.get(updatedBuyer)
+                            }.toMutableMap()
+                            buyerMap["ownerUserId"] = uid
+
+                            batch.set(firestore.collection("users").document(uid).collection("payments").document(updatedPayment.id), paymentMap)
+                            batch.set(firestore.collection("users").document(uid).collection("buyers").document(updatedBuyer.id), buyerMap)
                             batch.commit().await()
                             paymentDao.markAsSynced(updatedPayment.id)
                             buyerDao.markAsSynced(updatedBuyer.id)
@@ -121,7 +148,7 @@ class PaymentRepositoryImpl @Inject constructor(
             }
 
             // Generate Payment PDF with Branding
-            PdfGenerator.generatePaymentReceiptPdf(context, profile, finalPayment)
+            pdfService.generatePaymentReceiptPdf(context, profile, finalPayment, finalPayment.partyType == "Farmer")
 
             Resource.Success(Unit)
         } catch (e: Exception) {
@@ -136,7 +163,12 @@ class PaymentRepositoryImpl @Inject constructor(
             userId?.let { uid ->
                 repositoryScope.launch {
                     try {
-                        firestore.collection("users").document(uid).collection("payments").document(payment.id).set(updated).await()
+                        val firestoreData = updated.javaClass.declaredFields.associate { field ->
+                            field.isAccessible = true
+                            field.name to field.get(updated)
+                        }.toMutableMap()
+                        firestoreData["ownerUserId"] = uid
+                        firestore.collection("users").document(uid).collection("payments").document(payment.id).set(firestoreData).await()
                         paymentDao.markAsSynced(payment.id)
                     } catch (e: Exception) { }
                 }
@@ -168,7 +200,12 @@ class PaymentRepositoryImpl @Inject constructor(
         return try {
             val unsynced = paymentDao.getUnsyncedPayments()
             for (payment in unsynced) {
-                firestore.collection("users").document(uid).collection("payments").document(payment.id).set(payment).await()
+                val firestoreData = payment.javaClass.declaredFields.associate { field ->
+                    field.isAccessible = true
+                    field.name to field.get(payment)
+                }.toMutableMap()
+                firestoreData["ownerUserId"] = uid
+                firestore.collection("users").document(uid).collection("payments").document(payment.id).set(firestoreData).await()
                 paymentDao.markAsSynced(payment.id)
             }
             Resource.Success(Unit)

@@ -15,12 +15,11 @@ class NotificationHelper(private val context: Context) {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     companion object {
-        const val CHANNEL_DUE_REMINDERS = "due_reminders"
         const val CHANNEL_DAILY_SUMMARY = "daily_summary"
         const val CHANNEL_PAYMENT_ALERTS = "payment_alerts"
         
         const val NOTIFICATION_ID_SUMMARY = 1001
-        const val NOTIFICATION_ID_DUE = 1002
+        const val NOTIFICATION_ID_PAYMENT = 1002
     }
 
     init {
@@ -29,17 +28,9 @@ class NotificationHelper(private val context: Context) {
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val dueChannel = NotificationChannel(
-                CHANNEL_DUE_REMINDERS,
-                "Due Reminders / బాకీ రిమైండర్లు",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Reminders for pending payments and overdue accounts"
-            }
-
             val summaryChannel = NotificationChannel(
                 CHANNEL_DAILY_SUMMARY,
-                "Daily Summary / రోజువారీ సారాంశం",
+                context.getString(R.string.daily_summary),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Daily business performance and expense summary"
@@ -47,14 +38,14 @@ class NotificationHelper(private val context: Context) {
 
             val paymentChannel = NotificationChannel(
                 CHANNEL_PAYMENT_ALERTS,
-                "Payment Alerts / చెల్లింపు హెచ్చరికలు",
+                context.getString(R.string.payment_alerts),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Alerts for new payments and receipts"
             }
 
             notificationManager.createNotificationChannels(
-                listOf(dueChannel, summaryChannel, paymentChannel)
+                listOf(summaryChannel, paymentChannel)
             )
         }
     }

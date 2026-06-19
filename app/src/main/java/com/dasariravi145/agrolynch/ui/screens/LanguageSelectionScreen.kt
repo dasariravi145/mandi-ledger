@@ -55,7 +55,7 @@ fun LanguageSelectionScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "మీ భాషను ఎంచుకోండి / अपनी भाषा चुनें / தமிழ் / ಕನ್ನಡ",
+                stringResource(R.string.choose_language),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

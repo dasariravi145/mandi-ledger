@@ -46,6 +46,7 @@ object LanguageManager {
     }
 
     fun applyLocale(context: Context, languageCode: String): Context {
+        timber.log.Timber.d("LanguageManager: Selected Language: $languageCode")
         val locale = Locale(languageCode)
         Locale.setDefault(locale)
         

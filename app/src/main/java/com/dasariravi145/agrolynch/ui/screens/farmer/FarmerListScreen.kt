@@ -12,18 +12,22 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.FarmerEntity
+import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FarmerListScreen(
     viewModel: FarmerViewModel,
+    isPremium: Boolean = false,
+    onUpgradeClick: () -> Unit = {},
     onAddClick: () -> Unit,
     onFarmerClick: (String) -> Unit,
     onBackClick: () -> Unit
@@ -31,6 +35,8 @@ fun FarmerListScreen(
     Timber.d("FarmerListScreen: Initializing...")
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val farmers by viewModel.filteredFarmers.collectAsStateWithLifecycle()
+
+    var showPremiumDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -87,19 +93,42 @@ fun FarmerListScreen(
                         items = farmers,
                         key = { it.id }
                     ) { farmer ->
-                        FarmerItem(farmer = farmer, onClick = { 
-                            Timber.d("FarmerListScreen: Farmer clicked: ${farmer.id}")
-                            onFarmerClick(farmer.id) 
-                        })
+                        FarmerItem(
+                            farmer = farmer,
+                            isPremium = isPremium,
+                            onPremiumRequired = { showPremiumDialog = true },
+                            onClick = { 
+                                Timber.d("FarmerListScreen: Farmer clicked: ${farmer.id}")
+                                onFarmerClick(farmer.id) 
+                            }
+                        )
                     }
                 }
             }
         }
     }
+
+    if (showPremiumDialog) {
+        PremiumFeatureLockedDialog(
+            title = "Premium Feature",
+            message = "Upgrade to Premium to instantly call and chat with Farmers, Buyers & Traders.",
+            onDismiss = { showPremiumDialog = false },
+            onUpgradeClick = {
+                showPremiumDialog = false
+                onUpgradeClick()
+            }
+        )
+    }
 }
 
 @Composable
-fun FarmerItem(farmer: FarmerEntity, onClick: () -> Unit) {
+fun FarmerItem(
+    farmer: FarmerEntity,
+    isPremium: Boolean,
+    onPremiumRequired: () -> Unit,
+    onClick: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -121,12 +150,52 @@ fun FarmerItem(farmer: FarmerEntity, onClick: () -> Unit) {
                     Text(text = farmer.village, fontSize = 14.sp, color = MaterialTheme.colorScheme.secondary)
                 }
             }
-            Text(
-                text = farmer.mobileNumber,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary
-            )
+            
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = farmer.mobileNumber,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    IconButton(
+                        onClick = { 
+                            if (isPremium) {
+                                com.dasariravi145.agrolynch.util.CommunicationUtils.makeCall(context, farmer.mobileNumber)
+                            } else {
+                                onPremiumRequired()
+                            }
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Call,
+                            contentDescription = "Call",
+                            tint = Color(0xFF2E7D32), // Professional Green
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = { 
+                            if (isPremium) {
+                                com.dasariravi145.agrolynch.util.CommunicationUtils.openWhatsApp(context, farmer.mobileNumber)
+                            } else {
+                                onPremiumRequired()
+                            }
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Chat,
+                            contentDescription = "WhatsApp",
+                            tint = Color(0xFF25D366), // WhatsApp Green
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }

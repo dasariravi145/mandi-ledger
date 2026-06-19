@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,13 +15,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.FarmerEntity
+import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditFarmerScreen(
     viewModel: FarmerViewModel,
+    isPremium: Boolean = false,
+    onUpgradeClick: () -> Unit = {},
     farmerId: String? = null,
     onBack: () -> Unit
 ) {
@@ -33,6 +40,7 @@ fun AddEditFarmerScreen(
     var notes by remember { mutableStateOf("") }
     
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showPremiumDialog by remember { mutableStateOf(false) }
     var hasInitialized by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -59,7 +67,7 @@ fun AddEditFarmerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (farmerId == null) "Add Farmer / జోడించండి" else "Edit Farmer / సవరించండి") },
+                title = { Text(if (farmerId == null) stringResource(R.string.add_farmer) else stringResource(R.string.edit_farmer)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -85,33 +93,61 @@ fun AddEditFarmerScreen(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Farmer Name / రైతు పేరు") },
+                label = { Text(stringResource(R.string.farmer_name_label)) },
                 modifier = Modifier.fillMaxWidth()
             )
 
-            OutlinedTextField(
-                value = mobile,
-                onValueChange = { 
-                    if (it.length <= 10 && it.all { char -> char.isDigit() }) {
-                        mobile = it 
-                    }
-                },
-                label = { Text("Mobile Number / మొబైల్ సంఖ్య") },
+            val context = androidx.compose.ui.platform.LocalContext.current
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = mobile,
+                    onValueChange = { 
+                        if (it.length <= 10 && it.all { char -> char.isDigit() }) {
+                            mobile = it 
+                        }
+                    },
+                    label = { Text(stringResource(R.string.mobile_number)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                )
+                
+                if (farmerId != null && mobile.length == 10) {
+                    IconButton(onClick = { 
+                        if (isPremium) {
+                            com.dasariravi145.agrolynch.util.CommunicationUtils.makeCall(context, mobile)
+                        } else {
+                            showPremiumDialog = true
+                        }
+                    }) {
+                        Icon(Icons.Default.Call, contentDescription = "Call", tint = Color(0xFF2E7D32))
+                    }
+                    IconButton(onClick = { 
+                        if (isPremium) {
+                            com.dasariravi145.agrolynch.util.CommunicationUtils.openWhatsApp(context, mobile)
+                        } else {
+                            showPremiumDialog = true
+                        }
+                    }) {
+                        Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = Color(0xFF25D366))
+                    }
+                }
+            }
 
             OutlinedTextField(
                 value = village,
                 onValueChange = { village = it },
-                label = { Text("Village / గ్రామం") },
+                label = { Text(stringResource(R.string.village)) },
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
-                label = { Text("Notes / గమనికలు") },
+                label = { Text(stringResource(R.string.notes)) },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -140,7 +176,7 @@ fun AddEditFarmerScreen(
                 if (state.isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
                 } else {
-                    Text("Save Farmer / సేవ్ చేయండి")
+                    Text(stringResource(R.string.save_farmer))
                 }
             }
         }
@@ -165,6 +201,18 @@ fun AddEditFarmerScreen(
                     TextButton(onClick = { showDeleteDialog = false }) {
                         Text("Cancel")
                     }
+                }
+            )
+        }
+
+        if (showPremiumDialog) {
+            PremiumFeatureLockedDialog(
+                title = "Premium Feature",
+                message = "Upgrade to Premium to instantly call and chat with Farmers, Buyers & Traders.",
+                onDismiss = { showPremiumDialog = false },
+                onUpgradeClick = {
+                    showPremiumDialog = false
+                    onUpgradeClick()
                 }
             )
         }

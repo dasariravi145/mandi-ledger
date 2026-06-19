@@ -23,7 +23,8 @@ data class SaleItemEntity(
     val productName: String = "",
     val productCategory: String = "",
     val grade: String = "",
-    val quantitySold: Double = 0.0,
+    val quantitySold: Double = 0.0, // Always stores Net KG
+    val inputQuantity: Double = 0.0, // Stores user entered value (Ton/Boxes/KG)
     val unit: String = "KG",
     val purchaseRate: Double = 0.0,
     val saleRate: Double = 0.0,

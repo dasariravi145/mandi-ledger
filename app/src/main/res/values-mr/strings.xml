@@ -210,4 +210,46 @@
     <string name="enter_quantity">कृपया प्रमाण टाका</string>
     <string name="select_buyer">कृपया खरेदीदार निवडा</string>
     <string name="mobile_number_error">कृपया वैध १०-अंकी मोबाईल नंबर प्रविष्ट करा</string>
+    <string name="show_premium_offers">Premium ऑफर दाखवा</string>
+    <string name="show_premium_offers_sub">Premium वैशिष्ट्यांबद्दल सूचना मिळवा</string>
+    <string name="dont_show_again">पुन्हा दाखवू नका</string>
+
+    <!-- New Keys -->
+    <string name="calculation_summary">गणनेचा सारांश</string>
+    <string name="business_analytics">व्यवसाय विश्लेषण</string>
+    <string name="sales_trend_7d">विक्री कल (7 दिवस)</string>
+    <string name="top_farmers">प्रमुख शेतकरी</string>
+    <string name="top_buyers">प्रमुख खरेदीदार</string>
+    <string name="estimated_profit_trend">अंदाजित नफा कल</string>
+    <string name="receipt_preview">पावती पूर्वावलोकन</string>
+    <string name="share_pdf">PDF शेअर करा (WhatsApp)</string>
+    <string name="grand_total">एकूण रक्कम</string>
+    <string name="branding_assets">ब्रँडिंग</string>
+    <string name="business_details">व्यवसाय तपशील</string>
+    <string name="bill_settings">बिल सेटिंग्ज</string>
+    <string name="invalid_pin">चुकीचा PIN</string>
+    <string name="daily_business_summary">दैनिक व्यवसाय सारांश</string>
+    <string name="profile_updated_success">प्रोफाइल यशस्वीरित्या अपडेट झाले!</string>
+    <string name="auth_failed">प्रमाणीकरण अयशस्वी</string>
+    <string name="biometric_login">बायोमेट्रिक लॉगिन</string>
+    <string name="gst_number_label">GST क्रमांक (पर्यायी)</string>
+    <string name="ad_free_experience">जाहिरातमुक्त अनुभव</string>
+    <string name="unlimited_ocr_scan">अमर्यादित OCR बिल स्कॅनिंग</string>
+    <string name="cloud_backup_restore">क्लाउड बॅकअप</string>
+    <string name="export_reports">PDF आणि Excel अहवाल निर्यात करा</string>
+    <string name="payment_details">पेमेंट तपशील</string>
+    <string name="local_backup_saved">बॅकअप सेव्ह झाला!</string>
+    <string name="cloud_backup_success">क्लाउड बॅकअप यशस्वी!</string>
+    <string name="daily_summary">दैनिक सारांश</string>
+    <string name="payment_alerts">पेमेंट अलर्ट</string>
+    <string name="buyer_name_label">खरेदीदाराचे नाव</string>
+    <string name="verify_otp">OTP सत्यापित करा</string>
+    <string name="otp">OTP</string>
+    <string name="enter_otp">6-अंकी कोड टाका</string>
+    <string name="verify">सत्यापित करा</string>
+    <string name="enter_pin">तुमचा PIN टाका</string>
+    <string name="edit_farmer">शेतकरी संपादित करा</string>
+    <string name="save_farmer">शेतकरी सेव्ह करा</string>
+    <string name="edit_buyer">खरेदीदार संपादित करा</string>
+    <string name="save_buyer">खरेदीदार सेव्ह करा</string>
 </resources>

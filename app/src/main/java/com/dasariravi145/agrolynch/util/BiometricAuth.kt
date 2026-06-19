@@ -9,6 +9,10 @@ import androidx.fragment.app.FragmentActivity
 object BiometricAuth {
     fun showBiometricPrompt(
         activity: FragmentActivity,
+        title: String,
+        subtitle: String,
+        negativeButtonText: String,
+        errorAuthFailed: String,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -27,14 +31,14 @@ object BiometricAuth {
 
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
-                    onError("Authentication failed / ప్రామాణీకరణ విఫలమైంది")
+                    onError(errorAuthFailed)
                 }
             })
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Biometric Login / బయోమెట్రిక్ లాగిన్")
-            .setSubtitle("Log in using your biometric credential")
-            .setNegativeButtonText("Use PIN")
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setNegativeButtonText(negativeButtonText)
             .build()
 
         biometricPrompt.authenticate(promptInfo)

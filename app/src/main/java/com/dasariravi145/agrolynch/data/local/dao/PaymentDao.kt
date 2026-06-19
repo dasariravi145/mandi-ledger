@@ -9,6 +9,9 @@ interface PaymentDao {
     @Query("SELECT * FROM payments WHERE isDeleted = 0 ORDER BY date DESC")
     fun getAllPayments(): Flow<List<PaymentEntity>>
 
+    @Query("SELECT * FROM payments")
+    suspend fun getAllPaymentsList(): List<PaymentEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPayment(payment: PaymentEntity)
 

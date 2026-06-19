@@ -17,6 +17,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dasariravi145.agrolynch.R
+import com.dasariravi145.agrolynch.ui.components.AuthLogo
 
 @Composable
 fun LoginScreen(
@@ -40,31 +41,23 @@ fun LoginScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            painter = painterResource(id = R.drawable.ic_launcher_foreground),
-            contentDescription = null,
-            modifier = Modifier.size(100.dp),
-            tint = Color(0xFF16A34A)
-        )
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        Text(
-            text = stringResource(R.string.welcome_to_mandi_ledger),
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
-        )
+        AuthLogo()
         
         Spacer(modifier = Modifier.height(48.dp))
         
         OutlinedTextField(
             value = phoneNumber,
-            onValueChange = { if (it.length <= 10) phoneNumber = it },
+            onValueChange = { 
+                if (it.all { char -> char.isDigit() } && it.length <= 10) {
+                    phoneNumber = it 
+                }
+            },
             label = { Text(stringResource(R.string.mobile_number)) },
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             leadingIcon = { Text("+91 ", modifier = Modifier.padding(start = 12.dp)) },
-            shape = MaterialTheme.shapes.medium
+            shape = MaterialTheme.shapes.medium,
+            enabled = !state.isLoading
         )
         
         if (state.error != null) {
@@ -72,6 +65,16 @@ fun LoginScreen(
                 text = state.error!!,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        if (state.isLoading && state.loadingMessage != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = state.loadingMessage!!,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
         
