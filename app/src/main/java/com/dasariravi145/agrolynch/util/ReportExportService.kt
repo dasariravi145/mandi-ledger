@@ -52,30 +52,53 @@ class ReportExportService @Inject constructor() {
 
     fun exportToPdf(context: Context, profile: CompanyProfileEntity, reportName: String, data: List<Any>): File? {
         return try {
+            val range = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).let { df ->
+                val now = System.currentTimeMillis()
+                "Generated on ${df.format(Date(now))}"
+            }
+
+            val firstItem = data.firstOrNull()
+            Timber.d("REPORT_EXPORT_PDF: name=$reportName, items=${data.size}, firstItemType=${firstItem?.javaClass?.simpleName}")
+
             when {
-                reportName.contains("Farmer", true) -> {
+                firstItem is DetailedArrivalReportModel || reportName.contains("Farmer", true) -> {
                     @Suppress("UNCHECKED_CAST")
-                    PdfGenerator.generateFarmerReport(context, profile, FarmerEntity(), data as List<DetailedArrivalReportModel>, "Selected Range")
+                    PdfGenerator.generateFarmerReport(context, profile, FarmerEntity(), data as List<DetailedArrivalReportModel>, range)
                 }
-                reportName.contains("Buyer", true) || reportName.contains("Sales", true) -> {
+                firstItem is DetailedSaleReportModel || reportName.contains("Buyer", true) || reportName.contains("Sales", true) -> {
                     @Suppress("UNCHECKED_CAST")
-                    PdfGenerator.generateBuyerReport(context, profile, BuyerEntity(), data as List<DetailedSaleReportModel>, "Selected Range")
+                    PdfGenerator.generateBuyerReport(context, profile, BuyerEntity(), data as List<DetailedSaleReportModel>, range)
                 }
-                reportName.contains("Commission", true) -> {
+                firstItem is CommissionReportModel || reportName.contains("Commission", true) -> {
                     @Suppress("UNCHECKED_CAST")
-                    PdfGenerator.generateCommissionReport(context, profile, data as List<CommissionReportModel>, "Selected Range")
+                    PdfGenerator.generateCommissionReport(context, profile, data as List<CommissionReportModel>, range)
                 }
-                reportName.contains("Payment", true) || reportName.contains("Expense", true) -> {
+                firstItem is PaymentReportModel || reportName.contains("Payment", true) || reportName.contains("Expense", true) -> {
                     @Suppress("UNCHECKED_CAST")
-                    PdfGenerator.generatePaymentReport(context, profile, data as List<PaymentReportModel>, "Selected Range")
+                    PdfGenerator.generatePaymentReport(context, profile, data as List<PaymentReportModel>, range)
+                }
+                firstItem is OutstandingAgingModel || reportName.contains("Pending", true) || reportName.contains("Aging", true) || reportName.contains("Outstanding", true) -> {
+                    @Suppress("UNCHECKED_CAST")
+                    PdfGenerator.generateOutstandingAgingReport(context, profile, data as List<OutstandingAgingModel>, range)
+                }
+                firstItem is ProductPerformanceModel || reportName.contains("Item", true) || reportName.contains("Product", true) || reportName.contains("Stats", true) -> {
+                    @Suppress("UNCHECKED_CAST")
+                    PdfGenerator.generateProductPerformanceReport(context, profile, data as List<ProductPerformanceModel>, range)
                 }
                 else -> {
-                    Timber.w("REPORT_EXPORT: Unknown report type for PDF: $reportName")
-                    null
+                    Timber.w("REPORT_EXPORT: Unknown report type for PDF: $reportName. Attempting generic export if possible.")
+                    // If we can't identify it and it's empty, we might just fail, but for Pending Payments we want it to work.
+                    // This is the fallback for when data is empty and name doesn't match English keywords.
+                    if (reportName.contains("బాకీ", true) || reportName.contains("विवरण", true)) {
+                         // Some common local keywords if needed, but the user wants Pending Payments fixed.
+                         PdfGenerator.generateOutstandingAgingReport(context, profile, emptyList(), range)
+                    } else {
+                        null
+                    }
                 }
             }
         } catch (e: Exception) {
-            Timber.e(e, "REPORT_EXPORT: PDF generation failed for $reportName")
+            Timber.e(e, "REPORT_EXPORT: PDF generation failed for $reportName. Error: ${e.message}")
             null
         }
     }
@@ -85,6 +108,8 @@ class ReportExportService @Inject constructor() {
         is DetailedArrivalReportModel -> listOf("Date", "Farmer", "Product", "Grade", "Qty", "Rate", "Gross", "Comm", "Net")
         is CommissionReportModel -> listOf("Date", "Farmer", "Product", "Category", "Grade", "Qty", "NetQty", "Rate", "GrossAmt", "CommAmt")
         is PaymentReportModel -> listOf("Date", "Party", "Type", "Mode", "Amount", "Balance", "Status")
+        is OutstandingAgingModel -> listOf("Name", "Type", "Pending Amount", "Last Payment Date", "Age Days")
+        is ProductPerformanceModel -> listOf("Item Name", "Grade", "Arrivals", "Sold", "Stock", "Avg Buy", "Avg Sale", "Margin")
         else -> listOf("Data")
     }
 
@@ -97,6 +122,8 @@ class ReportExportService @Inject constructor() {
         is DetailedArrivalReportModel -> listOf(formatDate(item.date), item.farmerName, item.productName, item.grade, "${Formatter.formatWeight(item.quantity)}${item.unit}", Formatter.formatCurrency(item.rate), Formatter.formatCurrency(item.grossAmount), Formatter.formatCurrency(item.commissionAmount), Formatter.formatCurrency(item.netAmount))
         is CommissionReportModel -> listOf(formatDate(item.date), item.farmerName, item.productName, item.category, item.grade, Formatter.formatWeight(item.quantity), Formatter.formatWeight(item.netQuantity), Formatter.formatCurrency(item.rate), Formatter.formatCurrency(item.grossAmount), Formatter.formatCurrency(item.commissionAmount))
         is PaymentReportModel -> listOf(formatDate(item.date), item.partyName, item.partyType, item.paymentMode, Formatter.formatCurrency(item.amount), Formatter.formatCurrency(item.remainingBalance), item.status)
+        is OutstandingAgingModel -> listOf(item.name, item.type, Formatter.formatCurrency(item.pendingAmount), item.lastPaymentDate?.let { formatDate(it) } ?: "-", item.daysPending.toString())
+        is ProductPerformanceModel -> listOf(item.productName, item.grade, Formatter.formatWeight(item.totalArrivals), Formatter.formatWeight(item.totalSold), Formatter.formatWeight(item.currentStock), Formatter.formatCurrency(item.avgPurchaseRate), Formatter.formatCurrency(item.avgSaleRate), Formatter.formatCurrency(item.avgSaleRate - item.avgPurchaseRate))
         else -> listOf(item.toString().replace(",", " "))
     }
 

@@ -23,10 +23,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.util.Constants
 import com.dasariravi145.agrolynch.util.Formatter
+import com.dasariravi145.agrolynch.util.findActivity
 import com.dasariravi145.agrolynch.data.local.entity.FarmerEntity
 import com.dasariravi145.agrolynch.data.local.entity.ProductEntity
 import java.io.File
@@ -54,10 +60,13 @@ fun NewArrivalScreen(
     ocrEmptyBoxWeight: Double = 0.0,
     ocrSpoilagePercent: Double = 0.0,
     ocrComm: Double = 5.0,
+    ocrLabor: Double = 0.0,
+    ocrTransport: Double = 0.0,
     ocrDeductions: String = "",
+    ocrAutoSave: Boolean = false,
+    ocrItems: String = "",
     onBack: () -> Unit,
-    onVoiceEntryClick: () -> Unit = {},
-    onScanBillClick: () -> Unit = {}
+    onVoiceEntryClick: () -> Unit = {}
 ) {
     val farmers by viewModel.farmers.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -81,7 +90,6 @@ fun NewArrivalScreen(
     var entryDate by remember { mutableStateOf(if (ocrDate > 0) ocrDate else System.currentTimeMillis()) }
     
     var selectedCategory by remember { mutableStateOf("Fruit") }
-    var selectedUnit by remember { mutableStateOf(if(ocrUnit.isNotEmpty()) ocrUnit else "KG") }
     
     LaunchedEffect(ocrDeductions) {
         if (ocrDeductions.isNotEmpty()) {
@@ -99,23 +107,51 @@ fun NewArrivalScreen(
     }
     
     var commissionInput by remember { mutableStateOf(Formatter.formatWeight(ocrComm)) }
-    var laborInput by remember { mutableStateOf("0") }
-    var transportInput by remember { mutableStateOf("0") }
+    var laborInput by remember { mutableStateOf(Formatter.formatWeight(ocrLabor)) }
+    var transportInput by remember { mutableStateOf(Formatter.formatWeight(ocrTransport)) }
     var packingInput by remember { mutableStateOf("0") }
-    var otherInput by remember { mutableStateOf("0") }
     
     // Multi-Grade Entry State
     var gradeEntries by remember { 
-        val initialQty = if (selectedUnit == "Boxes" && ocrWeightTon > 0) ocrWeightTon else ocrQty
-        mutableStateOf(listOf(ArrivalViewModel.GradeEntry(
-            grade = ocrGrade.ifEmpty { "Grade A" }, 
-            quantity = initialQty, 
-            boxCount = ocrNumBoxes,
-            avgGrossWeight = ocrEmptyBoxWeight,
-            spoilage = ocrSpoilagePercent,
-            rate = ocrRate,
-            unit = selectedUnit
-        )))
+        if (ocrItems.isNotEmpty()) {
+            val decoded = ocrItems.split(";").mapNotNull { itemStr ->
+                val parts = itemStr.split("|")
+                if (parts.size >= 6) {
+                    ArrivalViewModel.GradeEntry(
+                        grade = parts[1].ifEmpty { "Grade A" },
+                        quantity = parts[2].toDoubleOrNull() ?: 0.0,
+                        rate = parts[3].toDoubleOrNull() ?: 0.0,
+                        unit = parts[5],
+                        spoilage = if (parts.size >= 7) parts[6].toDoubleOrNull() ?: 0.0 else 0.0
+                    )
+                } else null
+            }
+            if (decoded.isNotEmpty()) {
+                mutableStateOf(decoded)
+            } else {
+                val initialQty = if (ocrUnit == "Boxes" && ocrWeightTon > 0) ocrWeightTon else ocrQty
+                mutableStateOf(listOf(ArrivalViewModel.GradeEntry(
+                    grade = ocrGrade.ifEmpty { "Grade A" }, 
+                    quantity = initialQty, 
+                    boxCount = ocrNumBoxes,
+                    avgGrossWeight = ocrEmptyBoxWeight,
+                    spoilage = ocrSpoilagePercent,
+                    rate = ocrRate,
+                    unit = ocrUnit
+                )))
+            }
+        } else {
+            val initialQty = if (ocrUnit == "Boxes" && ocrWeightTon > 0) ocrWeightTon else ocrQty
+            mutableStateOf(listOf(ArrivalViewModel.GradeEntry(
+                grade = ocrGrade.ifEmpty { "Grade A" }, 
+                quantity = initialQty, 
+                boxCount = ocrNumBoxes,
+                avgGrossWeight = ocrEmptyBoxWeight,
+                spoilage = ocrSpoilagePercent,
+                rate = ocrRate,
+                unit = ocrUnit
+            )))
+        }
     }
 
     LaunchedEffect(matchedProduct) {
@@ -126,10 +162,6 @@ fun NewArrivalScreen(
         }
     }
 
-    val totalNetQuantity by remember {
-        derivedStateOf { gradeEntries.sumOf { it.netQuantity } }
-    }
-    
     val totalGrossAmount by remember {
         derivedStateOf { gradeEntries.sumOf { it.grossAmount } }
     }
@@ -149,38 +181,90 @@ fun NewArrivalScreen(
     }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.get(0) ?: ""
+            if (spokenText.isNotEmpty()) {
+                val (parsedFarmer, parsedItem, parsedGrade, parsedUnit, parsedQty, parsedRate, parsedWaste, parsedEach) = parseVoiceInput(spokenText)
+                
+                var missingFields = mutableListOf<String>()
+                
+                if (parsedFarmer.isNotEmpty()) farmerName = parsedFarmer else missingFields.add("Farmer")
+                if (parsedItem.isNotEmpty()) viewModel.onProductQueryChange(parsedItem) else missingFields.add("Item")
+                
+                val currentGrade = parsedGrade.ifEmpty { "Grade A" }
+                val qtyValue = if (parsedEach > 0 && parsedQty > 0 && parsedUnit == "Boxes") (parsedQty * parsedEach) / 1000.0 else parsedQty
+                
+                gradeEntries = listOf(ArrivalViewModel.GradeEntry(
+                    grade = currentGrade,
+                    quantity = qtyValue,
+                    boxCount = if (parsedUnit == "Boxes") parsedQty.toInt() else 0,
+                    rate = parsedRate,
+                    spoilage = parsedWaste,
+                    unit = parsedUnit.ifEmpty { "KG" }
+                ))
+                
+                if (parsedRate <= 0) missingFields.add("Rate")
+                if (parsedQty <= 0) missingFields.add("Quantity")
+
+                scope.launch {
+                    if (missingFields.isEmpty()) {
+                        snackbarHostState.showSnackbar("Voice details filled. Please verify before saving.")
+                    } else {
+                        snackbarHostState.showSnackbar("Some details missing: ${missingFields.joinToString(", ")}. Please fill manually.")
+                    }
+                }
+            }
+        }
+    }
+
     val exportStatus by viewModel.exportStatus.collectAsState(initial = "")
     var pendingFileForAction by remember { mutableStateOf<File?>(null) }
 
-    LaunchedEffect(exportStatus) {
-        if (exportStatus.startsWith("SUCCESS:")) {
-            pendingFileForAction = File(exportStatus.removePrefix("SUCCESS:"))
+    // Voice Entry Enhanced State
+    var showLanguageSelector by remember { mutableStateOf(false) }
+    var parsedVoiceData by remember { mutableStateOf<ParsedArrivalVoiceData?>(null) }
+    
+    val voiceEntryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.get(0) ?: ""
+            if (spokenText.isNotEmpty()) {
+                parsedVoiceData = VoiceEntryParser.parse(spokenText)
+            }
         }
+    }
+
+    LaunchedEffect(exportStatus) {
+        // Removed auto-showing dialog logic
     }
 
     LaunchedEffect(Unit) {
         viewModel.saveSuccess.collect {
-            if (pendingFileForAction == null) {
-                // If PDF generation was too fast or too slow, we wait for it or just go back
-                // but usually we want to show the Print/Share dialog if it succeeded
-            }
+            android.widget.Toast.makeText(context, "Saved successfully", android.widget.Toast.LENGTH_SHORT).show()
             
             if (viewModel.adMobManager.shouldShowAds()) {
                 val activity = context as? android.app.Activity
                 if (activity != null) {
                     viewModel.adMobManager.showInterstitialAd(activity) {
-                        if (pendingFileForAction == null) onBack()
+                        onBack()
                     }
                 } else {
-                    if (pendingFileForAction == null) onBack()
+                    onBack()
                 }
             } else {
-                if (pendingFileForAction == null) onBack()
+                onBack()
             }
         }
     }
 
-    if (pendingFileForAction != null) {
+    if (false) { // Disabled Bill Generated Dialog
         AlertDialog(
             onDismissRequest = { 
                 pendingFileForAction = null
@@ -189,10 +273,25 @@ fun NewArrivalScreen(
             title = { Text("Bill Generated") },
             text = { Text("Would you like to Print or Share this bill?") },
             confirmButton = {
-                Button(onClick = { 
-                    com.dasariravi145.agrolynch.util.PdfGenerator.printPdf(context, pendingFileForAction!!)
-                    pendingFileForAction = null
-                    onBack()
+                Button(onClick = {
+                    val file = pendingFileForAction
+                    if (file != null) {
+                        val uri = com.dasariravi145.agrolynch.util.PdfGenerator.getUriFromFile(context, file)
+                        pendingFileForAction = null
+                        scope.launch {
+                            kotlinx.coroutines.delay(200)
+                            val activity = context.findActivity()
+                            if (activity != null) {
+                                android.util.Log.d("PRINT_DEBUG", "context=${context::class.java.name}, activity=${activity::class.java.name}")
+                                activity.runOnUiThread {
+                                    com.dasariravi145.agrolynch.util.PdfPrintHelper.print(activity, uri)
+                                }
+                            } else {
+                                android.widget.Toast.makeText(context, "Print requires active screen", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            onBack()
+                        }
+                    }
                 }) {
                     Icon(Icons.Default.Print, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -200,10 +299,14 @@ fun NewArrivalScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { 
-                    com.dasariravi145.agrolynch.util.PdfGenerator.sharePdf(context, pendingFileForAction!!)
-                    pendingFileForAction = null
-                    onBack()
+                TextButton(onClick = {
+                    val file = pendingFileForAction
+                    if (file != null) {
+                        val uri = com.dasariravi145.agrolynch.util.PdfGenerator.getUriFromFile(context, file)
+                        pendingFileForAction = null
+                        com.dasariravi145.agrolynch.util.PdfActionManager.sharePdf(context, uri)
+                        onBack()
+                    }
                 }) {
                     Icon(Icons.Default.Share, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -213,7 +316,73 @@ fun NewArrivalScreen(
         )
     }
 
+    if (showLanguageSelector) {
+        VoiceLanguageSelector(
+            onLanguageSelected = { lang ->
+                showLanguageSelector = false
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang.locale)
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak arrival details (e.g., Dinesh mango 5 ton rate 15)")
+                }
+                voiceEntryLauncher.launch(intent)
+            },
+            onDismiss = { showLanguageSelector = false }
+        )
+    }
+
+    parsedVoiceData?.let { data ->
+        VoiceEntryReviewDialog(
+            data = data,
+            onConfirm = { d ->
+                if (!d.farmerName.isNullOrEmpty()) farmerName = d.farmerName
+                if (!d.product.isNullOrEmpty()) viewModel.onProductQueryChange(d.product)
+                if (!d.grade.isNullOrEmpty() || d.quantity != null || d.rate != null) {
+                    gradeEntries = listOf(ArrivalViewModel.GradeEntry(
+                        grade = d.grade ?: "Grade A",
+                        quantity = d.quantity ?: 0.0,
+                        rate = d.rate ?: 0.0,
+                        unit = d.unit ?: "KG"
+                    ))
+                }
+                if (d.commission != null) commissionInput = Formatter.formatWeight(d.commission)
+                if (d.transport != null) transportInput = Formatter.formatWeight(d.transport)
+                if (d.labor != null) laborInput = Formatter.formatWeight(d.labor)
+                if (d.otherDeduction != null) viewModel.addDeduction("Other", d.otherDeduction, "Voice CAT")
+                
+                parsedVoiceData = null
+                scope.launch { snackbarHostState.showSnackbar("Form filled from voice input.") }
+            },
+            onRetry = {
+                parsedVoiceData = null
+                showLanguageSelector = true
+            },
+            onDismiss = { parsedVoiceData = null }
+        )
+    }
+
+    LaunchedEffect(ocrAutoSave, isLoading) {
+        if (ocrAutoSave && !isLoading && farmerName.isNotBlank() && productSearchQuery.isNotBlank() && netAmount > 0) {
+            viewModel.saveArrivalBatch(
+                context = context,
+                farmerName = farmerName,
+                farmerPhone = farmerPhone,
+                farmerVillage = farmerVillage,
+                productName = productSearchQuery,
+                productCategory = selectedCategory,
+                commissionPercent = commissionInput.toDoubleOrNull() ?: 0.0,
+                laborCharges = laborInput.toDoubleOrNull() ?: 0.0,
+                transportCharges = transportInput.toDoubleOrNull() ?: 0.0,
+                packingCharges = packingInput.toDoubleOrNull() ?: 0.0,
+                otherDeductionsUnused = 0.0,
+                billNumberUnused = billNo,
+                gradeEntries = gradeEntries
+            )
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.farmer_arrival)) },
@@ -233,29 +402,16 @@ fun NewArrivalScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Voice & Scan Entry Buttons
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onScanBillClick,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.DocumentScanner, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Scan Bill", fontWeight = FontWeight.Bold)
-                }
-                
-                Button(
-                    onClick = onVoiceEntryClick,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.Mic, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Voice Entry", fontWeight = FontWeight.Bold)
-                }
+            // Entry Mode
+            Button(
+                onClick = { onVoiceEntryClick() },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Mic, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Voice Entry", fontWeight = FontWeight.Bold)
             }
 
             // 1. Farmer Section
@@ -328,25 +484,11 @@ fun NewArrivalScreen(
                 }
             }
 
-            // 3. Unit Section
-            SectionHeader(stringResource(R.string.unit_type))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf("KG", "Ton", "Boxes").forEach { unit ->
-                    FilterChip(
-                        selected = selectedUnit == unit,
-                        onClick = { selectedUnit = unit },
-                        label = { Text(unit) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            // 4. Grade Entries
+            // 3. Grade Entries
             SectionHeader(stringResource(R.string.stock_qty_per_grade))
             gradeEntries.forEachIndexed { index, entry ->
                 GradeEntryRow(
-                    entry = entry.copy(unit = selectedUnit),
-                    unit = selectedUnit,
+                    entry = entry,
                     onEntryChange = { updated ->
                         val newList = gradeEntries.toMutableList()
                         newList[index] = updated
@@ -517,11 +659,6 @@ fun NewArrivalScreen(
             }
 
             // Summary Card
-            val totalQtySum = gradeEntries.sumOf { it.quantity }
-            val totalSpoilageSum = gradeEntries.sumOf { it.spoilage }
-            val totalSpoilageKgSum = gradeEntries.sumOf { it.calculatedTotalSpoilageKg }
-            val totalBoxCount = gradeEntries.sumOf { it.totalBoxes }
-            val totalTareWeight = gradeEntries.sumOf { it.totalTareWeightKg }
             val totalGrossWeight = gradeEntries.sumOf { it.totalGrossWeightKg }
             val totalNetWeight = gradeEntries.sumOf { it.totalNetWeightKg }
             
@@ -532,13 +669,6 @@ fun NewArrivalScreen(
                 grade = gradeEntries.joinToString(", ") { it.grade },
                 date = entryDate,
                 billNo = billNo,
-                totalQty = totalQtySum,
-                spoilage = totalSpoilageSum,
-                totalSpoilageKg = totalSpoilageKgSum,
-                boxCount = totalBoxCount,
-                tareWeight = totalTareWeight,
-                netQty = totalNetQuantity,
-                purchaseRate = if (totalNetWeight > 0) totalGrossAmount / totalNetWeight else 0.0,
                 grossAmount = totalGrossAmount,
                 commissionPercent = commissionInput.toDoubleOrNull() ?: 0.0,
                 commissionAmount = commissionAmount,
@@ -546,42 +676,38 @@ fun NewArrivalScreen(
                 transport = transportInput.toDoubleOrNull() ?: 0.0,
                 otherCharges = totalOtherDeductions + (packingInput.toDoubleOrNull() ?: 0.0),
                 netPayable = netAmount,
-                unit = selectedUnit,
                 totalNetWeight = totalNetWeight,
-                emptyBoxWeightPerBox = if (gradeEntries.isNotEmpty()) gradeEntries[0].avgGrossWeight else 0.0,
                 totalGrossKg = totalGrossWeight,
-                spoilagePercentValue = totalSpoilageSum,
-                totalSpoilageKgValue = totalSpoilageKgSum,
-                tareWeightValue = totalTareWeight,
                 deductionList = deductions,
                 gradeEntries = gradeEntries
             )
 
             Button(
                 onClick = {
-                    viewModel.saveArrivalBatch(
-                        context = context,
-                        farmerName = farmerName,
-                        farmerPhone = farmerPhone,
-                        farmerVillage = farmerVillage,
-                        productName = productSearchQuery,
-                        productCategory = selectedCategory,
-                        unit = selectedUnit,
-                        commissionPercent = commissionInput.toDoubleOrNull() ?: 0.0,
-                        laborCharges = laborInput.toDoubleOrNull() ?: 0.0,
-                        transportCharges = transportInput.toDoubleOrNull() ?: 0.0,
-                        packingCharges = packingInput.toDoubleOrNull() ?: 0.0,
-                        otherDeductionsUnused = 0.0,
-                        billNumberUnused = billNo,
-                        gradeEntries = gradeEntries
-                    )
+                    if (!isLoading) {
+                        viewModel.saveArrivalBatch(
+                            context = context,
+                            farmerName = farmerName,
+                            farmerPhone = farmerPhone,
+                            farmerVillage = farmerVillage,
+                            productName = productSearchQuery,
+                            productCategory = selectedCategory,
+                            commissionPercent = commissionInput.toDoubleOrNull() ?: 0.0,
+                            laborCharges = laborInput.toDoubleOrNull() ?: 0.0,
+                            transportCharges = transportInput.toDoubleOrNull() ?: 0.0,
+                            packingCharges = packingInput.toDoubleOrNull() ?: 0.0,
+                            otherDeductionsUnused = 0.0,
+                            billNumberUnused = billNo,
+                            gradeEntries = gradeEntries
+                        )
+                    }
                 },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
                 shape = RoundedCornerShape(12.dp),
                 enabled = farmerName.isNotBlank() && productSearchQuery.isNotBlank() && netAmount > 0 && !isLoading
             ) {
-                if (isLoading) CircularProgressIndicator(color = Color.White)
+                if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                 else Text(stringResource(R.string.confirm_save_stock), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         }
@@ -591,10 +717,35 @@ fun NewArrivalScreen(
 @Composable
 fun GradeEntryRow(
     entry: ArrivalViewModel.GradeEntry,
-    unit: String,
     onEntryChange: (ArrivalViewModel.GradeEntry) -> Unit,
     onRemove: (() -> Unit)?
 ) {
+    // Local text states to preserve user typing (e.g., "2.0")
+    var qtyInput by remember(entry.unit) { mutableStateOf(if (entry.quantity == 0.0) "" else Formatter.formatWeight(entry.quantity)) }
+    var boxCountInput by remember(entry.unit) { mutableStateOf(if (entry.boxCount == 0) "" else entry.boxCount.toString()) }
+    var emptyWtInput by remember(entry.unit) { mutableStateOf(if (entry.avgGrossWeight == 0.0) "" else Formatter.formatWeight(entry.avgGrossWeight)) }
+    var spoilageInput by remember(entry.unit) { mutableStateOf(if (entry.spoilage == 0.0) "" else Formatter.formatWeight(entry.spoilage)) }
+    var rateInput by remember(entry.unit) { mutableStateOf(if (entry.rate == 0.0) "" else Formatter.formatWeight(entry.rate)) }
+
+    // Sync from entry prop only if numeric values differ (prevents cursor jumps while allowing external resets)
+    LaunchedEffect(entry) {
+        if (qtyInput.toDoubleOrNull() ?: 0.0 != entry.quantity) {
+            qtyInput = if (entry.quantity == 0.0) "" else Formatter.formatWeight(entry.quantity)
+        }
+        if ((boxCountInput.toIntOrNull() ?: 0) != entry.boxCount) {
+            boxCountInput = if (entry.boxCount == 0) "" else entry.boxCount.toString()
+        }
+        if (emptyWtInput.toDoubleOrNull() ?: 0.0 != entry.avgGrossWeight) {
+            emptyWtInput = if (entry.avgGrossWeight == 0.0) "" else Formatter.formatWeight(entry.avgGrossWeight)
+        }
+        if (spoilageInput.toDoubleOrNull() ?: 0.0 != entry.spoilage) {
+            spoilageInput = if (entry.spoilage == 0.0) "" else Formatter.formatWeight(entry.spoilage)
+        }
+        if (rateInput.toDoubleOrNull() ?: 0.0 != entry.rate) {
+            rateInput = if (entry.rate == 0.0) "" else Formatter.formatWeight(entry.rate)
+        }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -622,18 +773,38 @@ fun GradeEntryRow(
                 }
             }
             
-            if (unit == "Boxes") {
+            // Unit Selector for this grade
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("KG", "Ton", "Boxes").forEach { u ->
+                    FilterChip(
+                        selected = entry.unit == u,
+                        onClick = { onEntryChange(entry.copy(unit = u)) },
+                        label = { Text(u) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            if (entry.unit == "Boxes") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = if (entry.quantity == 0.0) "" else Formatter.formatWeight(entry.quantity),
-                        onValueChange = { onEntryChange(entry.copy(quantity = it.toDoubleOrNull() ?: 0.0)) },
+                        value = qtyInput,
+                        onValueChange = { 
+                            qtyInput = it
+                            onEntryChange(entry.copy(quantity = it.toDoubleOrNull() ?: 0.0)) 
+                        },
                         label = { Text("Total Weight (Ton)") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                     OutlinedTextField(
-                        value = if (entry.boxCount == 0) "" else entry.boxCount.toString(),
-                        onValueChange = { onEntryChange(entry.copy(boxCount = it.toIntOrNull() ?: 0)) },
+                        value = boxCountInput,
+                        onValueChange = { 
+                            if (it.all { char -> char.isDigit() }) {
+                                boxCountInput = it
+                                onEntryChange(entry.copy(boxCount = it.toIntOrNull() ?: 0))
+                            }
+                        },
                         label = { Text("Number of Boxes") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
@@ -641,23 +812,32 @@ fun GradeEntryRow(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = if (entry.avgGrossWeight == 0.0) "" else Formatter.formatWeight(entry.avgGrossWeight),
-                        onValueChange = { onEntryChange(entry.copy(avgGrossWeight = it.toDoubleOrNull() ?: 0.0)) },
+                        value = emptyWtInput,
+                        onValueChange = { 
+                            emptyWtInput = it
+                            onEntryChange(entry.copy(avgGrossWeight = it.toDoubleOrNull() ?: 0.0)) 
+                        },
                         label = { Text("Empty Weight/Box (KG)") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                     OutlinedTextField(
-                        value = if (entry.spoilage == 0.0) "" else Formatter.formatWeight(entry.spoilage),
-                        onValueChange = { onEntryChange(entry.copy(spoilage = it.toDoubleOrNull() ?: 0.0)) },
+                        value = spoilageInput,
+                        onValueChange = { 
+                            spoilageInput = it
+                            onEntryChange(entry.copy(spoilage = it.toDoubleOrNull() ?: 0.0)) 
+                        },
                         label = { Text("Spoilage %") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                 }
                 OutlinedTextField(
-                    value = if (entry.rate == 0.0) "" else Formatter.formatWeight(entry.rate),
-                    onValueChange = { onEntryChange(entry.copy(rate = it.toDoubleOrNull() ?: 0.0)) },
+                    value = rateInput,
+                    onValueChange = { 
+                        rateInput = it
+                        onEntryChange(entry.copy(rate = it.toDoubleOrNull() ?: 0.0)) 
+                    },
                     label = { Text("Rate per KG") },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
@@ -666,16 +846,22 @@ fun GradeEntryRow(
                 // KG / Ton mode
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = if (entry.quantity == 0.0) "" else Formatter.formatWeight(entry.quantity),
-                        onValueChange = { onEntryChange(entry.copy(quantity = it.toDoubleOrNull() ?: 0.0)) },
-                        label = { Text(stringResource(R.string.total_qty)) },
+                        value = qtyInput,
+                        onValueChange = { 
+                            qtyInput = it
+                            onEntryChange(entry.copy(quantity = it.toDoubleOrNull() ?: 0.0)) 
+                        },
+                        label = { Text(if (entry.unit == "Ton") "Total Quantity (Ton)" else stringResource(R.string.total_qty)) },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                     OutlinedTextField(
-                        value = if (entry.spoilage == 0.0) "" else Formatter.formatWeight(entry.spoilage),
-                        onValueChange = { onEntryChange(entry.copy(spoilage = it.toDoubleOrNull() ?: 0.0)) },
-                        label = { Text(if (unit == "Ton") "Spoilage per Ton (KG)" else stringResource(R.string.spoilage) + " (KG)") },
+                        value = spoilageInput,
+                        onValueChange = { 
+                            spoilageInput = it
+                            onEntryChange(entry.copy(spoilage = it.toDoubleOrNull() ?: 0.0)) 
+                        },
+                        label = { Text(if (entry.unit == "Ton") "Spoilage per Ton (KG)" else stringResource(R.string.spoilage) + " (KG)") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
@@ -683,9 +869,12 @@ fun GradeEntryRow(
                 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = if (entry.rate == 0.0) "" else Formatter.formatWeight(entry.rate),
-                        onValueChange = { onEntryChange(entry.copy(rate = it.toDoubleOrNull() ?: 0.0)) },
-                        label = { Text(if (unit == "Ton") "Rate per KG" else stringResource(R.string.rate_per_unit, unit.removeSuffix("es"))) },
+                        value = rateInput,
+                        onValueChange = { 
+                            rateInput = it
+                            onEntryChange(entry.copy(rate = it.toDoubleOrNull() ?: 0.0)) 
+                        },
+                        label = { Text(if (entry.unit == "Ton") "Rate per KG" else stringResource(R.string.rate_per_unit, entry.unit.removeSuffix("es"))) },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
@@ -704,8 +893,8 @@ fun GradeEntryRow(
             
             Surface(color = Color(0xFFF1F8E9), shape = RoundedCornerShape(4.dp)) {
                 Text(
-                    if (unit == "Boxes") "Net Weight: ${Formatter.formatWeight(entry.totalNetWeightKg)} KG | ${entry.totalBoxes} Boxes"
-                    else "Net Available: ${Formatter.formatWeight(entry.netQuantity)} $unit",
+                    if (entry.unit == "Boxes") "Net Weight: ${Formatter.formatWeight(entry.totalNetWeightKg)} KG | ${entry.totalBoxes} Boxes"
+                    else "Net Available: ${Formatter.formatWeight(entry.netQuantity)} ${entry.unit} | ${Formatter.formatWeight(entry.totalNetWeightKg)} KG",
                     Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     fontSize = 12.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold
                 )
@@ -722,13 +911,6 @@ fun StockCalculationSummary(
     grade: String,
     date: Long,
     billNo: String,
-    totalQty: Double,
-    spoilage: Double,
-    totalSpoilageKg: Double,
-    boxCount: Int,
-    tareWeight: Double,
-    netQty: Double,
-    purchaseRate: Double,
     grossAmount: Double,
     commissionPercent: Double,
     commissionAmount: Double,
@@ -736,13 +918,8 @@ fun StockCalculationSummary(
     transport: Double,
     otherCharges: Double,
     netPayable: Double,
-    unit: String,
     totalNetWeight: Double = 0.0,
-    emptyBoxWeightPerBox: Double = 0.0,
     totalGrossKg: Double = 0.0,
-    spoilagePercentValue: Double = 0.0,
-    totalSpoilageKgValue: Double = 0.0,
-    tareWeightValue: Double = 0.0,
     deductionList: List<com.dasariravi145.agrolynch.data.local.entity.EntryDeductionEntity> = emptyList(),
     gradeEntries: List<ArrivalViewModel.GradeEntry> = emptyList()
 ) {
@@ -780,57 +957,34 @@ fun StockCalculationSummary(
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0xFFC5E1A5))
             
             // Multi-Grade Table
-            if (gradeEntries.size > 1) {
-                Text("Grade Breakdown:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF388E3C))
-                Spacer(Modifier.height(4.dp))
-                Row(Modifier.fillMaxWidth().background(Color(0xFFE8F5E9)).padding(4.dp)) {
-                    Text("Grade", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text("Net KG", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
-                    Text("Rate/KG", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
-                    Text("Amount", Modifier.weight(1.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
-                }
-                gradeEntries.forEach { entry ->
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
-                        Text(entry.grade, Modifier.weight(1f), fontSize = 11.sp)
-                        Text(Formatter.formatWeight(entry.totalNetWeightKg), Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
-                        Text("₹${Formatter.formatWeight(entry.rate)}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
-                        Text("₹${Formatter.formatCurrency(entry.grossAmount)}", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
-                    }
-                }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = Color(0xFFC5E1A5))
-                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-                    Text("Total", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text(Formatter.formatWeight(totalNetWeight), Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
-                    Text("-", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
-                    Text("₹${Formatter.formatCurrency(grossAmount)}", Modifier.weight(1.2f), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.End)
-                }
-                Spacer(Modifier.height(12.dp))
-            } else {
-                // Calculation Section
-                if (unit == "Ton") {
-                    CalculationRow(stringResource(R.string.total_qty), "${Formatter.formatWeight(totalQty)} Ton")
-                    CalculationRow("Total Weight", "${Formatter.formatWeight(totalQty * 1000)} KG")
-                    CalculationRow("Total Spoilage", "${Formatter.formatWeight(totalSpoilageKg)} KG", color = Color.Red)
-                    CalculationRow("Net Weight", "${Formatter.formatWeight(totalNetWeight)} KG", isBold = true)
-                } else if (unit == "Boxes") {
-                    CalculationRow(stringResource(R.string.gross_wt), "${Formatter.formatWeight(totalQty)} Ton")
-                    CalculationRow(stringResource(R.string.boxes), "$boxCount")
-                    CalculationRow(stringResource(R.string.box_wt), "${Formatter.formatWeight(emptyBoxWeightPerBox)} KG")
-                    CalculationRow("Total Waste", "${Formatter.formatWeight(totalSpoilageKgValue)} KG", color = Color.Red)
-                    CalculationRow(stringResource(R.string.net_wt), "${Formatter.formatWeight(totalNetWeight)} KG", isBold = true)
-                } else {
-                    CalculationRow(stringResource(R.string.total_qty), "${Formatter.formatWeight(totalQty)} $unit")
-                    CalculationRow("Waste", "${Formatter.formatWeight(totalSpoilageKg)} KG", color = Color.Red)
-                    CalculationRow(stringResource(R.string.net_available), "${Formatter.formatWeight(netQty)} $unit", isBold = true)
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                CalculationRow(stringResource(R.string.rate), "₹${Formatter.formatCurrency(purchaseRate)}${if(unit == "Ton" || unit == "Boxes") " / KG" else ""}")
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                CalculationRow(stringResource(R.string.gross_amount), "₹${Formatter.formatCurrency(grossAmount)}", color = Color(0xFF2E7D32), isBold = true)
+            Text("Grade Breakdown:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF388E3C))
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.fillMaxWidth().background(Color(0xFFE8F5E9)).padding(4.dp)) {
+                Text("Grade", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("Unit", Modifier.weight(0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text("Net KG", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                Text("Rate/KG", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                Text("Amount", Modifier.weight(1.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            gradeEntries.forEach { entry ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
+                    Text(entry.grade, Modifier.weight(1f), fontSize = 11.sp)
+                    Text(entry.unit, Modifier.weight(0.7f), fontSize = 11.sp, textAlign = TextAlign.Center)
+                    Text(Formatter.formatWeight(entry.totalNetWeightKg), Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                    Text("₹${Formatter.formatWeight(entry.rate)}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                    Text("₹${Formatter.formatCurrency(entry.grossAmount)}", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                }
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = Color(0xFFC5E1A5))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                Text("Total", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("", Modifier.weight(0.7f))
+                Text(Formatter.formatWeight(totalNetWeight), Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                Text("-", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                Text("₹${Formatter.formatCurrency(grossAmount)}", Modifier.weight(1.2f), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.End)
+            }
+            Spacer(Modifier.height(12.dp))
+
             CalculationRow(stringResource(R.string.commission), "₹${Formatter.formatCurrency(commissionAmount)}", color = Color.Red)
             CalculationRow(stringResource(R.string.labor_charges), "₹${Formatter.formatCurrency(labor)}", color = Color.Red)
             CalculationRow(stringResource(R.string.transport), "₹${Formatter.formatCurrency(transport)}", color = Color.Red)
@@ -872,6 +1026,33 @@ fun StockCalculationSummary(
         }
     }
 }
+
+fun parseVoiceInput(text: String): ParsedArrival {
+    // ... logic moved to VoiceEntryParser
+    return VoiceEntryParser.parse(text).let {
+        ParsedArrival(
+            farmer = it.farmerName ?: "",
+            item = it.product ?: "",
+            grade = it.grade ?: "",
+            unit = it.unit ?: "KG",
+            quantity = it.quantity ?: 0.0,
+            rate = it.rate ?: 0.0,
+            waste = it.otherDeduction ?: 0.0,
+            each = 0.0
+        )
+    }
+}
+
+data class ParsedArrival(
+    val farmer: String,
+    val item: String,
+    val grade: String,
+    val unit: String,
+    val quantity: Double,
+    val rate: Double,
+    val waste: Double,
+    val each: Double
+)
 
 @Composable
 fun SummaryDetailRow(label: String, value: String) {

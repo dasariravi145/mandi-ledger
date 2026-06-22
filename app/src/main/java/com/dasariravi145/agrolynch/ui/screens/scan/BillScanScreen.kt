@@ -42,7 +42,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.ads.BannerAdView
-import com.dasariravi145.agrolynch.util.ExtractedData
+import com.dasariravi145.agrolynch.util.ocr.ExtractedBillData
 import com.dasariravi145.agrolynch.util.Formatter
 import java.text.SimpleDateFormat
 import java.util.*
@@ -98,29 +98,29 @@ fun BillScanScreen(
     LaunchedEffect(state.isSuccess) {
         if (state.isSuccess) {
             val d = state.extractedData
-            val deductionsStr = d.deductions.joinToString(";") { "${it.deductionType}:${it.amount}" }
+            // We pass a dummy string for deductions here as it's now handled by the review screen confirm
             onNavigateToEntry(
                 state.target ?: ScanTarget.STOCK_ENTRY,
-                d.billNumber,
-                if (d.amount > 0) d.amount else d.netAmount,
+                d.originalBillRefNo ?: "",
+                d.netAmount,
                 d.date,
                 d.farmerName,
-                d.farmerPhone,
-                d.farmerVillage,
-                d.buyerName,
-                d.partyName,
-                d.productName,
-                d.category,
-                d.grade,
-                d.quantity,
-                d.rate,
-                d.paymentMode,
-                d.unit,
-                d.numberOfBoxes,
-                d.totalWeightTon,
-                d.emptyBoxWeightPerBox,
-                d.spoilagePercentage,
-                deductionsStr
+                "", // phone
+                d.farmerPlace,
+                "", // buyer
+                "", // party
+                d.items.firstOrNull()?.productName ?: "",
+                "General",
+                d.items.firstOrNull()?.grade ?: "",
+                d.items.firstOrNull()?.quantityKg ?: 0.0,
+                d.items.firstOrNull()?.rate ?: 0.0,
+                "", // mode
+                "KG",
+                0, // boxes
+                0.0, // weightTon
+                0.0, // emptyBox
+                0.0, // spoilage
+                "" // deductions
             )
             viewModel.resetState()
         }
@@ -171,10 +171,21 @@ fun BillScanScreen(
 
                 state.error?.let {
                     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier.width(8.dp))
-                            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                        Column(Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Could not read clearly. Please enter manually.", color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = { 
+                                    onNavigateToEntry(ScanTarget.STOCK_ENTRY, "", 0.0, System.currentTimeMillis(), "", "", "", "", "", "", "", "", 0.0, 0.0, "", "", 0, 0.0, 0.0, 0.0, "")
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Open Manual Entry")
+                            }
                         }
                     }
                 }
@@ -227,13 +238,13 @@ fun BillScanScreen(
                         Text("Extracting numbers from bill...", fontWeight = FontWeight.Medium)
                     }
                 } else if (state.ocrFinished) {
-                    OcrReviewContent(
-                        bitmap = state.currentImageBitmap,
-                        data = state.extractedData,
-                        target = state.target ?: ScanTarget.STOCK_ENTRY,
-                        onConfirm = { viewModel.confirmOcrData(it) },
-                        onRescan = { viewModel.resetState() }
-                    )
+                    // Automatically trigger navigation to review screen
+                    LaunchedEffect(state.ocrFinished) {
+                        onNavigateToEntry(
+                            state.target ?: ScanTarget.STOCK_ENTRY,
+                            "", 0.0, 0L, "", "", "", "", "", "", "", "", 0.0, 0.0, "", "", 0, 0.0, 0.0, 0.0, ""
+                        )
+                    }
                 }
             }
         }
@@ -287,183 +298,6 @@ fun ScanTypeOption(label: String, icon: androidx.compose.ui.graphics.vector.Imag
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(16.dp))
             Text(label, fontWeight = FontWeight.Medium)
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun OcrReviewContent(
-    bitmap: Bitmap?,
-    data: ExtractedData,
-    target: ScanTarget,
-    onConfirm: (ExtractedData) -> Unit,
-    onRescan: () -> Unit
-) {
-    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-    
-    var billNo by remember { mutableStateOf(data.billNumber) }
-    var dateStr by remember { mutableStateOf(sdf.format(Date(data.date))) }
-    var farmerName by remember { mutableStateOf(data.farmerName) }
-    var farmerPhone by remember { mutableStateOf(data.farmerPhone) }
-    var farmerVillage by remember { mutableStateOf(data.farmerVillage) }
-    var buyerName by remember { mutableStateOf(data.buyerName) }
-    var productName by remember { mutableStateOf(data.productName) }
-    var category by remember { mutableStateOf(data.category) }
-    var grade by remember { mutableStateOf(data.grade) }
-    var unit by remember { mutableStateOf(data.unit) }
-    var qty by remember { mutableStateOf(if(data.quantity > 0) Formatter.formatWeight(data.quantity) else "") }
-    var boxes by remember { mutableStateOf(if(data.numberOfBoxes > 0) data.numberOfBoxes.toString() else "") }
-    var weightTon by remember { mutableStateOf(if(data.totalWeightTon > 0) Formatter.formatWeight(data.totalWeightTon) else "") }
-    var emptyWtPerBox by remember { mutableStateOf(if(data.emptyBoxWeightPerBox > 0) Formatter.formatWeight(data.emptyBoxWeightPerBox) else "") }
-    var spoilagePercent by remember { mutableStateOf(if(data.spoilagePercentage > 0) Formatter.formatWeight(data.spoilagePercentage) else "0") }
-    var damage by remember { mutableStateOf(if(data.damageOrSoot > 0) Formatter.formatWeight(data.damageOrSoot) else "0") }
-    var rate by remember { mutableStateOf(if(data.rate > 0) Formatter.formatWeight(data.rate) else "") }
-    var amount by remember { mutableStateOf(if(data.amount > 0) Formatter.formatCurrency(data.amount) else "") }
-    var comm by remember { mutableStateOf(if(data.commission > 0) Formatter.formatWeight(data.commission) else "5") }
-    var labor by remember { mutableStateOf(if(data.labor > 0) Formatter.formatWeight(data.labor) else "0") }
-    var trans by remember { mutableStateOf(if(data.transport > 0) Formatter.formatWeight(data.transport) else "0") }
-    var netAmt by remember { mutableStateOf(if(data.netAmount > 0) Formatter.formatCurrency(data.netAmount) else "") }
-
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        bitmap?.let {
-            Image(
-                bitmap = it.asImageBitmap(),
-                contentDescription = null,
-                modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)).border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop
-            )
-        }
-
-        Text("Detected Numbers & Dates:", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            data.detectedNumbers.forEach { valStr ->
-                SuggestionChip(onClick = { /* Could auto-assign logic here if needed */ }, label = { Text(valStr) })
-            }
-        }
-
-        HorizontalDivider()
-
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                
-                OcrSelectionField("Bill Number", billNo, { billNo = it }, data.detectedNumbers)
-                OcrSelectionField("Date (dd/mm/yyyy)", dateStr, { dateStr = it }, data.detectedNumbers)
-
-                when(target) {
-                    ScanTarget.STOCK_ENTRY -> {
-                        OutlinedTextField(value = farmerName, onValueChange = { farmerName = it }, label = { Text("Farmer Name *") }, modifier = Modifier.fillMaxWidth())
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value = farmerPhone, onValueChange = { if(it.length <= 10) farmerPhone = it }, label = { Text("Phone") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
-                            OutlinedTextField(value = farmerVillage, onValueChange = { farmerVillage = it }, label = { Text("Village") }, modifier = Modifier.weight(1f))
-                        }
-                        
-                        OutlinedTextField(value = productName, onValueChange = { productName = it }, label = { Text("Product Name *") }, modifier = Modifier.fillMaxWidth())
-                        
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, modifier = Modifier.weight(1f))
-                            OutlinedTextField(value = grade, onValueChange = { grade = it }, label = { Text("Grade") }, modifier = Modifier.weight(1f))
-                        }
-                        
-                        // Unit Selection
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Unit:", modifier = Modifier.padding(end = 8.dp), style = MaterialTheme.typography.bodyMedium)
-                            listOf("KG", "Ton", "Boxes").forEach { u ->
-                                FilterChip(
-                                    selected = unit == u,
-                                    onClick = { unit = u },
-                                    label = { Text(u) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-
-                        if (unit == "Boxes") {
-                            OcrSelectionField("Total Weight (Ton) *", weightTon, { weightTon = it }, data.detectedNumbers, KeyboardType.Decimal)
-                            OcrSelectionField("Number of Boxes *", boxes, { boxes = it }, data.detectedNumbers, KeyboardType.Number)
-                            OcrSelectionField("Empty Wt/Box (KG) *", emptyWtPerBox, { emptyWtPerBox = it }, data.detectedNumbers, KeyboardType.Decimal)
-                            OcrSelectionField("Spoilage %", spoilagePercent, { spoilagePercent = it }, data.detectedNumbers, KeyboardType.Decimal)
-                            OcrSelectionField("Rate per KG *", rate, { rate = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        } else {
-                            OcrSelectionField("Quantity (${unit}) *", qty, { qty = it }, data.detectedNumbers, KeyboardType.Decimal)
-                            OcrSelectionField("Damage / Soot", damage, { damage = it }, data.detectedNumbers, KeyboardType.Decimal)
-                            OcrSelectionField(if (unit == "Ton") "Rate per KG *" else "Rate *", rate, { rate = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        }
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OcrSelectionField("Commission %", comm, { comm = it }, data.detectedNumbers, KeyboardType.Decimal)
-                            OcrSelectionField("Labor ₹", labor, { labor = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OcrSelectionField("Transport ₹", trans, { trans = it }, data.detectedNumbers, KeyboardType.Decimal)
-                            OcrSelectionField("Net Amount ₹", netAmt, { netAmt = it }, data.detectedNumbers, KeyboardType.Decimal)
-                        }
-                    }
-                    else -> { /* Other types hidden */ }
-                }
-            }
-        }
-
-        val isReady = when(target) {
-            ScanTarget.STOCK_ENTRY -> {
-                if (unit == "Boxes") farmerName.isNotEmpty() && productName.isNotEmpty() && weightTon.isNotEmpty() && boxes.isNotEmpty() && emptyWtPerBox.isNotEmpty() && rate.isNotEmpty()
-                else farmerName.isNotEmpty() && productName.isNotEmpty() && qty.isNotEmpty() && rate.isNotEmpty()
-            }
-            else -> farmerName.isNotEmpty() && amount.isNotEmpty()
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onRescan, modifier = Modifier.weight(1f).height(56.dp)) { Text("Rescan") }
-            Button(
-                onClick = { 
-                    val finalDate = try { sdf.parse(dateStr)?.time ?: data.date } catch(e: Exception) { data.date }
-                    onConfirm(data.copy(
-                        billNumber = billNo, date = finalDate,
-                        farmerName = farmerName, farmerPhone = farmerPhone, farmerVillage = farmerVillage,
-                        buyerName = buyerName, partyName = farmerName,
-                        productName = productName, category = category, grade = grade, unit = unit,
-                        quantity = if (unit == "Boxes") weightTon.toDoubleOrNull() ?: 0.0 else qty.toDoubleOrNull() ?: 0.0,
-                        numberOfBoxes = boxes.toIntOrNull() ?: 0,
-                        totalWeightTon = if (unit == "Boxes") weightTon.toDoubleOrNull() ?: 0.0 else 0.0,
-                        emptyBoxWeightPerBox = emptyWtPerBox.toDoubleOrNull() ?: 0.0,
-                        totalEmptyBoxWeightKg = (boxes.toIntOrNull() ?: 0) * (emptyWtPerBox.toDoubleOrNull() ?: 0.0),
-                        spoilagePercentage = spoilagePercent.toDoubleOrNull() ?: 0.0,
-                        damageOrSoot = damage.toDoubleOrNull() ?: 0.0,
-                        rate = rate.toDoubleOrNull() ?: 0.0, amount = amount.toDoubleOrNull() ?: 0.0,
-                        commission = comm.toDoubleOrNull() ?: 0.0, 
-                        labor = labor.toDoubleOrNull() ?: 0.0,
-                        transport = trans.toDoubleOrNull() ?: 0.0,
-                        netAmount = netAmt.toDoubleOrNull() ?: 0.0
-                    ))
-                },
-                modifier = Modifier.weight(2f).height(56.dp),
-                enabled = isReady,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-            ) { Text("Review Farmer Arrival", fontWeight = FontWeight.Bold) }
-        }
-        Spacer(modifier = Modifier.height(40.dp))
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun OcrSelectionField(label: String, value: String, onValueChange: (String) -> Unit, options: List<String>, keyboardType: KeyboardType = KeyboardType.Text) {
-    Column {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            label = { Text(label) },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType)
-        )
-        FlowRow(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            options.take(8).forEach { opt ->
-                SuggestionChip(
-                    onClick = { onValueChange(opt) },
-                    label = { Text(opt, fontSize = 10.sp) },
-                    border = AssistChipDefaults.assistChipBorder(enabled = true, borderColor = if(value == opt) Color(0xFF16A34A) else Color.LightGray)
-                )
-            }
         }
     }
 }

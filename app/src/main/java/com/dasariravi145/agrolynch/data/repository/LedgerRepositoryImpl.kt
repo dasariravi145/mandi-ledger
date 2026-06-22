@@ -140,16 +140,17 @@ class LedgerRepositoryImpl @Inject constructor(
             val entries = (sales.map { sale ->
                 val saleItems = allItems.filter { it.saleId == sale.id }
                 val deductions = billNumberRepository.getDeductionsByEntryIdSync(sale.id)
+                val originalQty = if (saleItems.isNotEmpty()) saleItems.sumOf { it.inputQuantity } else sale.totalQuantity
                 val details = LedgerEntryDetails(
                     billNumber = sale.billNumber.ifBlank { sale.id.takeLast(6).uppercase() },
                     farmerName = sale.farmerName,
                     productName = sale.productName,
                     category = "General",
                     grade = sale.grade,
-                    quantity = sale.totalQuantity,
+                    quantity = originalQty,
                     unit = if (saleItems.isNotEmpty()) saleItems.first().unit else "KG",
-                    rate = if (sale.totalQuantity > 0) sale.totalAmount / sale.totalQuantity else 0.0,
-                    purchaseRate = if (sale.totalQuantity > 0) sale.totalPurchaseAmount / sale.totalQuantity else 0.0,
+                    rate = if (originalQty > 0) sale.totalAmount / originalQty else 0.0,
+                    purchaseRate = if (originalQty > 0) sale.totalPurchaseAmount / originalQty else 0.0,
                     ratePerKg = if (saleItems.isNotEmpty()) saleItems.first().saleRate else 0.0,
                     grossAmount = sale.totalAmount,
                     commissionAmount = sale.totalCommission, 

@@ -73,6 +73,29 @@ object Formatter {
         return currencyDecimalFormat.format(value)
     }
 
+    fun formatDate(timestamp: Long): String {
+        val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        return sdf.format(Date(timestamp))
+    }
+
+    fun numberToWords(n: Long): String {
+        val units = arrayOf("", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen")
+        val tens = arrayOf("", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety")
+
+        if (n == 0L) return "Zero"
+
+        fun convert(number: Long): String {
+            if (number < 20) return units[number.toInt()]
+            if (number < 100) return tens[(number / 10).toInt()] + (if (number % 10 != 0L) " " + units[(number % 10).toInt()] else "")
+            if (number < 1000) return units[(number / 100).toInt()] + " Hundred" + (if (number % 100 != 0L) " " + convert(number % 100) else "")
+            if (number < 100000) return convert(number / 1000) + " Thousand" + (if (number % 1000 != 0L) " " + convert(number % 1000) else "")
+            if (number < 10000000) return convert(number / 100000) + " Lakh" + (if (number % 100000 != 0L) " " + convert(number % 100000) else "")
+            return convert(number / 10000000) + " Crore" + (if (number % 10000000 != 0L) " " + convert(number % 10000000) else "")
+        }
+
+        return convert(n) + " Only"
+    }
+
     fun formatFileSize(bytes: Long): String {
         if (bytes <= 0) return "0 B"
         val units = arrayOf("B", "KB", "MB", "GB", "TB")

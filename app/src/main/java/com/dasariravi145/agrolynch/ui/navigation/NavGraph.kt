@@ -6,6 +6,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
 import androidx.navigation.navArgument
 import com.dasariravi145.agrolynch.ui.screens.*
 import com.dasariravi145.agrolynch.ui.screens.analytics.*
@@ -41,6 +42,8 @@ import com.dasariravi145.agrolynch.ui.screens.voice.VoiceEntryScreen
 import com.dasariravi145.agrolynch.ui.screens.voice.VoiceNavigationEvent
 import com.dasariravi145.agrolynch.ui.screens.voice.VoiceViewModel
 import com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileScreen
+import com.dasariravi145.agrolynch.util.ocr.ExtractedBillData
+import com.dasariravi145.agrolynch.util.ocr.ExtractedBillItem
 import com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileViewModel
 import timber.log.Timber
 
@@ -149,7 +152,6 @@ fun SetupNavGraph(
                 onViewExpenses = { navController.navigate(Screen.Expense.route) },
                 onViewAnalytics = { navController.navigate(Screen.Analytics.route) },
                 onViewReports = { navController.navigate(Screen.ReportsDashboard.route) },
-                onViewBillScan = { navController.navigate(Screen.BillScan.route) },
                 onViewSecurity = { navController.navigate(Screen.Security.route) },
                 onViewBackup = { navController.navigate(Screen.Backup.route) },
                 onViewSettings = { navController.navigate(Screen.Settings.route) },
@@ -204,7 +206,11 @@ fun SetupNavGraph(
                 navArgument("emptyWtBox") { defaultValue = 0f; type = NavType.FloatType },
                 navArgument("spoilage") { defaultValue = 0f; type = NavType.FloatType },
                 navArgument("comm") { defaultValue = 5f; type = NavType.FloatType },
-                navArgument("deductions") { defaultValue = ""; type = NavType.StringType }
+                navArgument("labor") { defaultValue = 0f; type = NavType.FloatType },
+                navArgument("transport") { defaultValue = 0f; type = NavType.FloatType },
+                navArgument("deductions") { defaultValue = ""; type = NavType.StringType },
+                navArgument("autoSave") { defaultValue = false; type = NavType.BoolType },
+                navArgument("ocrItems") { defaultValue = ""; type = NavType.StringType }
             )
         ) { backStackEntry ->
             val arrivalViewModel: ArrivalViewModel = hiltViewModel()
@@ -225,7 +231,11 @@ fun SetupNavGraph(
             val emptyWtBox = backStackEntry.arguments?.getFloat("emptyWtBox")?.toDouble() ?: 0.0
             val spoilage = backStackEntry.arguments?.getFloat("spoilage")?.toDouble() ?: 0.0
             val comm = backStackEntry.arguments?.getFloat("comm")?.toDouble() ?: 5.0
+            val labor = backStackEntry.arguments?.getFloat("labor")?.toDouble() ?: 0.0
+            val transport = backStackEntry.arguments?.getFloat("transport")?.toDouble() ?: 0.0
             val deductionsStr = backStackEntry.arguments?.getString("deductions") ?: ""
+            val autoSave = backStackEntry.arguments?.getBoolean("autoSave") ?: false
+            val ocrItems = backStackEntry.arguments?.getString("ocrItems") ?: ""
 
             NewArrivalScreen(
                 viewModel = arrivalViewModel,
@@ -246,10 +256,13 @@ fun SetupNavGraph(
                 ocrEmptyBoxWeight = emptyWtBox,
                 ocrSpoilagePercent = spoilage,
                 ocrComm = comm,
+                ocrLabor = labor,
+                ocrTransport = transport,
                 ocrDeductions = deductionsStr,
+                ocrAutoSave = autoSave,
+                ocrItems = ocrItems,
                 onBack = { navController.popBackStack() },
-                onVoiceEntryClick = { navController.navigate(Screen.VoiceEntry.route) },
-                onScanBillClick = { navController.navigate(Screen.FarmerBillScanner.route) }
+                onVoiceEntryClick = { navController.navigate(Screen.VoiceEntry.route) }
             )
         }
         composable(route = Screen.FarmerList.route) {
@@ -451,43 +464,11 @@ fun SetupNavGraph(
                 onBackClick = { navController.popBackStack() }
             )
         }
-        composable(route = Screen.BillScan.route) {
-            val billScanViewModel: BillScanViewModel = hiltViewModel()
-            BillScanScreen(
-                viewModel = billScanViewModel,
-                isPremium = isPremium,
-                onUpgradeClick = { navController.navigate(Screen.Premium.route) },
-                onNavigateToEntry = { target, billNo, amount, date, farmer, phone, village, buyer, party, product, category, grade, qty, rate, mode, unit, boxes, weightTon, emptyWt, spoilage, deductions ->
-                    val route = when(target) {
-                        ScanTarget.STOCK_ENTRY -> Screen.NewArrival.passOcr(billNo, amount, date, farmer, phone, village, product, category, grade, qty, rate, unit, boxes, weightTon, emptyWt, spoilage, 5.0, deductions)
-                        ScanTarget.SALE_ENTRY -> Screen.Sale.passOcr(billNo, amount, date, buyer, product, qty, rate, deductions)
-                        ScanTarget.PAYMENT, ScanTarget.CHEQUE -> Screen.Payment.passOcr(billNo, amount, date, party, mode)
-                        ScanTarget.EXPENSE -> Screen.Expense.route
-                    }
-                    navController.navigate(route) {
-                        popUpTo(Screen.BillScan.route) { inclusive = true }
-                    }
-                },
-                onBackClick = { navController.popBackStack() }
-            )
-        }
-        composable(route = Screen.FarmerBillScanner.route) {
-            val scannerViewModel: ScannerViewModel = hiltViewModel()
-            val arrivalViewModel: ArrivalViewModel = hiltViewModel()
-            FarmerBillScannerScreen(
-                viewModel = scannerViewModel,
-                arrivalViewModel = arrivalViewModel,
-                onBack = { navController.popBackStack() },
-                onSaveSuccess = { 
-                    navController.popBackStack()
-                }
-            )
-        }
         composable(route = Screen.VoiceEntry.route) {
             val voiceViewModel: VoiceViewModel = hiltViewModel()
             VoiceEntryScreen(
                 viewModel = voiceViewModel,
-                onNavigateToArrival = { draft ->
+                onNavigateToArrival = { draft, autoSave ->
                     val route = Screen.NewArrival.passOcr(
                         farmer = draft.farmerName, 
                         phone = draft.phone,
@@ -498,9 +479,15 @@ fun SetupNavGraph(
                         qty = draft.quantity, 
                         unit = draft.unitType, 
                         rate = draft.rate, 
-                        spoilage = draft.waste,
+                        spoilage = if (draft.unitType == "Boxes") draft.spoilagePercent else draft.waste,
+                        boxes = draft.numBoxes,
+                        weightTon = draft.totalWeightTon,
+                        emptyWtBox = draft.emptyWeightPerBox,
                         comm = draft.commissionPercent,
-                        deductions = "" // Deductions not yet handled in step-by-step but fields are there
+                        labor = draft.laborCharges,
+                        transport = draft.transportCharges,
+                        deductions = "Other:${draft.otherDeductions}",
+                        autoSave = autoSave
                     )
                     navController.navigate(route) {
                         popUpTo(Screen.VoiceEntry.route) { inclusive = true }

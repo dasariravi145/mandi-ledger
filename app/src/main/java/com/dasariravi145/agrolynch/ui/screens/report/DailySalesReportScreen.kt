@@ -39,7 +39,8 @@ fun DailySalesReportScreen(
                                 Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray)
                             }
                             Text("${item.productName} (${item.grade})", fontSize = 13.sp, color = Color.DarkGray)
-                            Text("${Formatter.formatWeight(item.quantity)} ${item.unit} @ ₹${Formatter.formatCurrency(item.rate)}", fontSize = 12.sp, color = Color.Gray)
+                            val displayQty = if (item.inputQuantity > 0) item.inputQuantity else item.quantity
+                            Text("${Formatter.formatWeight(displayQty)} ${item.unit} @ ₹${Formatter.formatCurrency(item.rate)}", fontSize = 12.sp, color = Color.Gray)
                             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
                             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                                 Text("Sale Amt: ₹${Formatter.formatCurrency(item.saleAmount)}", fontSize = 12.sp)

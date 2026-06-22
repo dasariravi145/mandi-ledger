@@ -17,7 +17,7 @@ object GeminiService {
         apiKey = API_KEY
     )
 
-    suspend fun extractBillData(bitmap: Bitmap, target: String): ExtractedData? {
+    suspend fun extractBillData(bitmap: Bitmap, target: String, mlKitData: ExtractedData? = null): ExtractedData? {
         if (API_KEY == "YOUR_GEMINI_API_KEY_HERE") {
             Timber.e("AI_VISION: API Key not set")
             return null
@@ -37,7 +37,17 @@ object GeminiService {
             
             val jsonText = response.text?.replace("```json", "")?.replace("```", "")?.trim() ?: ""
             Timber.d("AI_VISION: Raw Response: $jsonText")
-            parseGeminiJson(jsonText, target)
+            val parsed = parseGeminiJson(jsonText, target)
+            
+            // Carry over detected numbers/strings from ML Kit if available
+            if (mlKitData != null) {
+                parsed.copy(
+                    detectedNumbers = mlKitData.detectedNumbers,
+                    detectedStrings = mlKitData.detectedStrings
+                )
+            } else {
+                parsed
+            }
         } catch (e: Exception) {
             Timber.e(e, "AI_VISION: Gemini extraction failed")
             null

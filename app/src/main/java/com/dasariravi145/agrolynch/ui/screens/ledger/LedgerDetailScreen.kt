@@ -23,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.util.Formatter
+import com.dasariravi145.agrolynch.util.findActivity
 import com.dasariravi145.agrolynch.domain.model.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -31,6 +32,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import java.io.File
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,8 +48,12 @@ fun LedgerDetailScreen(
     
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val exportStatus by viewModel.exportStatus.collectAsState(initial = "")
+    val isPrinting by viewModel.isPrinting.collectAsState()
+    val isSharing by viewModel.isSharing.collectAsState()
+    
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     
     var showPremiumDialog by remember { mutableStateOf(false) }
     var pendingFileForAction by remember { mutableStateOf<File?>(null) }
@@ -54,40 +61,9 @@ fun LedgerDetailScreen(
     LaunchedEffect(exportStatus) {
         if (exportStatus == "PREMIUM_REQUIRED") {
             showPremiumDialog = true
-        } else if (exportStatus.startsWith("SUCCESS:")) {
-            val filePath = exportStatus.removePrefix("SUCCESS:")
-            pendingFileForAction = File(filePath)
         } else if (exportStatus.startsWith("FAILED:")) {
             snackbarHostState.showSnackbar(exportStatus.removePrefix("FAILED:"))
         }
-    }
-
-    if (pendingFileForAction != null) {
-        AlertDialog(
-            onDismissRequest = { pendingFileForAction = null },
-            title = { Text("Bill Generated") },
-            text = { Text("Would you like to Print or Share this bill?") },
-            confirmButton = {
-                Button(onClick = { 
-                    com.dasariravi145.agrolynch.util.PdfGenerator.printPdf(context, pendingFileForAction!!)
-                    pendingFileForAction = null
-                }) {
-                    Icon(Icons.Default.Print, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Print")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { 
-                    com.dasariravi145.agrolynch.util.PdfGenerator.sharePdf(context, pendingFileForAction!!)
-                    pendingFileForAction = null
-                }) {
-                    Icon(Icons.Default.Share, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Share")
-                }
-            }
-        )
     }
 
     Scaffold(
@@ -136,11 +112,19 @@ fun LedgerDetailScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(s.entries, key = { it.id }) { entry ->
+                            val billNo = entry.details?.billNumber?.ifEmpty { entry.id } ?: entry.id
                             EnhancedLedgerEntryItem(
                                 entry = entry, 
                                 partyType = partyType,
+                                isPrinting = isPrinting == billNo,
+                                isSharing = isSharing == billNo,
                                 onPrint = { 
-                                    viewModel.exportLedgerEntry(context, entry, partyType)
+                                    android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                                    viewModel.printLedgerEntry(context, entry, partyType)
+                                },
+                                onShare = {
+                                    android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                                    viewModel.shareLedgerEntry(context, entry, partyType)
                                 }
                             )
                         }
@@ -233,7 +217,10 @@ fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
 fun EnhancedLedgerEntryItem(
     entry: LedgerEntry, 
     partyType: String,
-    onPrint: () -> Unit
+    isPrinting: Boolean = false,
+    isSharing: Boolean = false,
+    onPrint: () -> Unit,
+    onShare: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val dateFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
@@ -257,8 +244,32 @@ fun EnhancedLedgerEntryItem(
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 
-                IconButton(onClick = onPrint, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Print, contentDescription = "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onShare, 
+                        modifier = Modifier.size(28.dp),
+                        enabled = !isSharing && !isPrinting
+                    ) {
+                        if (isSharing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    
+                    Spacer(Modifier.width(4.dp))
+                    
+                    IconButton(
+                        onClick = onPrint, 
+                        modifier = Modifier.size(28.dp),
+                        enabled = !isPrinting && !isSharing
+                    ) {
+                        if (isPrinting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Print, contentDescription = "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
                 
                 if (entry.details?.billNumber?.isNotEmpty() == true) {
@@ -345,27 +356,43 @@ fun EnhancedLedgerEntryItem(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     entry.details?.let { details ->
-                        if (details.arrivalItems.size > 1) {
+                        if (details.arrivalItems.size > 1 || details.saleItems.size > 1) {
                             Text("Grade Breakdown:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                             Spacer(Modifier.height(4.dp))
                             Row(Modifier.fillMaxWidth().background(Color(0xFFF1F8E9)).padding(8.dp)) {
                                 Text("Grade", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                Text("Net KG", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
-                                Text("Rate/KG", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                Text("Qty/Unit", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                Text("Rate", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
                                 Text("Amount", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
                             }
-                            details.arrivalItems.forEach { item ->
-                                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                    Text(item.grade, Modifier.weight(1f), fontSize = 11.sp)
-                                    Text(Formatter.formatWeight(item.finalNetWeightKg), Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
-                                    Text("₹${Formatter.formatWeight(item.ratePerKg)}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
-                                    Text("₹${Formatter.formatCurrency(item.grossAmount)}", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                            if (details.arrivalItems.isNotEmpty()) {
+                                details.arrivalItems.forEach { item ->
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                        Text(item.grade, Modifier.weight(1f), fontSize = 11.sp)
+                                        Text(Formatter.formatWeight(item.finalNetWeightKg), Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                                        Text("₹${Formatter.formatWeight(item.ratePerKg)}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                                        Text("₹${Formatter.formatCurrency(item.grossAmount)}", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                    }
+                                }
+                            } else {
+                                details.saleItems.forEach { item ->
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                        Text(item.grade, Modifier.weight(1f), fontSize = 11.sp)
+                                        val displayQty = if (item.inputQuantity > 0) item.inputQuantity else item.quantitySold
+                                        Text("${Formatter.formatWeight(displayQty)} ${item.unit}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                                        Text("₹${Formatter.formatWeight(item.saleRate)}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                                        Text("₹${Formatter.formatCurrency(item.saleAmount)}", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                    }
                                 }
                             }
                             HorizontalDivider(Modifier.padding(vertical = 4.dp))
                             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                                 Text("Total", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                Text(Formatter.formatWeight(details.totalNetWeightKg), Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                if (details.arrivalItems.isNotEmpty()) {
+                                    Text(Formatter.formatWeight(details.totalNetWeightKg), Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                } else {
+                                    Text("${Formatter.formatWeight(details.quantity)} ${details.unit}", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                }
                                 Text("-", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
                                 Text("₹${Formatter.formatCurrency(details.grossAmount)}", Modifier.weight(1.2f), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.End)
                             }

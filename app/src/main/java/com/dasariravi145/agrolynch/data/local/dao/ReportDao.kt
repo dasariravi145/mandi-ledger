@@ -47,7 +47,11 @@ data class DetailedArrivalReportModel(
     val grossAmount: Double,
     val commissionPercent: Double,
     val commissionAmount: Double,
+    val laborCharges: Double = 0.0,
+    val transportCharges: Double = 0.0,
+    val packingCharges: Double = 0.0,
     val otherDeductions: Double = 0.0,
+    val advanceAmount: Double = 0.0,
     val netAmount: Double,
     val pendingAmount: Double,
     val numberOfBoxes: Int = 0,
@@ -138,7 +142,9 @@ interface ReportDao {
     @Query("""
         SELECT id, farmerName, date, billNumber, productName, grade, quantity, unit,
                purchaseRate as rate, grossAmount, commissionPercent, commissionAmount,
-               otherDeductions, netAmount, farmerPendingAmount as pendingAmount,
+               laborCharges, transportCharges, packingCharges, otherDeductions,
+               (SELECT COALESCE(SUM(amount), 0.0) FROM entry_deductions WHERE entryId = id AND deductionType = 'Advance') as advanceAmount,
+               netAmount, farmerPendingAmount as pendingAmount,
                numberOfBoxes, finalNetWeightKg, totalWeightTon, emptyBoxWeightPerBox, totalEmptyBoxWeightKg,
                spoilagePercentage, spoilageKg
         FROM arrivals

@@ -36,6 +36,13 @@ fun ExpenseScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedExpenseToEdit by remember { mutableStateOf<ExpenseEntity?>(null) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.saveSuccess.collect {
+            android.widget.Toast.makeText(context, "Saved successfully", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(

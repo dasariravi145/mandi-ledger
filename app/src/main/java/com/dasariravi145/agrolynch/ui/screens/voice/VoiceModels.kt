@@ -3,33 +3,34 @@ package com.dasariravi145.agrolynch.ui.screens.voice
 enum class VoiceStep(val label: String) {
     LANGUAGE_SELECTION("Language Selection"),
     FARMER_NAME("Farmer Name"),
-    PHONE_NUMBER("Phone Number"),
     VILLAGE("Village"),
-    PRODUCT_NAME("Product Name"),
+    PRODUCT_NAME("Product"),
     GRADE("Grade"),
     UNIT("Unit"),
-    QUANTITY("Quantity"),
-    WASTE("Waste/Damage"),
+    
+    // Unit-specific Quantity fields
+    QUANTITY("Quantity"), // Used for KG/Ton
+    WASTE("Waste"),       // Used for KG/Ton
+    
+    // Boxes-specific fields
+    BOX_COUNT("Number of Boxes"),
+    TOTAL_WEIGHT_TON("Total Weight (Ton)"),
+    EMPTY_BOX_WEIGHT("Empty Weight per Box"),
+    SPOILAGE_PERCENT("Spoilage %"),
+    
     RATE("Rate"),
-    COMMISSION("Commission %"),
-    LABOUR_CHARGES("Labour Charges"),
-    TRANSPORT_CHARGES("Transport Charges"),
-    OTHER_DEDUCTIONS("Other Deductions"),
     COMPLETED("Completed")
 }
 
 data class VoiceLanguage(val name: String, val code: String, val locale: String)
-
-data class Question(
-    val key: String, 
-    val text: Map<String, String>
-)
 
 data class VoiceState(
     val step: VoiceStep = VoiceStep.LANGUAGE_SELECTION,
     val selectedLanguage: VoiceLanguage? = null,
     val isListening: Boolean = false,
     val spokenText: String = "",
+    val detectedValue: String = "",
+    val awaitingConfirmation: Boolean = false,
     val confidence: Float = 1.0f,
     val error: String? = null,
     val isLoading: Boolean = false,

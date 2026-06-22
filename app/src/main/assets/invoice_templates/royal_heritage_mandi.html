@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Royal Heritage Mandi</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&display=swap');
+
+        @page { size: A4; margin: 0; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: #FFFDF3;
+            font-family: 'Georgia', serif;
+            color: #064E3B;
+        }
+
+        .invoice-page {
+            width: 794px;
+            height: 1123px;
+            position: relative;
+            overflow: hidden;
+            background: #FFFDF3;
+            padding: 40px 50px 80px 50px;
+            border: 15px solid #0F6B3A;
+        }
+
+        /* Premium Frame Ornaments */
+        .invoice-page::before {
+            content: "";
+            position: absolute;
+            top: 5px; left: 5px; right: 5px; bottom: 5px;
+            border: 2px solid #C9A227;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .corner-ornament {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border: 4px solid #C9A227;
+            z-index: 3;
+        }
+        .tl { top: -10px; left: -10px; border-right: none; border-bottom: none; border-radius: 40px 0 0 0; }
+        .tr { top: -10px; right: -10px; border-left: none; border-bottom: none; border-radius: 0 40px 0 0; }
+        .bl { bottom: -10px; left: -10px; border-right: none; border-top: none; border-radius: 0 0 0 40px; }
+        .br { bottom: -10px; right: -10px; border-left: none; border-top: none; border-radius: 0 0 40px 0; }
+
+        .dot { position: absolute; width: 8px; height: 8px; background: #C9A227; border-radius: 50%; z-index: 4; }
+        .d1 { top: 20px; left: 20px; }
+        .d2 { top: 20px; right: 20px; }
+        .d3 { bottom: 20px; left: 20px; }
+        .d4 { bottom: 20px; right: 20px; }
+
+        .watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-35deg);
+            opacity: 0.05;
+            font-size: 90px;
+            font-weight: 900;
+            letter-spacing: 10px;
+            pointer-events: none;
+            z-index: 0;
+            color: #064E3B;
+            text-transform: uppercase;
+            white-space: nowrap;
+            width: 100%;
+            text-align: center;
+        }
+
+        .content-layer {
+            position: relative;
+            z-index: 2;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header Section Redesign */
+        .header-main {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #C9A227;
+        }
+
+        .header-left {
+            flex: 1.2;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #064E3B;
+        }
+
+        .header-center {
+            flex: 0 0 120px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .header-right {
+            flex: 1;
+            text-align: right;
+            font-size: 14px;
+            color: #0F6B3A;
+            font-style: italic;
+            line-height: 1.5;
+            font-weight: 500;
+        }
+
+        .god-frame {
+            width: 110px;
+            height: 110px;
+            border: 3px solid #C9A227;
+            border-radius: 50% 50% 10px 10px;
+            overflow: hidden;
+            background: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .god-image { width: 100%; height: 100%; object-fit: cover; }
+
+        .company-name {
+            font-size: 44px;
+            color: #064E3B;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 8px;
+            margin: 15px 0;
+            text-align: center;
+            font-family: 'Cormorant Garamond', serif;
+            white-space: nowrap;
+        }
+
+        .biz-item { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 2px; }
+        .icon { color: #C9A227; font-size: 16px; margin-top: 2px; }
+
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            padding: 12px 20px;
+            background: rgba(201, 162, 39, 0.1);
+            border: 1px solid #C9A227;
+            border-radius: 8px;
+        }
+        .info-panel b { color: #064E3B; }
+
+        /* Table Section */
+        .table-wrap {
+            flex-grow: 1;
+            margin-top: 15px;
+            min-height: 350px;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            background: #064E3B;
+            color: #FFFDF3;
+            padding: 12px 5px;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border: 1px solid #064E3B;
+        }
+        td {
+            padding: 10px;
+            border: 1px solid rgba(15, 107, 58, 0.2);
+            font-size: 15px;
+            vertical-align: middle;
+            color: #064E3B;
+        }
+
+        /* Qty Column Style */
+        table td:nth-child(4) {
+            white-space: nowrap;
+            font-size: 13px;
+        }
+
+        tr:nth-child(even) { background: rgba(15, 107, 58, 0.03); }
+
+        .text-left { text-align: left; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+
+        /* Footer Section */
+        .footer-area {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-top: 20px;
+        }
+
+        .qr-section {
+            width: 130px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .qr-container {
+            background: #fff;
+            padding: 8px;
+            border: 2px solid #C9A227;
+            border-radius: 8px;
+            margin-bottom: 5px;
+        }
+        .qr-label { font-size: 10px; font-weight: bold; color: #064E3B; letter-spacing: 1px; }
+
+        .footer-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 15px;
+        }
+
+        .totals-card {
+            width: 380px;
+            border: 2px solid #0F6B3A;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 15px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(15, 107, 58, 0.1);
+        }
+        .grand-total-row {
+            background: #064E3B;
+            color: #FFFDF3;
+            padding: 12px 15px;
+            font-size: 22px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .signature-section {
+            width: 250px;
+            text-align: center;
+            margin-top: 10px;
+        }
+        .sig-img { width: 100%; height: 110px; object-fit: contain; margin-bottom: 5px; }
+        .sig-label {
+            border-top: 1.5px solid #064E3B;
+            padding-top: 5px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #064E3B;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .bottom-ribbon {
+            position: absolute;
+            bottom: 0; left: -50px; right: -50px;
+            height: 35px;
+            background: #064E3B;
+            color: #C9A227;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 13px;
+            letter-spacing: 5px;
+            z-index: 10;
+            text-transform: uppercase;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="invoice-page">
+        <!-- Corner Ornaments -->
+        <div class="corner-ornament tl"></div>
+        <div class="corner-ornament tr"></div>
+        <div class="corner-ornament bl"></div>
+        <div class="corner-ornament br"></div>
+        <div class="dot d1"></div>
+        <div class="dot d2"></div>
+        <div class="dot d3"></div>
+        <div class="dot d4"></div>
+
+        <div class="watermark">{{companyName}}</div>
+
+        <div class="content-layer">
+            <div class="header-main">
+                <div class="header-left">
+                    <div class="biz-item">
+                        <span class="icon">📍</span>
+                        <span>{{address}}</span>
+                    </div>
+                    <div class="biz-item {{mobileHidden}}">
+                        <span class="icon">📞</span>
+                        <span>{{mobile}}</span>
+                    </div>
+                    <div class="biz-item {{gstHidden}}">
+                        <span class="icon">🆔</span>
+                        <span>GST: {{gstNumber}}</span>
+                    </div>
+                    <div class="biz-item {{proprietorHidden}}">
+                        <span>{{proprietor}}</span>
+                    </div>
+                </div>
+
+                <div class="header-center">
+                    <div class="god-frame {{godImageHidden}}">
+                        <img src="{{godImageBase64}}" class="god-image" alt="God Image">
+                    </div>
+                </div>
+
+                <div class="header-right">
+                    <div class="tagline-container {{taglineHidden}}">
+                        Fresh from Farmers,<br>
+                        Trusted by Businesses,<br>
+                        Loved by Customers
+                    </div>
+                </div>
+            </div>
+
+            <h1 class="company-name">{{companyName}}</h1>
+
+            <div class="info-panel">
+                <div class="info-left">
+                    Customer: <b>{{customerName}}</b>
+                </div>
+                <div class="info-right" style="text-align: right;">
+                    Bill No: <b>{{billNumber}}</b> | Date: <b>{{date}}</b>
+                    <div class="{{vehicleHidden}}">Vehicle: <b>{{vehicleNumber}}</b></div>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="8%">SR.</th>
+                            <th width="45%" class="text-left">DESCRIPTION</th>
+                            <th width="15%">GRADE</th>
+                            <th width="15%">QTY</th>
+                            <th width="17%" class="text-right">AMOUNT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{productRows}}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="footer-area">
+                <div class="qr-section {{qrHidden}}">
+                    <div class="qr-container">
+                        <img src="{{qrBase64}}" style="width: 100%; display: block;" alt="QR">
+                    </div>
+                    <div class="qr-label">SCAN TO PAY</div>
+                </div>
+
+                <div class="footer-right">
+                    <div class="totals-card">
+                        <div class="total-row"><span>Sub Total</span> <span class="text-right">₹{{subtotal}}</span></div>
+                        <div class="total-row {{commissionHidden}}"><span>Commission</span> <span class="text-right">- ₹{{commission}}</span></div>
+                        <div class="total-row {{labourHidden}}"><span>Labour/Coolie</span> <span class="text-right">- ₹{{labour}}</span></div>
+                        <div class="total-row {{transportHidden}}"><span>Transport</span> <span class="text-right">- ₹{{transport}}</span></div>
+                        <div class="total-row {{advanceHidden}}"><span>Advance</span> <span class="text-right">- ₹{{advance}}</span></div>
+                        <div class="total-row {{othersHidden}}"><span>Others</span> <span class="text-right">- ₹{{others}}</span></div>
+                        <div class="grand-total-row">
+                            <span>NET PAYABLE</span>
+                            <span class="text-right">₹{{grandTotal}}</span>
+                        </div>
+                    </div>
+
+                    <div class="signature-section {{signatureHidden}}">
+                        <img src="{{signatureBase64}}" class="sig-img" alt="Signature">
+                        <div class="sig-label">Authorized Signature</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="bottom-ribbon">ROYAL QUALITY MANDI SERVICES</div>
+    </div>
+</body>
+</html>

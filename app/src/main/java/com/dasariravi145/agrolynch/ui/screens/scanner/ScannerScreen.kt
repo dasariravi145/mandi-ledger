@@ -2,7 +2,6 @@ package com.dasariravi145.agrolynch.ui.screens.scanner
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.util.Size
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -10,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Camera
-import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +21,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dasariravi145.agrolynch.ui.screens.arrival.ArrivalViewModel
+import androidx.navigation.NavController
+import com.dasariravi145.agrolynch.ui.navigation.Screen
 import timber.log.Timber
 import java.util.concurrent.Executors
 
@@ -30,6 +30,7 @@ import java.util.concurrent.Executors
 fun FarmerBillScannerScreen(
     viewModel: ScannerViewModel,
     arrivalViewModel: ArrivalViewModel,
+    navController: NavController,
     onBack: () -> Unit,
     onSaveSuccess: () -> Unit
 ) {
@@ -53,7 +54,7 @@ fun FarmerBillScannerScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = Color.White)
                             Spacer(Modifier.height(16.dp))
-                            Text("AI Reading handwritten data...", color = Color.White)
+                            Text("Processing image...", color = Color.White)
                         }
                     }
                 } else {
@@ -71,7 +72,7 @@ fun FarmerBillScannerScreen(
                                     object : ImageCapture.OnImageCapturedCallback() {
                                         override fun onCaptureSuccess(image: ImageProxy) {
                                             val bitmap = image.toBitmap()
-                                            viewModel.processBillImage(bitmap)
+                                            viewModel.onImageCaptured(bitmap)
                                             image.close()
                                         }
 
@@ -88,17 +89,39 @@ fun FarmerBillScannerScreen(
                             Icon(Icons.Default.Camera, contentDescription = "Capture", modifier = Modifier.size(32.dp))
                         }
                         Spacer(Modifier.height(16.dp))
-                        Text("Align bill and capture", color = Color.White)
+                        Text("Capture bill photo for reference", color = Color.White)
                     }
                 }
             }
-            is ScannerUiState.Success -> {
-                ScannerReviewScreen(
-                    result = state.result,
-                    arrivalViewModel = arrivalViewModel,
-                    onBack = { viewModel.processBillImage(Bitmap.createBitmap(1,1,Bitmap.Config.ARGB_8888)) }, // Placeholder to reset or better implement a reset method
-                    onConfirm = {
-                        onSaveSuccess()
+            is ScannerUiState.Captured -> {
+                AssistedBillEntryScreen(
+                    bitmap = state.bitmap,
+                    onBack = { viewModel.reset() },
+                    onComplete = { data ->
+                        // Convert products list to string format for NewArrivalScreen
+                        val ocrItems = data.items.joinToString(";") { p ->
+                            "${p.product}|${p.grade}|${p.quantity}|${p.rate}|${p.quantity * p.rate}|${p.unit}|${p.spoilage}"
+                        }
+                        
+                        val route = Screen.NewArrival.passOcr(
+                            billNo = "",
+                            farmer = data.farmerName,
+                            phone = "",
+                            village = data.village,
+                            comm = data.commission,
+                            labor = data.labour,
+                            transport = data.transport,
+                            deductions = "Gate/Others:${data.others};Advance:${data.advance}",
+                            ocrItems = ocrItems,
+                            autoSave = false,
+                            product = data.items.firstOrNull()?.product ?: "",
+                            qty = data.items.firstOrNull()?.quantity ?: 0.0,
+                            rate = data.items.firstOrNull()?.rate ?: 0.0,
+                            unit = data.items.firstOrNull()?.unit ?: "KG"
+                        )
+                        navController.navigate(route) {
+                            popUpTo(Screen.FarmerBillScanner.route) { inclusive = true }
+                        }
                     }
                 )
             }
@@ -106,12 +129,13 @@ fun FarmerBillScannerScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Error: ${state.message}", color = Color.Red)
-                        Button(onClick = { viewModel.processBillImage(Bitmap.createBitmap(1,1,Bitmap.Config.ARGB_8888)) }) {
+                        Button(onClick = { viewModel.reset() }) {
                             Text("Retry")
                         }
                     }
                 }
             }
+            else -> {}
         }
     }
 }

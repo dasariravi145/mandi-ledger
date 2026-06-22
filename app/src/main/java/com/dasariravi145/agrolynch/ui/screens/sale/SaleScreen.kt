@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.util.Constants
 import com.dasariravi145.agrolynch.util.Formatter
+import com.dasariravi145.agrolynch.util.findActivity
 import com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity
 import com.dasariravi145.agrolynch.data.local.entity.BuyerEntity
 import java.io.File
@@ -97,12 +98,16 @@ fun SaleScreen(
 
     LaunchedEffect(exportStatus) {
         if (exportStatus.startsWith("SUCCESS:")) {
-            pendingFileForAction = File(exportStatus.removePrefix("SUCCESS:"))
+            android.widget.Toast.makeText(context, "Saved successfully", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
     LaunchedEffect(Unit) {
         viewModel.saveSuccess.collect {
+            if (exportStatus.isEmpty() || !exportStatus.startsWith("SUCCESS:")) {
+                android.widget.Toast.makeText(context, "Saved successfully", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            
             selectedBuyer = null
             buyerSearchText = ""
             buyerMobile = ""
@@ -113,18 +118,20 @@ fun SaleScreen(
                 val activity = context as? android.app.Activity
                 if (activity != null) {
                     viewModel.adMobManager.showInterstitialAd(activity) {
-                        if (pendingFileForAction == null) onBackClick()
+                        onBackClick()
                     }
                 } else {
-                    if (pendingFileForAction == null) onBackClick()
+                    onBackClick()
                 }
             } else {
-                if (pendingFileForAction == null) onBackClick()
+                onBackClick()
             }
         }
     }
 
-    if (pendingFileForAction != null) {
+
+
+    if (false) { // Disabled Bill Generated Dialog
         AlertDialog(
             onDismissRequest = { 
                 pendingFileForAction = null
@@ -133,10 +140,25 @@ fun SaleScreen(
             title = { Text("Bill Generated") },
             text = { Text("Would you like to Print or Share this bill?") },
             confirmButton = {
-                Button(onClick = { 
-                    com.dasariravi145.agrolynch.util.PdfGenerator.printPdf(context, pendingFileForAction!!)
-                    pendingFileForAction = null
-                    onBackClick()
+                Button(onClick = {
+                    val file = pendingFileForAction
+                    if (file != null) {
+                        val uri = com.dasariravi145.agrolynch.util.PdfGenerator.getUriFromFile(context, file)
+                        pendingFileForAction = null
+                        scope.launch {
+                            kotlinx.coroutines.delay(200)
+                            val activity = context.findActivity()
+                            if (activity != null) {
+                                android.util.Log.d("PRINT_DEBUG", "context=${context::class.java.name}, activity=${activity::class.java.name}")
+                                activity.runOnUiThread {
+                                    com.dasariravi145.agrolynch.util.PdfPrintHelper.print(activity, uri)
+                                }
+                            } else {
+                                android.widget.Toast.makeText(context, "Print requires active screen", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            onBackClick()
+                        }
+                    }
                 }) {
                     Icon(Icons.Default.Print, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -144,10 +166,14 @@ fun SaleScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { 
-                    com.dasariravi145.agrolynch.util.PdfGenerator.sharePdf(context, pendingFileForAction!!)
-                    pendingFileForAction = null
-                    onBackClick()
+                TextButton(onClick = {
+                    val file = pendingFileForAction
+                    if (file != null) {
+                        val uri = com.dasariravi145.agrolynch.util.PdfGenerator.getUriFromFile(context, file)
+                        pendingFileForAction = null
+                        com.dasariravi145.agrolynch.util.PdfActionManager.sharePdf(context, uri)
+                        onBackClick()
+                    }
                 }) {
                     Icon(Icons.Default.Share, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -157,8 +183,12 @@ fun SaleScreen(
         )
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.error.collect { snackbarHostState.showSnackbar(it) }
+    val error by viewModel.error.collectAsState(initial = "")
+
+    LaunchedEffect(error) {
+        if (error.isNotEmpty()) {
+            snackbarHostState.showSnackbar(error)
+        }
     }
 
     Scaffold(
@@ -180,21 +210,23 @@ fun SaleScreen(
                     total = transactionTotal,
                     isLoading = isLoading,
                     onSave = {
-                        if (selectedBuyer != null) {
-                            viewModel.createSale(context = context, buyer = selectedBuyer!!)
-                        } else {
-                            if (buyerMobile.length != 10) {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(mobileError)
-                                }
+                        if (!isLoading) {
+                            if (selectedBuyer != null) {
+                                viewModel.createSale(context = context, buyer = selectedBuyer!!)
                             } else {
-                                viewModel.registerBuyerAndCreateSale(
-                                    context = context,
-                                    name = buyerSearchText,
-                                    mobile = buyerMobile,
-                                    address = buyerAddress,
-                                    gst = buyerGst
-                                )
+                                if (buyerMobile.length != 10) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(mobileError)
+                                    }
+                                } else {
+                                    viewModel.registerBuyerAndCreateSale(
+                                        context = context,
+                                        name = buyerSearchText,
+                                        mobile = buyerMobile,
+                                        address = buyerAddress,
+                                        gst = buyerGst
+                                    )
+                                }
                             }
                         }
                     }
@@ -477,20 +509,36 @@ fun SaleItemRowCard(
 
             // Available Info
             val unit = item.arrival.unit
-            val availableOrig = item.arrival.remainingQuantity
-            val availableKg = availableOrig * (if(unit == "Ton" || unit == "Boxes") 1000.0 else 1.0)
+            val kgPerBox = if (item.arrival.numberOfBoxes > 0) item.arrival.finalNetWeightKg / item.arrival.numberOfBoxes else 0.0
+            
+            val availableInUnit = if (unit == "Boxes") {
+                if (item.arrival.quantity > 0) (item.arrival.remainingQuantity / item.arrival.quantity) * item.arrival.numberOfBoxes else 0.0
+            } else item.arrival.remainingQuantity
+            
+            val availableKg = item.arrival.remainingQuantity * (when(unit) {
+                "Ton" -> 1000.0
+                "Boxes" -> kgPerBox
+                else -> 1.0
+            })
             
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Stock: ${Formatter.formatWeight(availableOrig)} $unit", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                Text("Stock: ${Formatter.formatWeight(availableInUnit)} $unit", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                 if (unit != "KG") {
                     Text("Net: ${Formatter.formatWeight(availableKg)} KG", fontSize = 12.sp, color = Color.Gray)
                 }
-                Text("P. Rate: ₹${Formatter.formatCurrency(if(item.arrival.ratePerKg > 0) item.arrival.ratePerKg else item.arrival.purchaseRate / (if(unit == "Ton") 1000.0 else 1.0))}/KG", fontSize = 12.sp, color = Color.Gray)
+                val purchaseRatePerKg = if(item.arrival.ratePerKg > 0) item.arrival.ratePerKg 
+                                       else item.arrival.purchaseRate / (when(unit) {
+                                           "Ton" -> 1000.0
+                                           "Boxes" -> if(kgPerBox > 0) kgPerBox else 1.0
+                                           else -> 1.0
+                                       })
+                Text("P. Rate: ₹${Formatter.formatCurrency(purchaseRatePerKg)}/KG", fontSize = 12.sp, color = Color.Gray)
             }
 
             // Editable Fields
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val isTon = unit == "Ton"
+                val isBoxes = unit == "Boxes"
                 Column(Modifier.weight(1f)) {
                     OutlinedTextField(
                         value = item.rawInputQuantity.ifEmpty { 
@@ -507,20 +555,21 @@ fun SaleItemRowCard(
                             onUpdate(item.copy(inputQuantity = v, rawInputQuantity = sanitizedInput))
                         },
                         label = { Text("Sale Qty ($unit)") },
-                        placeholder = { if (isTon) Text("0.00") }, // Requirement 3: Show "0.00" only as placeholder
+                        placeholder = { if (isTon || isBoxes) Text("0.00") }, // Requirement 3: Show "0.00" only as placeholder
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        isError = item.inputQuantity > (availableOrig + 0.0001)
+                        isError = item.inputQuantity > (availableInUnit + 0.0001)
                     )
-                    if (isTon && item.inputQuantity > 0) {
+                    if ((isTon || isBoxes) && item.inputQuantity > 0) {
+                        val factor = if(isTon) 1000.0 else kgPerBox
                         Text(
-                            "Equivalent: ${Formatter.formatNetWeight(item.inputQuantity * 1000.0)}",
+                            "Equivalent: ${Formatter.formatNetWeight(item.inputQuantity * factor)}",
                             fontSize = 11.sp,
                             color = Color.Gray,
                             modifier = Modifier.padding(start = 4.dp, top = 2.dp)
                         )
                     }
-                    if (item.inputQuantity > (availableOrig + 0.0001)) {
+                    if (item.inputQuantity > (availableInUnit + 0.0001)) {
                         Text(
                             "Sale quantity exceeds available stock",
                             fontSize = 10.sp,
@@ -746,12 +795,30 @@ fun FarmerStockSelectionCard(arrival: ArrivalEntity, isSelected: Boolean, onClic
                 Text(dateStr, fontSize = 11.sp, color = Color.Gray)
             }
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                val kgPerBox = if (arrival.numberOfBoxes > 0) arrival.finalNetWeightKg / arrival.numberOfBoxes else 0.0
                 val availableInUnit = if (arrival.unit == "Boxes") {
                     if (arrival.quantity > 0) (arrival.remainingQuantity / arrival.quantity) * arrival.numberOfBoxes else 0.0
                 } else arrival.remainingQuantity
                 
-                Text("${stringResource(R.string.stock_label)}: ${Formatter.formatWeight(availableInUnit)} ${arrival.unit}", fontSize = 13.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Medium)
-                Text("${stringResource(R.string.rate)}: ₹${Formatter.formatCurrency(if(arrival.ratePerKg > 0) arrival.ratePerKg else arrival.purchaseRate / (if(arrival.unit == "Ton") 1000.0 else 1.0))}${if(arrival.unit == "Ton" || arrival.unit == "Boxes") "/KG" else ""}", fontSize = 13.sp, color = Color.Gray)
+                val availableKg = arrival.remainingQuantity * (when(arrival.unit) {
+                    "Ton" -> 1000.0
+                    "Boxes" -> kgPerBox
+                    else -> 1.0
+                })
+                
+                Column {
+                    Text("${stringResource(R.string.stock_label)}: ${Formatter.formatWeight(availableInUnit)} ${arrival.unit}", fontSize = 13.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Medium)
+                    if (arrival.unit != "KG") {
+                        Text("(${Formatter.formatWeight(availableKg)} KG)", fontSize = 11.sp, color = Color.Gray)
+                    }
+                }
+                val purchaseRatePerKg = if(arrival.ratePerKg > 0) arrival.ratePerKg 
+                                       else arrival.purchaseRate / (when(arrival.unit) {
+                                           "Ton" -> 1000.0
+                                           "Boxes" -> if(kgPerBox > 0) kgPerBox else 1.0
+                                           else -> 1.0
+                                       })
+                Text("${stringResource(R.string.rate)}: ₹${Formatter.formatCurrency(purchaseRatePerKg)}/KG", fontSize = 13.sp, color = Color.Gray)
             }
         }
     }

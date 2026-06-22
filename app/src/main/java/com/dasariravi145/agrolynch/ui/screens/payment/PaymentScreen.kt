@@ -24,12 +24,15 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.util.Formatter
+import com.dasariravi145.agrolynch.util.findActivity
 import com.dasariravi145.agrolynch.data.local.entity.BuyerEntity
 import com.dasariravi145.agrolynch.data.local.entity.FarmerEntity
 import com.dasariravi145.agrolynch.data.local.entity.PaymentEntity
 import java.text.SimpleDateFormat
 import java.util.*
 import java.io.File
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,9 +52,12 @@ fun PaymentScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val pendingAmount by viewModel.pendingAmount.collectAsState()
     val selectedTab by viewModel.selectedTab.collectAsState()
+    val isPrinting by viewModel.isPrinting.collectAsState()
+    val isSharing by viewModel.isSharing.collectAsState()
     val autoBillNumber by viewModel.billNumber.collectAsState()
     val exportStatus by viewModel.exportStatus.collectAsState(initial = "")
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var showAddDialog by remember { mutableStateOf(ocrAmount > 0) }
     var selectedPaymentToEdit by remember { mutableStateOf<PaymentEntity?>(null) }
@@ -61,38 +67,9 @@ fun PaymentScreen(
     LaunchedEffect(exportStatus) {
         if (exportStatus == "PREMIUM_REQUIRED") {
             showPremiumDialog = true
-        } else if (exportStatus.startsWith("SUCCESS:")) {
-            val filePath = exportStatus.removePrefix("SUCCESS:")
-            pendingFileForAction = File(filePath)
+        } else if (exportStatus.startsWith("FAILED:")) {
+            android.widget.Toast.makeText(context, exportStatus.removePrefix("FAILED:"), android.widget.Toast.LENGTH_SHORT).show()
         }
-    }
-
-    if (pendingFileForAction != null) {
-        AlertDialog(
-            onDismissRequest = { pendingFileForAction = null },
-            title = { Text("Bill Generated") },
-            text = { Text("Would you like to Print or Share this bill?") },
-            confirmButton = {
-                Button(onClick = { 
-                    com.dasariravi145.agrolynch.util.PdfGenerator.printPdf(context, pendingFileForAction!!)
-                    pendingFileForAction = null
-                }) {
-                    Icon(Icons.Default.Print, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Print")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { 
-                    com.dasariravi145.agrolynch.util.PdfGenerator.sharePdf(context, pendingFileForAction!!)
-                    pendingFileForAction = null
-                }) {
-                    Icon(Icons.Default.Share, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Share")
-                }
-            }
-        )
     }
 
     LaunchedEffect(ocrPartyName) {
@@ -102,6 +79,20 @@ fun PaymentScreen(
             val isFarmer = farmers.any { it.name.contains(ocrPartyName, true) }
             if (isFarmer && !isBuyer) viewModel.onTabSelected(1)
             else if (isBuyer) viewModel.onTabSelected(0)
+        }
+    }
+
+    val error by viewModel.error.collectAsState(initial = "")
+    
+    LaunchedEffect(Unit) {
+        viewModel.saveSuccess.collect {
+            android.widget.Toast.makeText(context, "Payment saved successfully", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(error) {
+        if (error.isNotEmpty()) {
+            android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -159,10 +150,20 @@ fun PaymentScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(payments) { payment ->
+                        val billNo = payment.billNumber.ifEmpty { payment.id }
                         PaymentItem(
                             payment = payment,
                             onClick = { selectedPaymentToEdit = payment },
-                            onPrint = { viewModel.exportPayment(context, payment) }
+                            isPrinting = isPrinting == billNo,
+                            isSharing = isSharing == billNo,
+                            onPrint = { 
+                                android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                                viewModel.printPayment(context, payment)
+                            },
+                            onShare = {
+                                android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                                viewModel.sharePayment(context, payment)
+                            }
                         )
                     }
                 }
@@ -175,6 +176,7 @@ fun PaymentScreen(
                 farmers = farmers,
                 pendingAmount = pendingAmount,
                 selectedTab = selectedTab,
+                isLoading = isLoading,
                 initialAmount = if (ocrAmount > 0) ocrAmount.toString() else "",
                 initialRef = ocrBillNo,
                 initialPartyName = ocrPartyName,
@@ -209,7 +211,10 @@ fun PaymentScreen(
 fun PaymentItem(
     payment: PaymentEntity,
     onClick: () -> Unit,
-    onPrint: () -> Unit
+    isPrinting: Boolean = false,
+    isSharing: Boolean = false,
+    onPrint: () -> Unit,
+    onShare: () -> Unit
 ) {
     val dateFormat = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
     Card(
@@ -248,8 +253,31 @@ fun PaymentItem(
                     fontSize = 18.sp,
                     color = color
                 )
-                IconButton(onClick = onPrint, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onShare, 
+                        modifier = Modifier.size(32.dp),
+                        enabled = !isSharing && !isPrinting
+                    ) {
+                        if (isSharing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Share, "Share", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    
+                    IconButton(
+                        onClick = onPrint, 
+                        modifier = Modifier.size(32.dp),
+                        enabled = !isPrinting && !isSharing
+                    ) {
+                        if (isPrinting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        }
+                    }
                 }
             }
         }
@@ -263,6 +291,7 @@ fun AddPaymentDialog(
     farmers: List<FarmerEntity>,
     pendingAmount: Double,
     selectedTab: Int,
+    isLoading: Boolean = false,
     initialAmount: String = "",
     initialRef: String = "",
     initialPartyName: String = "",
@@ -507,15 +536,18 @@ fun AddPaymentDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val amt = amount.toDoubleOrNull() ?: 0.0
-                    if (selectedPartyId.isNotEmpty() && amt > 0) {
-                        onSave(selectedPartyId, selectedPartyName, partyType, amt, paymentMode, reference, notes)
+                    if (!isLoading) {
+                        val amt = amount.toDoubleOrNull() ?: 0.0
+                        if (selectedPartyId.isNotEmpty() && amt > 0) {
+                            onSave(selectedPartyId, selectedPartyName, partyType, amt, paymentMode, reference, notes)
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                enabled = selectedPartyId.isNotEmpty() && amount.isNotEmpty() && (amount.toDoubleOrNull() ?: 0.0) > 0 && !(selectedTab == 1 && pendingAmount <= 0)
+                enabled = selectedPartyId.isNotEmpty() && amount.isNotEmpty() && (amount.toDoubleOrNull() ?: 0.0) > 0 && !(selectedTab == 1 && pendingAmount <= 0) && !isLoading
             ) {
-                Text(stringResource(R.string.confirm_payment))
+                if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                else Text(stringResource(R.string.confirm_payment))
             }
         },
         dismissButton = {

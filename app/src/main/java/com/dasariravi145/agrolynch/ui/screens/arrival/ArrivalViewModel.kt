@@ -9,6 +9,7 @@ import com.dasariravi145.agrolynch.util.pdf.TemplateInvoicePdfService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.io.File
 import java.util.*
 import javax.inject.Inject
@@ -140,7 +141,6 @@ class ArrivalViewModel @Inject constructor(
         farmerVillage: String,
         productName: String,
         productCategory: String,
-        unit: String,
         commissionPercent: Double,
         laborCharges: Double,
         transportCharges: Double,
@@ -161,18 +161,20 @@ class ArrivalViewModel @Inject constructor(
             return
         }
 
-        if (unit == "Boxes") {
-            if (gradeEntries.any { it.boxCount <= 0 }) {
-                viewModelScope.launch { _error.emit("Number of Boxes must be greater than 0") }
-                return
-            }
-            if (gradeEntries.any { it.totalTareWeightKg >= (it.quantity * 1000) }) {
-                viewModelScope.launch { _error.emit("Empty Box Weight cannot exceed Total Weight") }
-                return
-            }
-            if (gradeEntries.any { it.spoilage < 0 || it.spoilage >= 100 }) {
-                viewModelScope.launch { _error.emit("Spoilage percentage must be between 0 and 99") }
-                return
+        gradeEntries.forEach { entry ->
+            if (entry.unit == "Boxes") {
+                if (entry.boxCount <= 0) {
+                    viewModelScope.launch { _error.emit("Number of Boxes must be greater than 0 for ${entry.grade}") }
+                    return
+                }
+                if (entry.totalTareWeightKg >= (entry.quantity * 1000)) {
+                    viewModelScope.launch { _error.emit("Empty Box Weight cannot exceed Total Weight for ${entry.grade}") }
+                    return
+                }
+                if (entry.spoilage < 0 || entry.spoilage >= 100) {
+                    viewModelScope.launch { _error.emit("Spoilage percentage must be between 0 and 99 for ${entry.grade}") }
+                    return
+                }
             }
         }
 
@@ -192,28 +194,29 @@ class ArrivalViewModel @Inject constructor(
 
         viewModelScope.launch {
             _isLoading.value = true
-            val farmerId = if (existingFarmer == null) {
-                val newId = UUID.randomUUID().toString()
-                val newFarmer = FarmerEntity(id = newId, name = farmerName, mobileNumber = farmerPhone, village = farmerVillage)
-                farmerRepository.addFarmer(newFarmer)
-                newId
-            } else {
-                existingFarmer.id
-            }
-
-            val selectedProduct = productRepository.getProductByName(productName)
-            val productId = if (selectedProduct == null) {
-                val newId = UUID.randomUUID().toString()
-                val newProduct = ProductEntity(id = newId, name = productName, category = productCategory, availableGrades = gradeEntries.map { it.grade }.distinct())
-                productRepository.addProduct(newProduct, null)
-                newId
-            } else {
-                val existingGrades = selectedProduct.availableGrades.toMutableSet()
-                if (existingGrades.addAll(gradeEntries.map { it.grade })) {
-                    productRepository.addProduct(selectedProduct.copy(availableGrades = existingGrades.toList()), null)
+            try {
+                val farmerId = if (existingFarmer == null) {
+                    val newId = UUID.randomUUID().toString()
+                    val newFarmer = FarmerEntity(id = newId, name = farmerName, mobileNumber = farmerPhone, village = farmerVillage)
+                    farmerRepository.addFarmer(newFarmer)
+                    newId
+                } else {
+                    existingFarmer.id
                 }
-                selectedProduct.id
-            }
+
+                val selectedProduct = productRepository.getProductByName(productName)
+                val productId = if (selectedProduct == null) {
+                    val newId = UUID.randomUUID().toString()
+                    val newProduct = ProductEntity(id = newId, name = productName, category = productCategory, availableGrades = gradeEntries.map { it.grade }.distinct())
+                    productRepository.addProduct(newProduct, null)
+                    newId
+                } else {
+                    val existingGrades = selectedProduct.availableGrades.toMutableSet()
+                    if (existingGrades.addAll(gradeEntries.map { it.grade })) {
+                        productRepository.addProduct(selectedProduct.copy(availableGrades = existingGrades.toList()), null)
+                    }
+                    selectedProduct.id
+                }
 
             val arrivals = gradeEntries.mapIndexed { index, entry ->
                 val arrivalId = UUID.randomUUID().toString()
@@ -238,7 +241,7 @@ class ArrivalViewModel @Inject constructor(
                     productCategory = productCategory,
                     grade = entry.grade,
                     quantity = entry.quantity, // Still store Ton value in quantity
-                    unit = unit,
+                    unit = entry.unit,
                     boxCount = entry.totalBoxes,
                     tareWeight = entry.totalTareWeightKg,
                     spoilageQuantity = entry.calculatedTotalSpoilageKg,
@@ -255,16 +258,16 @@ class ArrivalViewModel @Inject constructor(
                     netAmount = itemNetAmount,
                     billNumber = currentBillNumber,
                     totalKg = entry.totalGrossWeightKg,
-                    spoilagePerTon = if (unit == "Ton") entry.spoilage else 0.0,
+                    spoilagePerTon = if (entry.unit == "Ton") entry.spoilage else 0.0,
                     totalSpoilageKg = entry.calculatedTotalSpoilageKg,
                     otherCharges = itemPacking + itemOtherDeductions,
                     netPayable = itemNetAmount,
                     boxWeightMode = "AVERAGE",
                     numberOfBoxes = entry.boxCount,
-                    totalWeightTon = if(unit == "Boxes" || unit == "Ton") entry.quantity else 0.0,
-                    emptyBoxWeightPerBox = if(unit == "Boxes") entry.avgGrossWeight else 0.0,
-                    totalEmptyBoxWeightKg = if(unit == "Boxes") entry.totalTareWeightKg else 0.0,
-                    spoilagePercentage = if (unit == "Boxes") entry.spoilage else 0.0,
+                    totalWeightTon = if(entry.unit == "Boxes" || entry.unit == "Ton") entry.quantity else 0.0,
+                    emptyBoxWeightPerBox = if(entry.unit == "Boxes") entry.avgGrossWeight else 0.0,
+                    totalEmptyBoxWeightKg = if(entry.unit == "Boxes") entry.totalTareWeightKg else 0.0,
+                    spoilagePercentage = if (entry.unit == "Boxes") entry.spoilage else 0.0,
                     spoilageKg = entry.calculatedTotalSpoilageKg,
                     grossWeightKg = entry.totalGrossWeightKg,
                     weightAfterEmptyBoxesKg = entry.balanceKgBeforeSpoilage,
@@ -274,36 +277,31 @@ class ArrivalViewModel @Inject constructor(
                 )
             }
 
-            when (val result = arrivalRepository.addArrivalBatch(arrivals)) {
-                is Resource.Success -> {
-                    // Save deductions
-                    val currentDeductions = _deductions.value
-                    if (arrivals.isNotEmpty()) {
-                        val mainArrivalId = arrivals.first().id
-                        val deductionsToSave = currentDeductions.map { 
-                            it.copy(entryId = mainArrivalId, billId = currentBillNumber) 
+                when (val result = arrivalRepository.addArrivalBatch(arrivals)) {
+                    is Resource.Success -> {
+                        // Save deductions
+                        val currentDeductions = _deductions.value
+                        if (arrivals.isNotEmpty()) {
+                            val mainArrivalId = arrivals.first().id
+                            val deductionsToSave = currentDeductions.map { 
+                                it.copy(entryId = mainArrivalId, billId = currentBillNumber) 
+                            }
+                            billNumberRepository.saveDeductions(deductionsToSave)
                         }
-                        billNumberRepository.saveDeductions(deductionsToSave)
+                        
+                        // Finalize bill number
+                        billNumberRepository.incrementBillNumber(Constants.SeriesType.STOCK)
+                        _saveSuccess.emit(Unit)
                     }
-                    
-                    // Finalize bill number
-                    billNumberRepository.incrementBillNumber(Constants.SeriesType.STOCK)
-                    
-                    // Auto-export PDF
-                    val profile = companyRepository.getProfile().first()
-                    if (profile != null) {
-                        val file = pdfService.generateFarmerArrivalPdf(context, profile, arrivals, currentDeductions, farmerPhone)
-                        if (file != null) {
-                            _exportStatus.emit("SUCCESS:${file.absolutePath}")
-                        }
-                    }
-
-                    _saveSuccess.emit(Unit)
+                    is Resource.Error -> _error.emit(result.message ?: "Failed to save arrival batch")
+                    else -> {}
                 }
-                is Resource.Error -> _error.emit(result.message ?: "Failed to save arrival batch")
-                else -> {}
+            } catch (e: Exception) {
+                Timber.e(e, "SAVE_ARRIVAL_FAILED")
+                _error.emit("An error occurred while saving: ${e.message}")
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 

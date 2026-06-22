@@ -6,7 +6,9 @@ import timber.log.Timber
 object VoiceTextNormalizer {
 
     fun normalizeVoiceText(rawText: String, currentStep: VoiceStep): String {
-        val lowerText = rawText.lowercase().trim()
+        // Remove symbols: + . , - _
+        val cleanText = rawText.replace(Regex("[+.,\\-_]"), " ").trim()
+        val lowerText = cleanText.lowercase()
 
         // 1. Handle "Skip" in all supported languages
         if (isSkipCommand(lowerText)) {
@@ -16,19 +18,38 @@ object VoiceTextNormalizer {
 
         // 2. Step-specific normalization
         val result = when (currentStep) {
-            VoiceStep.FARMER_NAME, VoiceStep.VILLAGE, VoiceStep.GRADE -> rawText.trim()
+            VoiceStep.FARMER_NAME, VoiceStep.VILLAGE -> cleanText
+            VoiceStep.GRADE -> normalizeGrade(lowerText)
             VoiceStep.PRODUCT_NAME -> normalizeProductName(lowerText)
             VoiceStep.UNIT -> normalizeUnit(lowerText)
-            VoiceStep.QUANTITY, VoiceStep.WASTE, VoiceStep.RATE, VoiceStep.COMMISSION,
-            VoiceStep.LABOUR_CHARGES, VoiceStep.TRANSPORT_CHARGES, VoiceStep.OTHER_DEDUCTIONS -> {
+            VoiceStep.QUANTITY, VoiceStep.WASTE, VoiceStep.RATE, 
+            VoiceStep.BOX_COUNT, VoiceStep.TOTAL_WEIGHT_TON, 
+            VoiceStep.EMPTY_BOX_WEIGHT, VoiceStep.SPOILAGE_PERCENT -> {
                 parseNumberFromText(lowerText)
             }
-            VoiceStep.PHONE_NUMBER -> lowerText.filter { it.isDigit() }
-            else -> rawText.trim()
+            else -> cleanText
         }
         
         Timber.d("VOICE_NORMALIZED_TEXT: $result (Step: $currentStep)")
         return result
+    }
+
+    private fun normalizeGrade(text: String): String {
+        return when {
+            text.contains("grade a") || text.contains("great a") || 
+            text.contains("grand a") || text.contains("grada") ||
+            text.endsWith(" a") || text == "a" -> "Grade A"
+            
+            text.contains("grade b") || text.contains("great b") || 
+            text.contains("grand b") || text.contains("gradb") ||
+            text.endsWith(" b") || text == "b" -> "Grade B"
+            
+            text.contains("grade c") || text.contains("great c") || 
+            text.contains("grand c") || text.contains("gradc") ||
+            text.endsWith(" c") || text == "c" -> "Grade C"
+            
+            else -> "General"
+        }
     }
 
     private fun isSkipCommand(text: String): Boolean {
@@ -41,7 +62,7 @@ object VoiceTextNormalizer {
 
     private fun normalizeProductName(text: String): String {
         // Mango mapping
-        val mangoWords = listOf("mango", "mamidi", "మామిడి", "aam", "आम", "maampazham", "மாம்பழம்", "mavinahannu", "మావినహణ్ణు")
+        val mangoWords = listOf("mango", "mamidi", "మామిడి", "aam", "आम", "maampazham", "மாம்பழம்", "mavinahannu", "ಮಾವಿನಹಣ್ಣು")
         if (mangoWords.any { text.contains(it) }) return "Mango"
         
         // Tomato mapping
@@ -53,7 +74,7 @@ object VoiceTextNormalizer {
         if (potatoWords.any { text.contains(it) }) return "Potato"
 
         // Onion mapping
-        val onionWords = listOf("onion", "ullipaya", "pyaaz", "vengayam", "ఉల్లిపాయ", "प्याज", "வெங்காயம்")
+        val onionWords = listOf("onion", "ullipaya", "pyaaz", "vengayam", "ఉల్లిపాయ", "प्याज", "வெಂಗாயம்")
         if (onionWords.any { text.contains(it) }) return "Onion"
         
         return text.replaceFirstChar { it.uppercase() }

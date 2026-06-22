@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Premium Fruit Gallery</title>
+    <style>
+        @page { size: A4; margin: 0; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { margin: 0; padding: 0; background: #fdfdfd; font-family: 'Segoe UI', Arial, sans-serif; color: #444; }
+
+        .invoice-page {
+            width: 794px;
+            height: 1123px;
+            position: relative;
+            overflow: hidden;
+            background: #fff;
+            padding: 50px;
+        }
+
+        .decorative-corner {
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            background: linear-gradient(135deg, #4a148c 0%, transparent 70%);
+            top: 0; left: 0; opacity: 0.1;
+        }
+        .decorative-corner-br {
+            position: absolute;
+            width: 250px;
+            height: 250px;
+            background: radial-gradient(circle at bottom right, #fbc02d 0%, transparent 70%);
+            bottom: 0; right: 0; opacity: 0.08;
+        }
+
+        .watermark {
+            position: absolute;
+            top: 460px;
+            left: 70px;
+            width: 650px;
+            text-align: center;
+            transform: rotate(-35deg);
+            opacity: 0.05;
+            font-size: 86px;
+            font-weight: 900;
+            letter-spacing: 8px;
+            pointer-events: none;
+            z-index: 0;
+            color: #4a148c;
+            text-transform: uppercase;
+        }
+
+        .god-frame {
+            position: absolute;
+            top: 30px;
+            right: 50px;
+            width: 110px;
+            height: 110px;
+            border: 3px solid #fbc02d;
+            border-radius: 50%;
+            overflow: hidden;
+            background: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        .god-image { width: 100%; height: 100%; object-fit: cover; }
+
+        .header { text-align: center; margin-bottom: 40px; position: relative; }
+        .company-name {
+            font-size: 48px;
+            margin: 0;
+            color: #4a148c;
+            font-family: 'Times New Roman', serif;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .tagline { font-size: 16px; color: #fbc02d; font-weight: bold; margin-top: 5px; letter-spacing: 4px; text-transform: uppercase; }
+        .biz-details { margin-top: 10px; font-size: 13px; color: #777; }
+
+        .title-badge {
+            background: #4a148c;
+            color: #fff;
+            display: inline-block;
+            padding: 8px 30px;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 20px;
+            letter-spacing: 4px;
+            margin-top: 20px;
+            box-shadow: 0 4px 8px rgba(74, 20, 140, 0.2);
+        }
+
+        .meta-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            white-space: nowrap;
+            border: 2px solid #4a148c;
+            padding: 12px 25px;
+            border-radius: 12px;
+            background: #f8f0ff;
+            margin-top: 25px;
+            font-size: 15px;
+            color: #222;
+        }
+        .meta-item { display: flex; gap: 8px; font-weight: 800; color: #4a148c; }
+        .meta-item span { color: #222; }
+
+        .table-area { margin-top: 25px; height: 420px; overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; }
+
+        thead tr, tbody tr {
+            display: grid;
+            grid-template-columns: 45px 1fr 85px 140px 95px 125px;
+            align-items: center;
+            width: 100%;
+        }
+
+        th {
+            background: #6a1b9a;
+            color: white;
+            padding: 15px 10px;
+            font-size: 13px;
+            text-transform: uppercase;
+            text-align: center;
+        }
+        th:first-child { border-radius: 12px 0 0 12px; }
+        th:last-child { border-radius: 0 12px 12px 0; }
+
+        td { background: #fafafa; padding: 12px 10px; font-size: 15px; border-bottom: 1px solid #eee; height: 100%; display: flex; align-items: center; justify-content: center; }
+        td:nth-child(2) { justify-content: flex-start; }
+
+        /* Quantity + Unit Merge - Corrected Column Mapping */
+        td:nth-child(4) {
+            grid-column: 4;
+            justify-content: center;
+            white-space: nowrap !important;
+            display: flex !important;
+        }
+
+        /* Rate Mapping */
+        td:nth-child(5) {
+            grid-column: 5;
+            justify-content: center;
+            white-space: nowrap !important;
+            display: flex !important;
+        }
+
+        /* Total Amount Mapping */
+        td:nth-child(6) {
+            grid-column: 6;
+            justify-content: flex-end;
+            white-space: nowrap !important;
+            display: flex !important;
+            font-weight: bold;
+            color: #4a148c;
+        }
+
+        /* Prevent any block-level break inside cells */
+        td * { display: inline !important; white-space: nowrap !important; }
+
+        .text-left { text-align: left; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .empty-row td { height: 35px; background: transparent !important; border: none !important; }
+
+        .footer-container {
+            position: absolute;
+            bottom: 50px;
+            left: 50px;
+            right: 50px;
+        }
+
+        .footer-section { display: flex; justify-content: space-between; align-items: flex-start; }
+
+        .qr-area { background: #fdfdfd; padding: 10px; border-radius: 15px; border: 1px solid #eee; text-align: center; }
+
+        .right-footer {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 15px;
+        }
+
+        .totals-card {
+            width: 380px;
+            background: #4a148c;
+            color: white;
+            padding: 25px;
+            border-radius: 24px;
+            box-shadow: 0 8px 20px rgba(74, 20, 140, 0.3);
+            margin-bottom: 5px;
+        }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-size: 15px;
+            gap: 20px;
+        }
+        .total-row span:last-child {
+            font-weight: bold;
+            min-width: 100px;
+            text-align: right;
+        }
+        .grand-total {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            font-size: 28px;
+            font-weight: bold;
+            color: #fbc02d;
+            gap: 20px;
+        }
+        .grand-total span:last-child {
+            text-align: right;
+        }
+
+        .signature-section {
+            width: 250px;
+            text-align: center;
+            margin-top: 10px;
+            margin-right: 10px;
+        }
+
+        .signature-section img {
+            display: block;
+            width: 180px;
+            max-height: 85px;
+            margin: 0 auto;
+            object-fit: contain;
+        }
+
+        .sig-line {
+            width: 100%;
+            border-top: 1.5px solid #4a148c;
+            margin: 5px auto;
+        }
+
+        .auth-label {
+            color: #4a148c;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+
+        .bottom-ribbon {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 10px;
+            background: linear-gradient(to right, #4a148c, #fbc02d, #4a148c);
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="invoice-page">
+        <div class="decorative-corner"></div>
+        <div class="decorative-corner-br"></div>
+        <div class="watermark">{{companyName}}</div>
+
+        <div class="god-frame {{godImageHidden}}">
+            <img src="{{godImageBase64}}" class="god-image">
+        </div>
+
+        <div class="header">
+            <div class="company-name">{{companyName}}</div>
+            <div class="tagline {{taglineHidden}}">{{tagline}}</div>
+            <div class="biz-details">
+                {{address}}<br>
+                <span class="{{mobileHidden}}">📞 {{mobile}}</span> | <span class="{{gstHidden}}">🆔 GST: {{gstNumber}}</span>
+            </div>
+            <div class="title-badge">INVOICE</div>
+        </div>
+
+        <div class="meta-bar">
+            <div class="meta-item">Customer Name: <span>{{customerName}}</span></div>
+            <div class="meta-item">Bill No: <span>{{billNumber}}</span></div>
+            <div class="meta-item">Date: <span>{{date}}</span></div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; font-weight: bold; color: #4a148c; padding: 0 10px;">
+            <div class="{{customerMobileHidden}}">Mobile: {{customerMobile}}</div>
+            <div class="{{vehicleHidden}}">Vehicle: {{vehicleNumber}}</div>
+        </div>
+
+        <div class="table-area">
+            <table>
+                <thead>
+                    <tr>
+                        <th width="40">#</th>
+                        <th class="text-left">Particulars</th>
+                        <th width="80">Grade</th>
+                        <th width="120">Quantity</th>
+                        <th width="90">Rate</th>
+                        <th width="125" class="text-right">Total Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{productRows}}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer-container">
+            <div class="footer-section">
+                <div class="qr-area {{qrHidden}}">
+                    <img src="{{qrBase64}}" width="90" height="90">
+                    <div style="font-size: 10px; font-weight: bold; color: #4a148c; margin-top: 5px;">SCAN TO PAY</div>
+                </div>
+
+                <div class="right-footer">
+                    <div class="totals-card">
+                        <div class="total-row"><span>Gross Value</span> <span>₹{{subtotal}}</span></div>
+                        <div class="total-row {{commissionHidden}}"><span>Commission</span> <span>- ₹{{commission}}</span></div>
+                        <div class="total-row {{labourHidden}}"><span>Labor/Cooli</span> <span>- ₹{{labour}}</span></div>
+                        <div class="total-row {{transportHidden}}"><span>Transport</span> <span>- ₹{{transport}}</span></div>
+                        <div class="total-row {{advanceHidden}}"><span>Advance</span> <span>- ₹{{advance}}</span></div>
+                        <div class="total-row {{othersHidden}}"><span>Others</span> <span>- ₹{{others}}</span></div>
+                        <div class="grand-total"><span>TOTAL</span> <span>₹{{grandTotal}}</span></div>
+                    </div>
+
+                    <div class="signature-section">
+                        <img src="{{signatureBase64}}" class="{{signatureHidden}}" alt="Signature">
+                        <div class="sig-line"></div>
+                        <div class="auth-label">Authorized Signature</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="bottom-ribbon"></div>
+    </div>
+</body>
+</html>

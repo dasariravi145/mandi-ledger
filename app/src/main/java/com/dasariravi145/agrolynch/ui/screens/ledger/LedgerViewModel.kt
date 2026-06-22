@@ -9,9 +9,15 @@ import com.dasariravi145.agrolynch.domain.repository.LedgerRepository
 import com.dasariravi145.agrolynch.domain.repository.CompanyRepository
 import com.dasariravi145.agrolynch.util.LedgerExportService
 import com.dasariravi145.agrolynch.util.PremiumStateManager
+import com.dasariravi145.agrolynch.util.findActivity
+import com.dasariravi145.agrolynch.util.PdfGenerator
+import com.dasariravi145.agrolynch.util.PdfPrintHelper
+import com.dasariravi145.agrolynch.util.PdfActionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -40,6 +46,12 @@ class LedgerViewModel @Inject constructor(
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
+
+    private val _isPrinting = MutableStateFlow<String?>(null)
+    val isPrinting = _isPrinting.asStateFlow()
+
+    private val _isSharing = MutableStateFlow<String?>(null)
+    val isSharing = _isSharing.asStateFlow()
 
     private val _tabIndex = MutableStateFlow(0)
     val tabIndex: StateFlow<Int> = _tabIndex.asStateFlow()
@@ -80,60 +92,108 @@ class LedgerViewModel @Inject constructor(
     }
 
     fun exportLedgerEntry(context: Context, entry: LedgerEntry, partyType: String) {
+        // Deprecated, use printLedgerEntry or shareLedgerEntry
+    }
+
+    fun printLedgerEntry(context: Context, entry: LedgerEntry, partyType: String) {
+        val billNo = entry.details?.billNumber?.ifEmpty { entry.id } ?: entry.id
         viewModelScope.launch {
             try {
-                _isLoading.value = true
-                val profile = companyProfile.value ?: CompanyProfileEntity()
-                val details = entry.details
+                _isPrinting.value = billNo
                 
-                val file = when (entry.transactionType) {
-                    TransactionType.ARRIVAL -> {
-                        if (details != null && details.arrivalItems.isNotEmpty()) {
-                            exportService.exportArrivalToPdf(context, profile, details.arrivalItems, details.deductions)
-                        } else null
-                    }
-                    TransactionType.SALE -> {
-                        if (details != null) {
-                            val sale = com.dasariravi145.agrolynch.data.local.entity.SaleEntity(
-                                id = entry.id,
-                                buyerName = _currentSummary.value?.partyName ?: "",
-                                totalAmount = details.grossAmount,
-                                totalNetAmount = details.netAmount,
-                                laborCharges = details.laborCharges,
-                                transportCharges = details.transportCharges,
-                                billNumber = details.billNumber,
-                                date = entry.date
-                            )
-                            exportService.exportSaleToPdf(context, profile, sale, details.saleItems, details.deductions)
-                        } else null
-                    }
-                    TransactionType.PAYMENT -> {
-                        val payment = com.dasariravi145.agrolynch.data.local.entity.PaymentEntity(
-                            id = entry.id,
-                            partyName = _currentSummary.value?.partyName ?: "",
-                            partyType = partyType,
-                            amount = entry.amount,
-                            paymentMode = if(entry.title.contains(":")) entry.title.split(":")[1].trim() else "CASH",
-                            referenceNumber = entry.reference,
-                            billNumber = details?.billNumber ?: "",
-                            date = entry.date
-                        )
-                        exportService.exportPaymentToPdf(context, profile, payment, partyType)
-                    }
-                    else -> null
+                val activity = context.findActivity()
+                if (activity == null) {
+                    _exportStatus.emit("FAILED: Unable to open print. Please try again.")
+                    return@launch
+                }
+
+                val profile = companyProfile.value ?: CompanyProfileEntity()
+                val file = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    generateEntryPdf(context, profile, entry, partyType)
                 }
 
                 if (file != null && file.exists()) {
-                    _exportStatus.emit("SUCCESS:${file.absolutePath}")
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        val uri = PdfGenerator.getUriFromFile(context, file)
+                        PdfPrintHelper.print(activity, uri)
+                    }
                 } else {
                     _exportStatus.emit("FAILED: PDF generation failed")
                 }
             } catch (e: Exception) {
-                Timber.e(e, "PDF Generation Failed")
+                Timber.e(e, "Print Failed")
                 _exportStatus.emit("FAILED: ${e.message}")
             } finally {
-                _isLoading.value = false
+                _isPrinting.value = null
             }
+        }
+    }
+
+    fun shareLedgerEntry(context: Context, entry: LedgerEntry, partyType: String) {
+        val billNo = entry.details?.billNumber?.ifEmpty { entry.id } ?: entry.id
+        viewModelScope.launch {
+            try {
+                _isSharing.value = billNo
+                
+                val profile = companyProfile.value ?: CompanyProfileEntity()
+                val file = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    generateEntryPdf(context, profile, entry, partyType)
+                }
+
+                if (file != null && file.exists()) {
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        val uri = PdfGenerator.getUriFromFile(context, file)
+                        PdfActionManager.sharePdf(context, uri)
+                    }
+                } else {
+                    _exportStatus.emit("FAILED: PDF generation failed")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Share Failed")
+                _exportStatus.emit("FAILED: ${e.message}")
+            } finally {
+                _isSharing.value = null
+            }
+        }
+    }
+
+    private suspend fun generateEntryPdf(context: Context, profile: CompanyProfileEntity, entry: LedgerEntry, partyType: String): java.io.File? {
+        val details = entry.details
+        return when (entry.transactionType) {
+            TransactionType.ARRIVAL -> {
+                if (details != null && details.arrivalItems.isNotEmpty()) {
+                    exportService.exportArrivalToPdf(context, profile, details.arrivalItems, details.deductions)
+                } else null
+            }
+            TransactionType.SALE -> {
+                if (details != null) {
+                    val sale = com.dasariravi145.agrolynch.data.local.entity.SaleEntity(
+                        id = entry.id,
+                        buyerName = _currentSummary.value?.partyName ?: "",
+                        totalAmount = details.grossAmount,
+                        totalNetAmount = details.netAmount,
+                        laborCharges = details.laborCharges,
+                        transportCharges = details.transportCharges,
+                        billNumber = details.billNumber,
+                        date = entry.date
+                    )
+                    exportService.exportSaleToPdf(context, profile, sale, details.saleItems, details.deductions)
+                } else null
+            }
+            TransactionType.PAYMENT -> {
+                val payment = com.dasariravi145.agrolynch.data.local.entity.PaymentEntity(
+                    id = entry.id,
+                    partyName = _currentSummary.value?.partyName ?: "",
+                    partyType = partyType,
+                    amount = entry.amount,
+                    paymentMode = if(entry.title.contains(":")) entry.title.split(":")[1].trim() else "CASH",
+                    referenceNumber = entry.reference,
+                    billNumber = details?.billNumber ?: "",
+                    date = entry.date
+                )
+                exportService.exportPaymentToPdf(context, profile, payment, partyType)
+            }
+            else -> null
         }
     }
 

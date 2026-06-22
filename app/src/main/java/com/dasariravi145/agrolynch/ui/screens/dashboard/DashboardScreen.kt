@@ -44,7 +44,6 @@ fun DashboardScreen(
     onViewExpenses: () -> Unit,
     onViewAnalytics: () -> Unit,
     onViewReports: () -> Unit,
-    onViewBillScan: () -> Unit,
     onViewSecurity: () -> Unit,
     onViewBackup: () -> Unit,
     onViewSettings: () -> Unit,
@@ -265,15 +264,14 @@ fun DashboardScreen(
                             contentColor = Color(0xFF7C3AED)
                         )
                         DashboardBoxItem(
-                            text = stringResource(R.string.read_bill),
-                            icon = Icons.Default.DocumentScanner,
-                            onClick = {
-                                if (isPremium) onViewBillScan() else showPremiumLockedDialog = true
-                            },
+                            text = stringResource(R.string.business_reports),
+                            icon = Icons.Default.Assessment,
+                            onClick = onViewReports,
                             modifier = Modifier.weight(1f),
                             contentColor = Color(0xFFEF6C00)
                         )
                     }
+
                 }
 
                 // SECTION 4: QUICK ACCESS
@@ -307,9 +305,7 @@ fun DashboardScreen(
             isPremium = isPremium,
             onDismiss = { showMoreMenu = false },
             onViewAnalytics = onViewAnalytics,
-            onViewReports = onViewReports,
             onViewBackup = onViewBackup,
-            onViewBillScan = onViewBillScan,
             onViewCompanyProfile = onViewCompanyProfile,
             onUpgradeClick = onUpgradeClick,
             onViewSettings = onViewSettings,
@@ -333,9 +329,7 @@ fun MoreFeaturesDialog(
     isPremium: Boolean,
     onDismiss: () -> Unit,
     onViewAnalytics: () -> Unit,
-    onViewReports: () -> Unit,
     onViewBackup: () -> Unit,
-    onViewBillScan: () -> Unit,
     onViewCompanyProfile: () -> Unit,
     onUpgradeClick: () -> Unit,
     onViewSettings: () -> Unit,
@@ -356,26 +350,10 @@ fun MoreFeaturesDialog(
                     onDismiss = onDismiss
                 )
                 MoreMenuItem(
-                    text = stringResource(R.string.business_reports),
-                    icon = Icons.Default.Assessment,
-                    onClick = onViewReports,
-                    onDismiss = onDismiss
-                )
-                MoreMenuItem(
                     text = stringResource(R.string.backup_reports),
                     icon = Icons.Default.CloudUpload,
                     onClick = onViewBackup,
                     onDismiss = onDismiss
-                )
-                MoreMenuItem(
-                    text = stringResource(R.string.read_bill), 
-                    icon = Icons.Default.DocumentScanner, 
-                    onClick = {
-                        if (isPremium) onViewBillScan() else showPremiumLockedDialog()
-                    }, 
-                    onDismiss = onDismiss,
-                    isPremiumFeature = true,
-                    isPremium = isPremium
                 )
                 MoreMenuItem(
                     text = stringResource(R.string.company_profile_branding),

@@ -8,10 +8,14 @@ import com.dasariravi145.agrolynch.data.local.entity.PaymentEntity
 import com.dasariravi145.agrolynch.domain.repository.*
 import com.dasariravi145.agrolynch.util.*
 import android.content.Context
+import android.app.Activity
+import com.dasariravi145.agrolynch.util.findActivity
 import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import timber.log.Timber
 import java.util.*
 import javax.inject.Inject
@@ -36,6 +40,12 @@ class PaymentViewModel @Inject constructor(
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _isPrinting = MutableStateFlow<String?>(null) // Stores billNo or ID being printed
+    val isPrinting: StateFlow<String?> = _isPrinting.asStateFlow()
+
+    private val _isSharing = MutableStateFlow<String?>(null) // Stores billNo or ID being shared
+    val isSharing: StateFlow<String?> = _isSharing.asStateFlow()
 
     private val _error = MutableSharedFlow<String>()
     val error = _error.asSharedFlow()
@@ -119,52 +129,104 @@ class PaymentViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             _isLoading.value = true
-            val currentBillNumber = _billNumber.value
-            val payment = PaymentEntity(
-                id = UUID.randomUUID().toString(),
-                partyId = partyId,
-                partyName = partyName,
-                partyType = partyType,
-                amount = amount,
-                paymentMode = mode,
-                referenceNumber = reference,
-                billNumber = currentBillNumber,
-                notes = notes
-            )
-            val result = paymentRepository.addPayment(payment)
-            if (result is Resource.Error) {
-                _error.emit(result.message ?: "Failed to save payment")
-            } else {
-                // Finalize bill number
-                billNumberRepository.incrementBillNumber(Constants.SeriesType.PAYMENT)
-                _saveSuccess.emit(Unit)
+            try {
+                val currentBillNumber = _billNumber.value
+                val payment = PaymentEntity(
+                    id = UUID.randomUUID().toString(),
+                    partyId = partyId,
+                    partyName = partyName,
+                    partyType = partyType,
+                    amount = amount,
+                    paymentMode = mode,
+                    referenceNumber = reference,
+                    billNumber = currentBillNumber,
+                    notes = notes
+                )
+                val result = paymentRepository.addPayment(payment)
+                if (result is Resource.Error) {
+                    _error.emit(result.message ?: "Failed to save payment")
+                } else {
+                    // Finalize bill number
+                    billNumberRepository.incrementBillNumber(Constants.SeriesType.PAYMENT)
+                    _saveSuccess.emit(Unit)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "SAVE_PAYMENT_FAILED")
+                _error.emit("An error occurred while saving: ${e.message}")
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
-    fun exportPayment(context: Context, payment: PaymentEntity) {
+    fun printPayment(context: Context, payment: PaymentEntity) {
+        val billNo = payment.billNumber.ifEmpty { payment.id }
         viewModelScope.launch {
-            if (!premiumStateManager.getCachedPremiumStatus()) {
-                _exportStatus.emit("PREMIUM_REQUIRED")
-                return@launch
-            }
-
             try {
-                _isLoading.value = true
+                _isPrinting.value = billNo
+                
+                if (!premiumStateManager.getCachedPremiumStatus()) {
+                    _exportStatus.emit("PREMIUM_REQUIRED")
+                    return@launch
+                }
+
+                val activity = context.findActivity()
+                if (activity == null) {
+                    _exportStatus.emit("FAILED: Unable to open print. Please try again.")
+                    return@launch
+                }
+
                 val profile = companyProfile.value ?: CompanyProfileEntity()
-                val file = exportService.exportPaymentToPdf(context, profile, payment, payment.partyType)
+                val file = withContext(Dispatchers.IO) {
+                    exportService.exportPaymentToPdf(context, profile, payment, payment.partyType)
+                }
 
                 if (file != null && file.exists()) {
-                    _exportStatus.emit("SUCCESS:${file.absolutePath}")
+                    withContext(Dispatchers.Main) {
+                        val uri = PdfGenerator.getUriFromFile(context, file)
+                        PdfPrintHelper.print(activity, uri)
+                    }
                 } else {
                     _exportStatus.emit("FAILED: PDF generation failed")
                 }
             } catch (e: Exception) {
-                Timber.e(e, "PDF Generation Failed")
+                Timber.e(e, "Print failed")
                 _exportStatus.emit("FAILED: ${e.message}")
             } finally {
-                _isLoading.value = false
+                _isPrinting.value = null
+            }
+        }
+    }
+
+    fun sharePayment(context: Context, payment: PaymentEntity) {
+        val billNo = payment.billNumber.ifEmpty { payment.id }
+        viewModelScope.launch {
+            try {
+                _isSharing.value = billNo
+                
+                if (!premiumStateManager.getCachedPremiumStatus()) {
+                    _exportStatus.emit("PREMIUM_REQUIRED")
+                    return@launch
+                }
+
+                val profile = companyProfile.value ?: CompanyProfileEntity()
+                val file = withContext(Dispatchers.IO) {
+                    exportService.exportPaymentToPdf(context, profile, payment, payment.partyType)
+                }
+
+                if (file != null && file.exists()) {
+                    withContext(Dispatchers.Main) {
+                        val uri = PdfGenerator.getUriFromFile(context, file)
+                        PdfActionManager.sharePdf(context, uri)
+                    }
+                } else {
+                    _exportStatus.emit("FAILED: PDF generation failed")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Share failed")
+                _exportStatus.emit("FAILED: ${e.message}")
+            } finally {
+                _isSharing.value = null
             }
         }
     }

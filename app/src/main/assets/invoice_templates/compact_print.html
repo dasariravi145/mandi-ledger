@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Compact Premium Receipt</title>
+    <style>
+        @page { size: A4; margin: 0; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; background: #FFFDF3; font-family: 'Segoe UI', Arial, sans-serif; color: #000; }
+
+        .invoice-page {
+            width: 794px;
+            height: 1123px;
+            margin: 0 auto;
+            position: relative;
+            padding: 50px 147px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .receipt-container {
+            width: 500px;
+            background: #fff;
+            border: 2px solid #0B6B35;
+            padding: 25px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
+            height: fit-content;
+        }
+
+        .header { text-align: center; border-bottom: 2px solid #0B6B35; padding-bottom: 12px; margin-bottom: 15px; }
+        .company-name { font-size: 28px; font-weight: 900; margin: 0; text-transform: uppercase; color: #0B6B35; }
+        .tagline { font-size: 11px; margin-top: 4px; text-transform: uppercase; color: #666; letter-spacing: 1px; }
+        .biz-details { font-size: 13px; margin-top: 6px; color: #333; }
+
+        .bill-info { font-size: 14px; line-height: 1.6; margin-bottom: 15px; }
+        .bill-info b { color: #0B6B35; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #0B6B35; }
+        th {
+            background: #0B6B35;
+            color: #ffffff;
+            text-align: left;
+            padding: 10px 8px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        td { padding: 8px; border-bottom: 1px solid #eee; border-right: 1px solid #eee; }
+
+        /* Merged Qty + Unit Logic */
+        thead th:nth-child(2) { text-align: center; }
+        tbody tr td:nth-child(2) { text-align: center; white-space: nowrap; }
+
+        /* Hide separate unit column if it exists in data but not in header */
+        /* Since compact_print in Kotlin doesn't generate Unit column, we just style what's there */
+
+        .qty-cell{
+            white-space: nowrap !important;
+            text-align:center;
+            vertical-align:middle;
+        }
+
+        .qty-cell *{
+            display:inline !important;
+            white-space:nowrap !important;
+        }
+
+        .text-left { text-align: left; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+
+        .totals-section { margin-top: 15px; font-size: 14px; }
+        .total-row { display: flex; justify-content: space-between; padding: 4px 0; }
+        .grand-total {
+            background: #0B6B35;
+            color: white;
+            padding: 12px;
+            margin-top: 10px;
+            font-weight: bold;
+            font-size: 20px;
+            border-radius: 4px;
+        }
+
+        .qr-section { margin-top: 25px; text-align: center; }
+        .qr-img { width: 130px; height: 130px; border: 1px solid #0B6B35; padding: 8px; background: #fff; }
+
+        .signature-area { margin-top: 35px; text-align: center; font-size: 12px; }
+        .sig-img { max-height: 65px; max-width: 180px; object-fit: contain; }
+        .sig-line { margin: 5px auto; border-top: 1px solid #0B6B35; width: 200px; }
+
+        .footer-msg { text-align: center; margin-top: 25px; font-size: 11px; font-weight: bold; color: #0B6B35; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="invoice-page">
+        <div class="receipt-container">
+            <div class="header">
+                <div class="company-name">{{companyName}}</div>
+                <div class="tagline {{taglineHidden}}">{{tagline}}</div>
+                <div class="biz-details">
+                    {{address}}<br>
+                    Mob: <b>{{mobile}}</b>
+                </div>
+            </div>
+
+            <div class="bill-info">
+                <b>BILL TO:</b> {{customerName}}<br>
+                <b>BILL NO:</b> {{billNumber}}<br>
+                <b>DATE:</b> {{date}}
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th width="45%">ITEM</th>
+                        <th class="text-center" width="20%">QTY</th>
+                        <th class="text-right" width="15%">RATE</th>
+                        <th class="text-right" width="20%">AMT</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{productRows}}
+                </tbody>
+            </table>
+
+            <div class="totals-section">
+                <div class="total-row"><span>GROSS TOTAL:</span> <span>₹{{subtotal}}</span></div>
+                <div class="total-row {{commissionHidden}}"><span>COMMISSION:</span> <span>- ₹{{commission}}</span></div>
+                <div class="total-row {{labourHidden}}"><span>LABOUR/COOLIE:</span> <span>- ₹{{labour}}</span></div>
+                <div class="total-row {{transportHidden}}"><span>TRANSPORT:</span> <span>- ₹{{transport}}</span></div>
+                <div class="total-row {{advanceHidden}}"><span>ADVANCE:</span> <span>- ₹{{advance}}</span></div>
+                <div class="grand-total">
+                    <div class="total-row"><span>NET PAYABLE:</span> <span>₹{{grandTotal}}</span></div>
+                </div>
+            </div>
+
+            <div class="qr-section {{qrHidden}}">
+                <img src="{{qrBase64}}" class="qr-img">
+                <div style="font-size: 11px; margin-top: 8px; font-weight: bold; color: #0B6B35; letter-spacing: 1px;">SCAN & PAY</div>
+            </div>
+
+            <div class="signature-area {{signatureHidden}}">
+                <img src="{{signatureBase64}}" class="sig-img">
+                <div class="sig-line"></div>
+                <div style="font-weight: bold; color: #0B6B35; text-transform: uppercase;">AUTHORIZED SIGNATORY</div>
+            </div>
+
+            <div class="footer-msg">
+                *** THANK YOU! VISIT AGAIN ***<br>
+                <span style="font-size: 9px; opacity: 0.8;">SOFTWARE BY AGROLYNCH</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

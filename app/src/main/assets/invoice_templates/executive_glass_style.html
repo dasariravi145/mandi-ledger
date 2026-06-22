@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Executive Glass Style</title>
+    <style>
+        @page { size: A4; margin: 0; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { margin: 0; padding: 0; background: #e0f7fa; font-family: 'Segoe UI', sans-serif; color: #2c3e50; }
+
+        .invoice-page {
+            width: 794px;
+            height: 1123px;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, #e0f7fa 0%, #80deea 100%);
+            padding: 40px;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            width: 100%;
+            height: 100%;
+            padding: 35px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.05);
+        }
+
+        .watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 80px;
+            font-weight: 900;
+            color: rgba(0, 121, 107, 0.04);
+            pointer-events: none;
+            z-index: 0;
+            text-transform: uppercase;
+        }
+
+        .god-frame {
+            position: absolute;
+            top: 20px;
+            right: 40px;
+            width: 90px;
+            height: 90px;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 2px solid rgba(0, 150, 136, 0.3);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+            background: #fff;
+        }
+        .god-image { width: 100%; height: 100%; object-fit: cover; }
+
+        .header { margin-bottom: 25px; }
+        .company-name {
+            font-size: 44px;
+            margin: 0;
+            color: #00796b;
+            font-weight: 800;
+            letter-spacing: -1px;
+            text-transform: uppercase;
+        }
+        .tagline { font-size: 14px; color: #009688; font-weight: 500; letter-spacing: 5px; text-transform: uppercase; margin-top: 5px; }
+        .biz-details { margin-top: 15px; font-size: 13px; color: #546e7a; }
+
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 20px; }
+        .info-panel {
+            background: rgba(255, 255, 255, 0.5);
+            padding: 12px 25px;
+            border-radius: 16px;
+            width: 100%;
+            border: 1px solid rgba(255,255,255,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            white-space: nowrap;
+        }
+        .info-item { font-size: 14px; color: #00796b; font-weight: 600; }
+        .info-item b { color: #2c3e50; margin-left: 4px; }
+
+        .table-area { flex-grow: 1; margin-top: 5px; min-height: 350px; }
+        table { width: 100%; border-collapse: collapse; }
+
+        thead tr, tbody tr {
+            display: grid;
+            grid-template-columns: 45px 1fr 85px 140px 95px 125px;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        th, td { grid-row: 1; }
+
+        th {
+            background: linear-gradient(to right, #00796b, #009688);
+            color: white;
+            padding: 12px 10px;
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: bold;
+            text-align: center;
+        }
+        th:first-child { border-radius: 12px 0 0 12px; }
+        th:last-child { border-radius: 0 12px 12px 0; }
+
+        td { background: rgba(255, 255, 255, 0.4); padding: 10px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.5); height: 100%; display: flex; align-items: center; justify-content: center; }
+        td:nth-child(2) { justify-content: flex-start; }
+
+        /* Quantity + Unit Column */
+        td:nth-child(4) {
+            grid-column: 4;
+            white-space: nowrap !important;
+            display: flex !important;
+            justify-content: center;
+        }
+
+        /* Rate Column */
+        td:nth-child(5) {
+            grid-column: 5;
+            justify-content: center;
+        }
+
+        /* Amount Column */
+        td:nth-child(6) {
+            grid-column: 6;
+            display: flex !important;
+            justify-content: flex-end;
+            white-space: nowrap !important;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        /* Prevent any block-level rendering inside cells */
+        td * { display: inline !important; }
+
+        .text-left { text-align: left; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .empty-row td { height: 35px; background: transparent !important; border: none !important; }
+
+        .footer-section { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 15px; margin-bottom: 10px; }
+
+        .right-footer { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+
+        .totals-glass {
+            background: #00796b;
+            color: white;
+            padding: 20px;
+            border-radius: 24px;
+            width: 380px;
+            box-shadow: 0 10px 25px rgba(0, 121, 107, 0.2);
+        }
+        .total-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 14px; }
+        .grand-total { display: flex; justify-content: space-between; margin-top: 10px; font-size: 26px; font-weight: 800; color: #fff; }
+
+        .signature-panel {
+            background: #fff;
+            padding: 12px;
+            border-radius: 16px;
+            text-align: center;
+            width: 200px;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        .sig-img { max-width: 160px; max-height: 55px; object-fit: contain; }
+        .auth-label { font-size: 10px; font-weight: bold; color: #00796b; margin-top: 5px; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="invoice-page">
+        <div class="glass-card">
+            <div class="watermark">{{companyName}}</div>
+
+            <div class="god-frame {{godImageHidden}}">
+                <img src="{{godImageBase64}}" class="god-image">
+            </div>
+
+            <div class="header">
+                <div class="company-name">{{companyName}}</div>
+                <div class="tagline {{taglineHidden}}">{{tagline}}</div>
+                <div class="biz-details">
+                    <span>📍 {{address}}</span><br>
+                    <span class="{{mobileHidden}}">📞 {{mobile}}</span> | <span class="{{gstHidden}}">🆔 GST: {{gstNumber}}</span>
+                </div>
+            </div>
+
+            <div class="info-row">
+                <div class="info-panel">
+                    <div class="info-item">Customer Name: <b>{{customerName}}</b></div>
+                    <div class="info-item">Bill No: <b>{{billNumber}}</b></div>
+                    <div class="info-item">Date: <b>{{date}}</b></div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin: 0 20px 15px; font-size: 12px; color: #546e7a;">
+                <div class="{{customerMobileHidden}}">📞 {{customerMobile}}</div>
+                <div class="{{vehicleHidden}}">🚚 {{vehicleNumber}}</div>
+            </div>
+
+            <div class="table-area">
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="40">#</th>
+                            <th class="text-left">Product / Description</th>
+                            <th width="80">Grade</th>
+                            <th width="120">Qty</th>
+                            <th width="90">Rate</th>
+                            <th width="125" class="text-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{productRows}}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="footer-section">
+                <div class="qr-panel">
+                    <div class="{{qrHidden}}" style="background: white; padding: 8px; border-radius: 12px; width: 100px; height: 100px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 5px;">
+                        <img src="{{qrBase64}}" style="width: 100%; height: 100%;">
+                    </div>
+                </div>
+
+                <div class="right-footer">
+                    <div class="totals-glass">
+                        <div class="total-row"><span>Subtotal</span> <span>₹{{subtotal}}</span></div>
+                        <div class="total-row {{commissionHidden}}"><span>Commission</span> <span>- ₹{{commission}}</span></div>
+                        <div class="total-row {{labourHidden}}"><span>Labor</span> <span>- ₹{{labour}}</span></div>
+                        <div class="total-row {{transportHidden}}"><span>Transport</span> <span>- ₹{{transport}}</span></div>
+                        <div class="total-row {{advanceHidden}}"><span>Advance</span> <span>- ₹{{advance}}</span></div>
+                        <div class="total-row {{othersHidden}}"><span>Others</span> <span>- ₹{{others}}</span></div>
+                        <div class="grand-total"><span>TOTAL</span> <span>₹{{grandTotal}}</span></div>
+                    </div>
+                    <div class="signature-panel {{signatureHidden}}">
+                        <img src="{{signatureBase64}}" class="sig-img">
+                        <div class="auth-label">AUTHORIZED SIGNATORY</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

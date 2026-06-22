@@ -16,14 +16,15 @@ sealed class Screen(val route: String) {
         fun passId(id: String? = null) = if (id != null) "add_transaction/$id" else "add_transaction/new"
     }
     object NewArrival : Screen("new_arrival") {
-        const val routeTemplate = "new_arrival?billNo={billNo}&amount={amount}&date={date}&farmer={farmer}&phone={phone}&village={village}&product={product}&category={category}&grade={grade}&qty={qty}&rate={rate}&unit={unit}&boxes={boxes}&weightTon={weightTon}&emptyWtBox={emptyWtBox}&spoilage={spoilage}&comm={comm}&deductions={deductions}"
+        const val routeTemplate = "new_arrival?billNo={billNo}&amount={amount}&date={date}&farmer={farmer}&phone={phone}&village={village}&product={product}&category={category}&grade={grade}&qty={qty}&rate={rate}&unit={unit}&boxes={boxes}&weightTon={weightTon}&emptyWtBox={emptyWtBox}&spoilage={spoilage}&comm={comm}&labor={labor}&transport={transport}&deductions={deductions}&autoSave={autoSave}&ocrItems={ocrItems}"
         fun passOcr(
             billNo: String = "", amount: Double = 0.0, date: Long = 0L, 
             farmer: String = "", phone: String = "", village: String = "", product: String = "", 
             category: String = "", grade: String = "", qty: Double = 0.0, rate: Double = 0.0,
             unit: String = "KG", boxes: Int = 0, weightTon: Double = 0.0, emptyWtBox: Double = 0.0, spoilage: Double = 0.0,
-            comm: Double = 5.0, deductions: String = ""
-        ) = "new_arrival?billNo=${enc(billNo)}&amount=$amount&date=$date&farmer=${enc(farmer)}&phone=${enc(phone)}&village=${enc(village)}&product=${enc(product)}&category=${enc(category)}&grade=${enc(grade)}&qty=$qty&rate=$rate&unit=$unit&boxes=$boxes&weightTon=$weightTon&emptyWtBox=$emptyWtBox&spoilage=$spoilage&comm=$comm&deductions=${enc(deductions)}"
+            comm: Double = 5.0, labor: Double = 0.0, transport: Double = 0.0, deductions: String = "", 
+            autoSave: Boolean = false, ocrItems: String = ""
+        ) = "new_arrival?billNo=${enc(billNo)}&amount=$amount&date=$date&farmer=${enc(farmer)}&phone=${enc(phone)}&village=${enc(village)}&product=${enc(product)}&category=${enc(category)}&grade=${enc(grade)}&qty=$qty&rate=$rate&unit=$unit&boxes=$boxes&weightTon=$weightTon&emptyWtBox=$emptyWtBox&spoilage=$spoilage&comm=$comm&labor=$labor&transport=$transport&deductions=${enc(deductions)}&autoSave=$autoSave&ocrItems=${enc(ocrItems)}"
     }
     object FarmerList : Screen("farmer_list")
     object AddEditFarmer : Screen("add_edit_farmer/{farmerId}") {
@@ -56,6 +57,7 @@ sealed class Screen(val route: String) {
     object Expense : Screen("expense")
     object Analytics : Screen("analytics")
     object BillScan : Screen("bill_scan")
+    object OcrReviewMapping : Screen("ocr_review_mapping")
     object FarmerBillScanner : Screen("farmer_bill_scanner")
     object VoiceEntry : Screen("voice_entry")
     object Security : Screen("security")

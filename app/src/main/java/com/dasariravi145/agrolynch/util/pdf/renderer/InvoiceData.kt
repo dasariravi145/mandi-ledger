@@ -1,5 +1,14 @@
 package com.dasariravi145.agrolynch.util.pdf.renderer
 
+data class InvoiceProduct(
+    val name: String,
+    val grade: String,
+    val unit: String = "KG",
+    val quantity: Double,
+    val rate: Double,
+    val amount: Double
+)
+
 data class InvoiceData(
     val billNumber: String,
     val date: Long,
@@ -12,13 +21,6 @@ data class InvoiceData(
     val labour: Double,
     val advance: Double,
     val others: Double,
-    val grandTotal: Double
-)
-
-data class InvoiceProduct(
-    val name: String,
-    val grade: String,
-    val quantity: Double,
-    val rate: Double,
-    val amount: Double
+    val grandTotal: Double,
+    val vehicleNumber: String = ""
 )

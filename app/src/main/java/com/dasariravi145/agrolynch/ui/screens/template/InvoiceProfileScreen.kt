@@ -16,6 +16,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -35,7 +42,7 @@ fun InvoiceProfileScreen(
     onBack: () -> Unit
 ) {
     val profile by viewModel.profile.collectAsState()
-    val previewFile by viewModel.previewFile.collectAsState()
+    val previewHtml by viewModel.previewHtml.collectAsState()
     val scrollState = rememberScrollState()
 
     LaunchedEffect(profile) {
@@ -73,8 +80,8 @@ fun InvoiceProfileScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             // Live Preview Section
-            if (previewFile != null) {
-                PdfPreviewCard(previewFile!!)
+            if (previewHtml != null) {
+                HtmlPreviewCard(previewHtml!!)
             } else {
                 Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
@@ -115,18 +122,80 @@ fun InvoiceProfileScreen(
 }
 
 @Composable
-fun PdfPreviewCard(file: File) {
+fun HtmlPreviewCard(html: String) {
     Card(
         modifier = Modifier.fillMaxWidth().aspectRatio(0.707f),
         elevation = CardDefaults.cardElevation(8.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(4.dp)
     ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.PictureAsPdf, null, modifier = Modifier.size(64.dp), tint = Color.Red)
-                Text("Pure PDF Preview Generated", fontWeight = FontWeight.Bold)
-                Text("Click Save to apply this design", fontSize = 10.sp, color = Color.Gray)
+        AndroidView(
+            factory = { context ->
+                WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.loadWithOverviewMode = true
+                    settings.useWideViewPort = true
+                    settings.setSupportZoom(false)
+                    settings.textZoom = 100
+                    webViewClient = WebViewClient()
+                }
+            },
+            update = { webView ->
+                // To scale A4 to fit the width of the WebView, we might need a small trick.
+                // Standard A4 is 210mm wide.
+                val scaledHtml = """
+                    <style>
+                        body {
+                            transform: scale(0.38); /* Approximate scale to fit screen, will be adjusted by overview mode */
+                            transform-origin: top left;
+                        }
+                    </style>
+                    $html
+                """.trimIndent()
+                
+                // Use scaled HTML for visual preview fit
+                webView.loadDataWithBaseURL(null, scaledHtml, "text/html", "utf-8", null)
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+@Composable
+fun PdfPreviewCard(file: File) {
+    val bitmap = remember(file) {
+        try {
+            val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            val renderer = PdfRenderer(pfd)
+            val page = renderer.openPage(0)
+            val b = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
+            page.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            renderer.close()
+            pfd.close()
+            b
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+        elevation = CardDefaults.cardElevation(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "PDF Preview",
+                modifier = Modifier.fillMaxWidth(),
+                contentScale = ContentScale.FillWidth
+            )
+        } else {
+            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                Text("Failed to load PDF preview", color = Color.Gray)
             }
         }
     }

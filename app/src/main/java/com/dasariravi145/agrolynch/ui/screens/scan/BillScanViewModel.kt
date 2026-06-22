@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.data.local.entity.*
 import com.dasariravi145.agrolynch.domain.repository.*
 import com.dasariravi145.agrolynch.util.*
+import com.dasariravi145.agrolynch.util.ocr.*
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -29,12 +30,13 @@ enum class ScanTarget(val label: String) {
 
 data class BillScanUiState(
     val isLoading: Boolean = false,
-    val extractedData: ExtractedData = ExtractedData(),
+    val extractedData: ExtractedBillData = ExtractedBillData(),
     val currentImageBitmap: Bitmap? = null,
     val target: ScanTarget? = ScanTarget.STOCK_ENTRY,
     val error: String? = null,
     val isSuccess: Boolean = false,
-    val ocrFinished: Boolean = false
+    val ocrFinished: Boolean = false,
+    val showReview: Boolean = false
 )
 
 @HiltViewModel
@@ -53,54 +55,38 @@ class BillScanViewModel @Inject constructor(
     }
 
     fun processImage(bitmap: Bitmap, rotation: Int = 0) {
+        Timber.d("OCR_SCAN_STARTED")
         val target = _state.value.target ?: return
         _state.update { it.copy(isLoading = true, error = null, currentImageBitmap = bitmap) }
         
         viewModelScope.launch(Dispatchers.Default) {
             try {
-                // 1. Preprocess & Orientation Correction
-                val processedBitmap = ImagePreprocessor.preprocess(bitmap, rotation)
+                // 1. Preprocess using the new OcrPreProcessor
+                val processedBitmap = OcrPreProcessor.preprocess(bitmap, rotation)
                 
-                // 2. Quality Validation
-                val quality = ImagePreprocessor.checkQuality(processedBitmap)
-                Timber.d("OCR_DEBUG: Size: ${processedBitmap.width}x${processedBitmap.height}, Rotation: $rotation")
-                Timber.d("OCR_DEBUG: Quality: $quality")
-
-                if (!quality.isClear) {
+                // 2. OCR using ML Kit via BillTextExtractor
+                val visionText = BillTextExtractor.extractText(processedBitmap)
+                
+                if (visionText == null) {
                     withContext(Dispatchers.Main) {
-                        _state.update { it.copy(isLoading = false, error = quality.message) }
+                        _state.update { it.copy(isLoading = false, error = "Could not read bill clearly. Please retry or enter manually.") }
                     }
                     return@launch
                 }
 
-                // 3. Try ML Kit First (Basic Extraction)
-                val image = InputImage.fromBitmap(processedBitmap, 0)
-                val visionText = recognizer.process(image).await()
-                var parsed = OcrParser.parse(visionText.text, target.name)
+                // 3. Parse and Validate
+                var parsed = BillStructureParser.parse(visionText)
+                parsed = BillValidationEngine.validate(parsed)
                 
-                Timber.d("OCR_DEBUG: ML Kit Text Length: ${visionText.text.length}")
-                Timber.d("OCR_DEBUG: ML Kit Confidence: ${parsed.confidenceScore}")
-
-                // 4. If Premium and (Low Confidence or missing required fields), use AI Vision
-                val isPremium = premiumStateManager.getCachedPremiumStatus()
-                val isLowConfidence = parsed.confidenceScore < 75f || parsed.lowConfidenceFields.isNotEmpty()
-                
-                if (isPremium && isLowConfidence) {
-                    Timber.i("OCR_DEBUG: Starting AI Vision extraction (ML Kit confidence too low)...")
-                    val aiParsed = GeminiService.extractBillData(processedBitmap, target.name)
-                    if (aiParsed != null) {
-                        parsed = aiParsed
-                        Timber.i("OCR_DEBUG: AI Vision successful. Confidence: ${parsed.confidenceScore}")
-                    } else {
-                        Timber.e("OCR_DEBUG: AI Vision extraction failed.")
-                    }
-                }
+                Timber.d("OCR_DEBUG: Extracted Farmer: ${parsed.farmerName}")
+                Timber.d("OCR_DEBUG: Items found: ${parsed.items.size}")
 
                 withContext(Dispatchers.Main) {
                     _state.update { it.copy(
                         isLoading = false,
                         extractedData = parsed,
                         ocrFinished = true,
+                        showReview = true,
                         currentImageBitmap = processedBitmap
                     ) }
                 }
@@ -113,37 +99,12 @@ class BillScanViewModel @Inject constructor(
         }
     }
 
-    fun confirmOcrData(updatedData: ExtractedData) {
-        viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
-            
-            val isPremium = premiumStateManager.getCachedPremiumStatus()
-            val bitmap = if (isPremium) _state.value.currentImageBitmap else null
+    fun updateExtractedData(data: ExtractedBillData) {
+        _state.update { it.copy(extractedData = data) }
+    }
 
-            val scan = OcrScanEntity(
-                scanId = UUID.randomUUID().toString(),
-                billNumber = updatedData.billNumber,
-                amount = if (updatedData.amount > 0) updatedData.amount else updatedData.netAmount,
-                billDate = updatedData.date,
-                ocrText = updatedData.ocrText,
-                transactionType = _state.value.target?.name ?: "",
-                farmerName = updatedData.farmerName,
-                productName = updatedData.productName,
-                productGrade = updatedData.grade,
-                unit = updatedData.unit,
-                numberOfBoxes = updatedData.numberOfBoxes,
-                totalWeightTon = updatedData.totalWeightTon,
-                emptyBoxWeightPerBox = updatedData.emptyBoxWeightPerBox,
-                totalEmptyBoxWeightKg = updatedData.totalEmptyBoxWeightKg,
-                spoilagePercentage = updatedData.spoilagePercentage,
-                rate = updatedData.rate,
-                createdAt = System.currentTimeMillis()
-            )
-            
-            ocrRepository.saveScanWithImage(scan, bitmap)
-            
-            _state.update { it.copy(isLoading = false, isSuccess = true, extractedData = updatedData) }
-        }
+    fun confirmOcrData(updatedData: ExtractedBillData) {
+        _state.update { it.copy(extractedData = updatedData, isSuccess = true) }
     }
 
     fun resetState() {

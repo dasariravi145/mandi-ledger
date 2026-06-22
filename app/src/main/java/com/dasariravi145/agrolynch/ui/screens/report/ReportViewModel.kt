@@ -1,6 +1,7 @@
 package com.dasariravi145.agrolynch.ui.screens.report
 
 import android.content.Context
+import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.data.local.dao.*
@@ -11,9 +12,15 @@ import com.dasariravi145.agrolynch.domain.repository.SyncRepository
 import com.dasariravi145.agrolynch.util.PremiumStateManager
 import com.dasariravi145.agrolynch.util.ReportExportService
 import com.dasariravi145.agrolynch.util.LedgerExportService
+import com.dasariravi145.agrolynch.util.findActivity
+import com.dasariravi145.agrolynch.util.PdfGenerator
+import com.dasariravi145.agrolynch.util.PdfPrintHelper
+import com.dasariravi145.agrolynch.util.PdfActionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.*
@@ -65,6 +72,12 @@ class ReportViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _isPrinting = MutableStateFlow<String?>(null) // Stores billNo or ID being printed
+    val isPrinting: StateFlow<String?> = _isPrinting.asStateFlow()
+
+    private val _isSharing = MutableStateFlow<String?>(null) // Stores billNo or ID being shared
+    val isSharing: StateFlow<String?> = _isSharing.asStateFlow()
+
     private val _exportStatus = MutableSharedFlow<String>()
     val exportStatus = _exportStatus.asSharedFlow()
 
@@ -82,51 +95,90 @@ class ReportViewModel @Inject constructor(
     }
 
     fun exportReport(context: Context, format: ExportFormat, reportName: String, data: List<Any>) {
-        if (data.isEmpty()) {
-            viewModelScope.launch {
-                _exportStatus.emit("FAILED: No report data available for selected period.")
-            }
-            return
+        // Deprecated, use shareReport or printReport
+        if (format == ExportFormat.PDF) {
+            shareReport(context, reportName, data)
+        } else {
+            // ... existing logic for EXCEL/CSV if needed ...
         }
+    }
 
+    fun shareReport(context: Context, reportName: String, data: List<Any>) {
         viewModelScope.launch {
             _showExportOptions.value = null
-            
             if (!premiumStateManager.getCachedPremiumStatus()) {
                 _exportStatus.emit("PREMIUM_REQUIRED")
                 return@launch
             }
-
             try {
                 _isLoading.value = true
+                Timber.d("SHARE_REPORT_STARTED: name=$reportName, dataSize=${data.size}")
+                
                 val profile = companyProfile.value ?: CompanyProfileEntity()
                 if (profile.companyName.isEmpty()) {
-                    _exportStatus.emit("FAILED: Company profile is missing. Please set it up in Settings.")
-                    _isLoading.value = false
+                    Timber.w("SHARE_REPORT_FAILED: Company profile is missing.")
+                    _exportStatus.emit("FAILED: Company profile is missing.")
                     return@launch
                 }
 
-                Timber.d("REPORT_EXPORT: Starting export for $reportName. Format: $format. Data count: ${data.size}")
-
-                val file = when (format) {
-                    ExportFormat.PDF -> exportService.exportToPdf(context, profile, reportName, data)
-                    ExportFormat.EXCEL -> exportService.exportToExcel(context, reportName, data)
-                    ExportFormat.CSV -> exportService.exportToCsv(context, reportName, data)
+                val file = withContext(Dispatchers.IO) {
+                    exportService.exportToPdf(context, profile, reportName, data)
                 }
 
-                if (file != null && file.exists() && file.length() > 0) {
-                    Timber.d("REPORT_EXPORT: Export successful. File path: ${file.absolutePath}. Size: ${file.length()} bytes")
-                    
-                    _exportStatus.emit("SUCCESS:${file.absolutePath}")
+                if (file != null && file.exists()) {
+                    Timber.d("SHARE_REPORT_SUCCESS: ${file.absolutePath}")
+                    withContext(Dispatchers.Main) {
+                        val uri = PdfGenerator.getUriFromFile(context, file)
+                        PdfActionManager.sharePdf(context, uri)
+                    }
                 } else {
-                    val reason = if (file == null) "PDF generation returned null" 
-                                else if (!file.exists()) "File was not created"
-                                else "File is empty (0 bytes)"
-                    _exportStatus.emit("FAILED: Export failed: $reason")
+                    Timber.e("SHARE_REPORT_FAILED: exportToPdf returned null or file doesn't exist.")
+                    _exportStatus.emit("FAILED: PDF generation failed")
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Export failed")
-                _exportStatus.emit("FAILED: ${e.message ?: "Unknown error"}")
+                Timber.e(e, "SHARE_REPORT_EXCEPTION: ${e.message}")
+                _exportStatus.emit("FAILED: ${e.message}")
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun printReport(context: Context, reportName: String, data: List<Any>) {
+        viewModelScope.launch {
+            _showExportOptions.value = null
+            if (!premiumStateManager.getCachedPremiumStatus()) {
+                _exportStatus.emit("PREMIUM_REQUIRED")
+                return@launch
+            }
+            try {
+                _isLoading.value = true
+                Timber.d("PRINT_REPORT_STARTED: name=$reportName, dataSize=${data.size}")
+                
+                val activity = context.findActivity()
+                if (activity == null) {
+                    Timber.w("PRINT_REPORT_FAILED: Activity is null")
+                    _exportStatus.emit("FAILED: Unable to open print.")
+                    return@launch
+                }
+                val profile = companyProfile.value ?: CompanyProfileEntity()
+                val file = withContext(Dispatchers.IO) {
+                    exportService.exportToPdf(context, profile, reportName, data)
+                }
+
+                if (file != null && file.exists()) {
+                    Timber.d("PRINT_REPORT_SUCCESS: ${file.absolutePath}")
+                    withContext(Dispatchers.Main) {
+                        val uri = PdfGenerator.getUriFromFile(context, file)
+                        PdfPrintHelper.print(activity, uri)
+                    }
+                } else {
+                    Timber.e("PRINT_REPORT_FAILED: exportToPdf returned null or file doesn't exist.")
+                    _exportStatus.emit("FAILED: PDF generation failed")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "PRINT_REPORT_EXCEPTION: ${e.message}")
+                _exportStatus.emit("FAILED: ${e.message}")
             } finally {
                 _isLoading.value = false
             }
@@ -134,9 +186,19 @@ class ReportViewModel @Inject constructor(
     }
 
     fun printArrival(context: Context, items: List<DetailedArrivalReportModel>) {
+        val first = items.firstOrNull() ?: return
+        val billNo = first.billNumber
+        
         viewModelScope.launch {
             try {
-                _isLoading.value = true
+                _isPrinting.value = billNo
+                
+                val activity = context.findActivity()
+                if (activity == null) {
+                    _exportStatus.emit("FAILED: Unable to open print.")
+                    return@launch
+                }
+
                 val profile = companyProfile.value ?: CompanyProfileEntity()
                 
                 val arrivals = items.map { item ->
@@ -152,6 +214,9 @@ class ReportViewModel @Inject constructor(
                         grossAmount = item.grossAmount,
                         commissionPercent = item.commissionPercent,
                         commissionAmount = item.commissionAmount,
+                        laborCharges = item.laborCharges,
+                        transportCharges = item.transportCharges,
+                        packingCharges = item.packingCharges,
                         otherDeductions = item.otherDeductions,
                         netAmount = item.netAmount,
                         billNumber = item.billNumber,
@@ -160,28 +225,118 @@ class ReportViewModel @Inject constructor(
                     )
                 }
 
-                val file = ledgerExportService.exportArrivalToPdf(context, profile, arrivals, emptyList())
+                // Map advance as a deduction entity if it exists
+                val deductions = items.filter { it.advanceAmount > 0 }.map { 
+                    com.dasariravi145.agrolynch.data.local.entity.EntryDeductionEntity(
+                        entryId = it.id,
+                        entryType = "STOCK",
+                        billId = it.billNumber,
+                        deductionType = "Advance",
+                        amount = it.advanceAmount
+                    )
+                }
+
+                val file = withContext(Dispatchers.IO) {
+                    ledgerExportService.exportArrivalToPdf(context, profile, arrivals, deductions)
+                }
+                
                 if (file != null && file.exists()) {
-                    _exportStatus.emit("SUCCESS:${file.absolutePath}")
+                    withContext(Dispatchers.Main) {
+                        val uri = PdfGenerator.getUriFromFile(context, file)
+                        PdfPrintHelper.print(activity, uri)
+                    }
                 } else {
                     _exportStatus.emit("FAILED: PDF generation failed")
                 }
             } catch (e: Exception) {
                 _exportStatus.emit("FAILED: ${e.message}")
             } finally {
-                _isLoading.value = false
+                _isPrinting.value = null
+            }
+        }
+    }
+
+    fun shareArrival(context: Context, items: List<DetailedArrivalReportModel>) {
+        val first = items.firstOrNull() ?: return
+        val billNo = first.billNumber
+        
+        viewModelScope.launch {
+            try {
+                _isSharing.value = billNo
+                
+                val profile = companyProfile.value ?: CompanyProfileEntity()
+                
+                val arrivals = items.map { item ->
+                    com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity(
+                        id = item.id,
+                        farmerName = item.farmerName,
+                        productName = item.productName,
+                        grade = item.grade,
+                        quantity = item.quantity,
+                        unit = item.unit,
+                        purchaseRate = item.rate,
+                        ratePerKg = item.rate,
+                        grossAmount = item.grossAmount,
+                        commissionPercent = item.commissionPercent,
+                        commissionAmount = item.commissionAmount,
+                        laborCharges = item.laborCharges,
+                        transportCharges = item.transportCharges,
+                        packingCharges = item.packingCharges,
+                        otherDeductions = item.otherDeductions,
+                        netAmount = item.netAmount,
+                        billNumber = item.billNumber,
+                        finalNetWeightKg = item.finalNetWeightKg,
+                        date = item.date
+                    )
+                }
+
+                // Map advance as a deduction entity if it exists
+                val deductions = items.filter { it.advanceAmount > 0 }.map { 
+                    com.dasariravi145.agrolynch.data.local.entity.EntryDeductionEntity(
+                        entryId = it.id,
+                        entryType = "STOCK",
+                        billId = it.billNumber,
+                        deductionType = "Advance",
+                        amount = it.advanceAmount
+                    )
+                }
+
+                val file = withContext(Dispatchers.IO) {
+                    ledgerExportService.exportArrivalToPdf(context, profile, arrivals, deductions)
+                }
+                
+                if (file != null && file.exists()) {
+                    withContext(Dispatchers.Main) {
+                        val uri = PdfGenerator.getUriFromFile(context, file)
+                        PdfActionManager.sharePdf(context, uri)
+                    }
+                } else {
+                    _exportStatus.emit("FAILED: PDF generation failed")
+                }
+            } catch (e: Exception) {
+                _exportStatus.emit("FAILED: ${e.message}")
+            } finally {
+                _isSharing.value = null
             }
         }
     }
 
     fun printSale(context: Context, items: List<DetailedSaleReportModel>) {
+        val first = items.firstOrNull() ?: return
+        val billNo = first.billNumber
+
         viewModelScope.launch {
             try {
-                if (items.isEmpty()) return@launch
-                _isLoading.value = true
+                _isPrinting.value = billNo
+
+                val activity = context.findActivity()
+                if (activity == null) {
+                    _exportStatus.emit("FAILED: Unable to open print.")
+                    return@launch
+                }
+
                 val profile = companyProfile.value ?: CompanyProfileEntity()
                 
-                val first = items.first()
                 val sale = com.dasariravi145.agrolynch.data.local.entity.SaleEntity(
                     id = first.saleId,
                     buyerName = first.buyerName,
@@ -205,16 +360,75 @@ class ReportViewModel @Inject constructor(
                     )
                 }
 
-                val file = ledgerExportService.exportSaleToPdf(context, profile, sale, saleItems, emptyList())
+                val file = withContext(Dispatchers.IO) {
+                    ledgerExportService.exportSaleToPdf(context, profile, sale, saleItems, emptyList())
+                }
+
                 if (file != null && file.exists()) {
-                    _exportStatus.emit("SUCCESS:${file.absolutePath}")
+                    withContext(Dispatchers.Main) {
+                        val uri = PdfGenerator.getUriFromFile(context, file)
+                        PdfPrintHelper.print(activity, uri)
+                    }
                 } else {
                     _exportStatus.emit("FAILED: PDF generation failed")
                 }
             } catch (e: Exception) {
                 _exportStatus.emit("FAILED: ${e.message}")
             } finally {
-                _isLoading.value = false
+                _isPrinting.value = null
+            }
+        }
+    }
+
+    fun shareSale(context: Context, items: List<DetailedSaleReportModel>) {
+        val first = items.firstOrNull() ?: return
+        val billNo = first.billNumber
+
+        viewModelScope.launch {
+            try {
+                _isSharing.value = billNo
+
+                val profile = companyProfile.value ?: CompanyProfileEntity()
+                
+                val sale = com.dasariravi145.agrolynch.data.local.entity.SaleEntity(
+                    id = first.saleId,
+                    buyerName = first.buyerName,
+                    totalAmount = items.sumOf { it.saleAmount },
+                    totalNetAmount = items.sumOf { it.totalAmount },
+                    laborCharges = items.sumOf { it.laborCharges },
+                    transportCharges = items.sumOf { it.transportCharges },
+                    billNumber = first.billNumber,
+                    date = first.date
+                )
+                
+                val saleItems = items.map { item ->
+                    com.dasariravi145.agrolynch.data.local.entity.SaleItemEntity(
+                        productName = item.productName,
+                        grade = item.grade,
+                        quantitySold = item.quantity,
+                        inputQuantity = item.inputQuantity,
+                        unit = item.unit,
+                        saleRate = item.rate,
+                        saleAmount = item.saleAmount
+                    )
+                }
+
+                val file = withContext(Dispatchers.IO) {
+                    ledgerExportService.exportSaleToPdf(context, profile, sale, saleItems, emptyList())
+                }
+
+                if (file != null && file.exists()) {
+                    withContext(Dispatchers.Main) {
+                        val uri = PdfGenerator.getUriFromFile(context, file)
+                        PdfActionManager.sharePdf(context, uri)
+                    }
+                } else {
+                    _exportStatus.emit("FAILED: PDF generation failed")
+                }
+            } catch (e: Exception) {
+                _exportStatus.emit("FAILED: ${e.message}")
+            } finally {
+                _isSharing.value = null
             }
         }
     }

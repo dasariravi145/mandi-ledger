@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.util.Formatter
+import com.dasariravi145.agrolynch.util.findActivity
 import com.dasariravi145.agrolynch.data.local.dao.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -32,6 +33,8 @@ import android.content.Intent
 import androidx.core.content.FileProvider
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import java.io.File
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -48,49 +51,20 @@ fun ReportLayout(
     val isPremium by viewModel.isPremium.collectAsStateWithLifecycle()
     val showExportOptions by viewModel.showExportOptions.collectAsStateWithLifecycle()
     val exportStatus by viewModel.exportStatus.collectAsState(initial = "")
+    val isSharing by viewModel.isSharing.collectAsStateWithLifecycle()
+    val isPrinting by viewModel.isPrinting.collectAsStateWithLifecycle()
+    
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     
     var showPremiumDialog by remember { mutableStateOf(false) }
-    var pendingFileForAction by remember { mutableStateOf<File?>(null) }
 
     LaunchedEffect(exportStatus) {
         if (exportStatus == "PREMIUM_REQUIRED") {
             showPremiumDialog = true
-        } else if (exportStatus.startsWith("SUCCESS:")) {
-            val filePath = exportStatus.removePrefix("SUCCESS:")
-            pendingFileForAction = File(filePath)
         } else if (exportStatus.startsWith("FAILED:")) {
             snackbarHostState.showSnackbar(exportStatus.removePrefix("FAILED:"))
         }
-    }
-
-    if (pendingFileForAction != null) {
-        AlertDialog(
-            onDismissRequest = { pendingFileForAction = null },
-            title = { Text("Report Generated") },
-            text = { Text("Would you like to Print or Share this report?") },
-            confirmButton = {
-                Button(onClick = { 
-                    com.dasariravi145.agrolynch.util.PdfGenerator.printPdf(context, pendingFileForAction!!)
-                    pendingFileForAction = null
-                }) {
-                    Icon(Icons.Default.Print, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Print")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { 
-                    com.dasariravi145.agrolynch.util.PdfGenerator.sharePdf(context, pendingFileForAction!!)
-                    pendingFileForAction = null
-                }) {
-                    Icon(Icons.Default.Share, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Share")
-                }
-            }
-        )
     }
 
     Scaffold(
@@ -159,14 +133,16 @@ fun ReportLayout(
             title = { Text("Export Report") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ExportOptionItem("PDF Document", Icons.Default.PictureAsPdf) {
-                        viewModel.exportReport(context, ExportFormat.PDF, title.replace(" ", "_"), showExportOptions!!)
+                    ExportOptionItem("Share PDF Report", Icons.Default.Share) {
+                        android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                        viewModel.shareReport(context, title.replace(" ", "_"), showExportOptions!!)
+                    }
+                    ExportOptionItem("Print PDF Report", Icons.Default.Print) {
+                        android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                        viewModel.printReport(context, title.replace(" ", "_"), showExportOptions!!)
                     }
                     ExportOptionItem("Excel Worksheet", Icons.Default.TableChart) {
                         viewModel.exportReport(context, ExportFormat.EXCEL, title.replace(" ", "_"), showExportOptions!!)
-                    }
-                    ExportOptionItem("CSV File", Icons.Default.TextSnippet) {
-                        viewModel.exportReport(context, ExportFormat.CSV, title.replace(" ", "_"), showExportOptions!!)
                     }
                 }
             },
@@ -226,6 +202,8 @@ fun DatePresetRow(selectedPreset: DatePreset, onPresetSelected: (DatePreset) -> 
 fun FarmerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
     val data by viewModel.farmerDetailedReport.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isPrinting by viewModel.isPrinting.collectAsStateWithLifecycle()
+    val isSharing by viewModel.isSharing.collectAsStateWithLifecycle()
     val context = LocalContext.current
     
     val filtered = remember(data, state.searchQuery) {
@@ -266,8 +244,39 @@ fun FarmerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                                         }
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = { viewModel.printArrival(context, billItems) }, modifier = Modifier.size(32.dp)) {
-                                            Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                        val isCurrentItemPrinting = isPrinting == billNo
+                                        val isCurrentItemSharing = isSharing == billNo
+                                        
+                                        IconButton(
+                                            onClick = { 
+                                                android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                                                viewModel.shareArrival(context, billItems)
+                                            }, 
+                                            modifier = Modifier.size(32.dp),
+                                            enabled = !isCurrentItemPrinting && !isCurrentItemSharing
+                                        ) {
+                                            if (isCurrentItemSharing) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Icon(Icons.Default.Share, "Share", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                            }
+                                        }
+
+                                        Spacer(Modifier.width(4.dp))
+
+                                        IconButton(
+                                            onClick = { 
+                                                android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                                                viewModel.printArrival(context, billItems)
+                                            }, 
+                                            modifier = Modifier.size(32.dp),
+                                            enabled = !isCurrentItemPrinting && !isCurrentItemSharing
+                                        ) {
+                                            if (isCurrentItemPrinting) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                            }
                                         }
                                         Spacer(Modifier.width(8.dp))
                                         Text(formatDate(firstItem.date), fontSize = 11.sp, color = Color.Gray)
@@ -325,6 +334,8 @@ fun FarmerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
 fun BuyerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
     val data by viewModel.buyerDetailedReport.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isPrinting by viewModel.isPrinting.collectAsStateWithLifecycle()
+    val isSharing by viewModel.isSharing.collectAsStateWithLifecycle()
     val context = LocalContext.current
     
     val filtered = remember(data, state.searchQuery) {
@@ -364,8 +375,39 @@ fun BuyerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                                         }
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = { viewModel.printSale(context, billItems) }, modifier = Modifier.size(32.dp)) {
-                                            Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                        val isCurrentItemPrinting = isPrinting == billNo
+                                        val isCurrentItemSharing = isSharing == billNo
+                                        
+                                        IconButton(
+                                            onClick = { 
+                                                android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                                                viewModel.shareSale(context, billItems)
+                                            }, 
+                                            modifier = Modifier.size(32.dp),
+                                            enabled = !isCurrentItemPrinting && !isCurrentItemSharing
+                                        ) {
+                                            if (isCurrentItemSharing) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Icon(Icons.Default.Share, "Share", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                            }
+                                        }
+
+                                        Spacer(Modifier.width(4.dp))
+
+                                        IconButton(
+                                            onClick = { 
+                                                android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                                                viewModel.printSale(context, billItems)
+                                            }, 
+                                            modifier = Modifier.size(32.dp),
+                                            enabled = !isCurrentItemPrinting && !isCurrentItemSharing
+                                        ) {
+                                            if (isCurrentItemPrinting) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                            }
                                         }
                                         Spacer(Modifier.width(8.dp))
                                         Text(formatDate(firstItem.date), fontSize = 11.sp, color = Color.Gray)
@@ -384,7 +426,8 @@ fun BuyerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                                     billItems.forEach { item ->
                                         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
                                             Text("${item.productName} (${item.grade})", Modifier.weight(1.5f), fontSize = 10.sp)
-                                            Text(Formatter.formatWeight(item.quantity), Modifier.weight(1f), fontSize = 10.sp, textAlign = TextAlign.End)
+                                            val displayQty = if (item.inputQuantity > 0) item.inputQuantity else item.quantity
+                                            Text("${Formatter.formatWeight(displayQty)} ${item.unit}", Modifier.weight(1f), fontSize = 10.sp, textAlign = TextAlign.End)
                                             Text("₹${Formatter.formatWeight(item.rate)}", Modifier.weight(1f), fontSize = 10.sp, textAlign = TextAlign.End)
                                             Text("₹${Formatter.formatCurrency(item.saleAmount)}", Modifier.weight(1.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
                                         }

@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.dasariravi145.agrolynch.domain.model.ReceiptData
 import com.dasariravi145.agrolynch.util.PdfGenerator
 import com.dasariravi145.agrolynch.util.Formatter
+import com.dasariravi145.agrolynch.util.findActivity
 import com.dasariravi145.agrolynch.util.pdf.TemplateInvoicePdfService
 import java.text.SimpleDateFormat
 import java.util.*
@@ -68,7 +69,12 @@ fun ReceiptPreviewScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
-                        onClick = { viewModel.generateAndSharePdf(context, data) },
+                        onClick = { 
+                            viewModel.generatedPdfFile.value?.let { file ->
+                                val uri = com.dasariravi145.agrolynch.util.PdfGenerator.getUriFromFile(context, file)
+                                com.dasariravi145.agrolynch.util.PdfActionManager.sharePdf(context, uri)
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -78,7 +84,20 @@ fun ReceiptPreviewScreen(
                     }
                     
                     Button(
-                        onClick = { viewModel.generateAndPrintPdf(context, data) },
+                        onClick = { 
+                            viewModel.generatedPdfFile.value?.let { file ->
+                                val uri = com.dasariravi145.agrolynch.util.PdfGenerator.getUriFromFile(context, file)
+                                val activity = context.findActivity()
+                                if (activity != null) {
+                                    android.util.Log.d("PRINT_DEBUG", "context=${context::class.java.name}, activity=${activity::class.java.name}")
+                                    activity.runOnUiThread {
+                                        com.dasariravi145.agrolynch.util.PdfPrintHelper.print(activity, uri)
+                                    }
+                                } else {
+                                    android.widget.Toast.makeText(context, "Print requires active screen", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
                         shape = RoundedCornerShape(8.dp)

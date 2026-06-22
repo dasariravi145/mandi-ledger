@@ -1,11 +1,14 @@
 package com.dasariravi145.agrolynch.ui.screens.voice
 
-import android.Manifest
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -25,8 +28,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.stringResource
-import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import com.dasariravi145.agrolynch.domain.model.FarmerArrivalDraft
 
@@ -34,7 +35,7 @@ import com.dasariravi145.agrolynch.domain.model.FarmerArrivalDraft
 @Composable
 fun VoiceEntryScreen(
     viewModel: VoiceViewModel,
-    onNavigateToArrival: (FarmerArrivalDraft) -> Unit,
+    onNavigateToArrival: (FarmerArrivalDraft, Boolean) -> Unit,
     onBackClick: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -43,7 +44,7 @@ fun VoiceEntryScreen(
     LaunchedEffect(Unit) {
         viewModel.navigationEvent.collect { event ->
             if (event is VoiceNavigationEvent.NavigateToArrival) {
-                onNavigateToArrival(event.draft)
+                onNavigateToArrival(event.draft, event.autoSave)
             }
         }
     }
@@ -57,7 +58,7 @@ fun VoiceEntryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.voice_entry), fontWeight = FontWeight.Bold) },
+                title = { Text("Guided Voice Entry", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -75,36 +76,14 @@ fun VoiceEntryScreen(
             
             LanguageSelector(viewModel, state.selectedLanguage)
 
-            AnimatedContent(
-                targetState = state.step,
-                transitionSpec = {
-                    fadeIn() + slideInHorizontally { it } togetherWith fadeOut() + slideOutHorizontally { -it }
-                },
-                label = "VoiceStepAnimation",
-                modifier = Modifier.weight(1f)
-            ) { step ->
-                if (step == VoiceStep.LANGUAGE_SELECTION) {
-                    LanguageSelectionPlaceholder()
-                } else {
-                    InteractiveStep(viewModel, state)
-                }
+            if (state.step != VoiceStep.LANGUAGE_SELECTION && state.step != VoiceStep.COMPLETED) {
+                ProgressChecklist(state.step)
             }
-            
-            VoiceChecklist(state.draft)
-            
-            if (state.draft.farmerName.isNotEmpty() && state.draft.productName.isNotEmpty()) {
-                Button(
-                    onClick = { viewModel.forceComplete() },
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
-                ) {
-                    Icon(Icons.Default.Check, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Review & Save")
-                }
+
+            if (state.step == VoiceStep.LANGUAGE_SELECTION) {
+                LanguageSelectionPlaceholder()
             } else {
-                Spacer(Modifier.height(16.dp))
+                WizardStepUI(viewModel, state)
             }
         }
 
@@ -124,6 +103,219 @@ fun VoiceEntryScreen(
 }
 
 @Composable
+fun ProgressChecklist(currentStep: VoiceStep) {
+    val steps = VoiceStep.entries.filter { 
+        it != VoiceStep.LANGUAGE_SELECTION && it != VoiceStep.COMPLETED
+    }
+    
+    val scrollState = rememberScrollState()
+    
+    // Auto scroll to current step
+    LaunchedEffect(currentStep) {
+        val index = steps.indexOf(currentStep)
+        if (index >= 0) {
+            scrollState.animateScrollTo(index * 80) // rough estimate
+        }
+    }
+
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        items(steps.size) { index ->
+            val step = steps[index]
+            val isCompleted = step.ordinal < currentStep.ordinal
+            val isCurrent = step == currentStep
+            
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = when {
+                            isCurrent -> MaterialTheme.colorScheme.primary
+                            isCompleted -> Color(0xFFE8F5E9)
+                            else -> Color.White
+                        },
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.LightGray,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isCompleted) {
+                        Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = step.label,
+                        fontSize = 11.sp,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isCurrent) Color.White else if (isCompleted) Color(0xFF2E7D32) else Color.Gray
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WizardStepUI(viewModel: VoiceViewModel, state: VoiceState) {
+    val context = LocalContext.current
+    
+    val voiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.get(0) ?: ""
+            if (spokenText.isNotEmpty()) {
+                viewModel.onSpokenResult(spokenText)
+            }
+        }
+    }
+
+    val currentPrompt = viewModel.getCurrentQuestion()
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = state.step.label, 
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = currentPrompt,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.height(80.dp)
+        )
+
+        if (state.awaitingConfirmation) {
+            DetectionResultUI(viewModel, state)
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = CircleShape
+                        )
+                        .clickable {
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, state.selectedLanguage?.locale ?: "en-IN")
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, currentPrompt)
+                            }
+                            voiceLauncher.launch(intent)
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = "Mic",
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                Text("Tap to Speak", color = Color.Gray)
+            }
+        }
+        
+        state.error?.let {
+            Spacer(Modifier.height(16.dp))
+            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp, textAlign = TextAlign.Center)
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        if (viewModel.isOptional(state.step) && !state.awaitingConfirmation) {
+            TextButton(onClick = { viewModel.skipCurrentStep() }) {
+                Text("Skip Optional Field")
+            }
+        }
+        
+        if (!state.awaitingConfirmation) {
+            TextButton(onClick = { viewModel.forceComplete() }) {
+                Text("Go to Form", color = Color.Gray)
+            }
+        }
+    }
+}
+
+@Composable
+fun DetectionResultUI(viewModel: VoiceViewModel, state: VoiceState) {
+    var manualValue by remember { mutableStateOf(state.detectedValue) }
+    var isEditing by remember { mutableStateOf(false) }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Heard: \"${state.spokenText}\"", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+        
+        if (isEditing) {
+            OutlinedTextField(
+                value = manualValue,
+                onValueChange = { manualValue = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Correct value") }
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { viewModel.updateManually(manualValue); viewModel.confirmValue() }) {
+                    Text("Confirm & Next")
+                }
+                TextButton(onClick = { isEditing = false }) { Text("Cancel") }
+            }
+        } else {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F8E9)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Detected:", fontSize = 12.sp, color = Color.Gray)
+                    Text(state.detectedValue.ifEmpty { "(Empty)" }, fontSize = 32.sp, fontWeight = FontWeight.Black, color = Color(0xFF1B5E20))
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { viewModel.confirmValue() },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                ) {
+                    Text("Confirm")
+                }
+                OutlinedButton(
+                    onClick = { viewModel.retry() },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Retry")
+                }
+            }
+            TextButton(onClick = { isEditing = true }) {
+                Icon(Icons.Default.Edit, null, Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Type Manually")
+            }
+        }
+    }
+}
+
+
+@Composable
 fun LanguageSelector(viewModel: VoiceViewModel, selected: VoiceLanguage?) {
     var expanded by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -135,7 +327,7 @@ fun LanguageSelector(viewModel: VoiceViewModel, selected: VoiceLanguage?) {
         ) {
             Icon(Icons.Default.Language, null)
             Spacer(Modifier.width(8.dp))
-            Text("Language: ${selected?.name ?: "Select..."}")
+            Text("Language: ${selected?.name ?: "Select Language..."}")
             Spacer(Modifier.weight(1f))
             Icon(Icons.Default.ArrowDropDown, null)
         }
@@ -153,132 +345,10 @@ fun LanguageSelector(viewModel: VoiceViewModel, selected: VoiceLanguage?) {
 @Composable
 fun LanguageSelectionPlaceholder() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Please select a language to start", color = Color.Gray)
-    }
-}
-
-@Composable
-fun InteractiveStep(viewModel: VoiceViewModel, state: VoiceState) {
-    val context = LocalContext.current
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) viewModel.startListening(context)
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = viewModel.getCurrentQuestion(),
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.height(60.dp)
-        )
-
-        Spacer(Modifier.height(24.dp))
-
-        Box(
-            modifier = Modifier
-                .size(120.dp)
-                .background(
-                    color = if (state.isListening) Color.Red.copy(alpha = 0.1f) else MaterialTheme.colorScheme.secondaryContainer,
-                    shape = CircleShape
-                )
-                .clickable {
-                    if (state.isListening) viewModel.stopListening()
-                    else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = if (state.isListening) Icons.Default.Stop else Icons.Default.Mic,
-                contentDescription = "Mic",
-                modifier = Modifier.size(48.dp),
-                tint = if (state.isListening) Color.Red else MaterialTheme.colorScheme.primary
-            )
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        if (state.spokenText.isNotEmpty()) {
-            Text(
-                "Captured: \"${state.spokenText}\"", 
-                style = MaterialTheme.typography.bodyLarge, 
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2E7D32)
-            )
-        }
-        
-        state.error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, textAlign = TextAlign.Center)
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            OutlinedButton(onClick = { viewModel.skipCurrentStep() }, shape = RoundedCornerShape(8.dp)) {
-                Text("Skip")
-            }
-            Button(onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }, shape = RoundedCornerShape(8.dp)) {
-                Text(if (state.spokenText.isEmpty()) "Speak" else "Speak Again")
-            }
-        }
-        
-        Spacer(Modifier.height(16.dp))
-        
-        TextButton(onClick = { viewModel.forceComplete() }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Edit Manually", color = Color.Gray)
-            }
-        }
-    }
-}
-
-@Composable
-fun VoiceChecklist(draft: FarmerArrivalDraft) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
-    ) {
-        Column(
-            Modifier.padding(12.dp).verticalScroll(rememberScrollState()), 
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text("Progress Checklist", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black, color = Color.Gray)
-            HorizontalDivider(Modifier.padding(bottom = 4.dp), thickness = 0.5.dp)
-            
-            ChecklistItem("Farmer Name", draft.farmerName)
-            ChecklistItem("Phone", draft.phone)
-            ChecklistItem("Village", draft.village)
-            ChecklistItem("Product", draft.productName)
-            ChecklistItem("Grade", draft.grade)
-            ChecklistItem("Unit", draft.unitType)
-            ChecklistItem("Quantity", if (draft.quantity > 0) draft.quantity.toString() else "")
-            ChecklistItem("Rate", if (draft.rate > 0) "₹${draft.rate}" else "")
-        }
-    }
-}
-
-@Composable
-fun ChecklistItem(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = Color.DarkGray)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (value.isNotBlank() && value != "0.0") {
-                Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
-                Spacer(Modifier.width(4.dp))
-                Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(16.dp))
-            } else {
-                Text("Pending", style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
-            }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Default.RecordVoiceOver, null, Modifier.size(64.dp), tint = Color.LightGray)
+            Spacer(Modifier.height(16.dp))
+            Text("Please select your language above to start", color = Color.Gray)
         }
     }
 }
