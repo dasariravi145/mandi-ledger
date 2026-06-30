@@ -62,35 +62,27 @@ class ReportExportService @Inject constructor() {
 
             when {
                 firstItem is DetailedArrivalReportModel || reportName.contains("Farmer", true) -> {
-                    @Suppress("UNCHECKED_CAST")
-                    PdfGenerator.generateFarmerReport(context, profile, FarmerEntity(), data as List<DetailedArrivalReportModel>, range)
+                    PdfGenerator.generateFarmerReport(context, profile, FarmerEntity(), data.filterIsInstance<DetailedArrivalReportModel>(), range)
                 }
                 firstItem is DetailedSaleReportModel || reportName.contains("Buyer", true) || reportName.contains("Sales", true) -> {
-                    @Suppress("UNCHECKED_CAST")
-                    PdfGenerator.generateBuyerReport(context, profile, BuyerEntity(), data as List<DetailedSaleReportModel>, range)
+                    PdfGenerator.generateBuyerReport(context, profile, BuyerEntity(), data.filterIsInstance<DetailedSaleReportModel>(), range)
                 }
                 firstItem is CommissionReportModel || reportName.contains("Commission", true) -> {
-                    @Suppress("UNCHECKED_CAST")
-                    PdfGenerator.generateCommissionReport(context, profile, data as List<CommissionReportModel>, range)
+                    PdfGenerator.generateCommissionReport(context, profile, data.filterIsInstance<CommissionReportModel>(), range)
                 }
-                firstItem is PaymentReportModel || reportName.contains("Payment", true) || reportName.contains("Expense", true) -> {
-                    @Suppress("UNCHECKED_CAST")
-                    PdfGenerator.generatePaymentReport(context, profile, data as List<PaymentReportModel>, range)
+                // Prioritize Pending/Outstanding before generic Payment check
+                firstItem is OutstandingAgingModel || reportName.contains("Pending", true) || reportName.contains("Outstanding", true) || reportName.contains("Aging", true) -> {
+                    PdfGenerator.generateOutstandingAgingReport(context, profile, data.filterIsInstance<OutstandingAgingModel>(), range)
                 }
-                firstItem is OutstandingAgingModel || reportName.contains("Pending", true) || reportName.contains("Aging", true) || reportName.contains("Outstanding", true) -> {
-                    @Suppress("UNCHECKED_CAST")
-                    PdfGenerator.generateOutstandingAgingReport(context, profile, data as List<OutstandingAgingModel>, range)
+                firstItem is PaymentReportModel || (reportName.contains("Payment", true) && !reportName.contains("Pending", true)) || reportName.contains("Expense", true) -> {
+                    PdfGenerator.generatePaymentReport(context, profile, data.filterIsInstance<PaymentReportModel>(), range)
                 }
                 firstItem is ProductPerformanceModel || reportName.contains("Item", true) || reportName.contains("Product", true) || reportName.contains("Stats", true) -> {
-                    @Suppress("UNCHECKED_CAST")
-                    PdfGenerator.generateProductPerformanceReport(context, profile, data as List<ProductPerformanceModel>, range)
+                    PdfGenerator.generateProductPerformanceReport(context, profile, data.filterIsInstance<ProductPerformanceModel>(), range)
                 }
                 else -> {
                     Timber.w("REPORT_EXPORT: Unknown report type for PDF: $reportName. Attempting generic export if possible.")
-                    // If we can't identify it and it's empty, we might just fail, but for Pending Payments we want it to work.
-                    // This is the fallback for when data is empty and name doesn't match English keywords.
                     if (reportName.contains("బాకీ", true) || reportName.contains("विवरण", true)) {
-                         // Some common local keywords if needed, but the user wants Pending Payments fixed.
                          PdfGenerator.generateOutstandingAgingReport(context, profile, emptyList(), range)
                     } else {
                         null

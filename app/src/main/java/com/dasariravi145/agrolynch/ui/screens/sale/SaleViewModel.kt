@@ -249,6 +249,11 @@ class SaleViewModel @Inject constructor(
                 val currentDeductionsTotal = totalDeductions.value
                 val currentDeductionList = _deductions.value
                 
+                if (currentBillNumber.isBlank() || currentBillNumber == "N/A") {
+                    throw IllegalStateException("billNumber must be generated before ledger insert")
+                }
+                Timber.tag("BillRef").d("Buyer Sale billNumber=$currentBillNumber billId=$currentBillNumber saleId=$saleId")
+
                 val saleItemEntities = items.map { draft ->
                     SaleItemEntity(
                         id = UUID.randomUUID().toString(),
@@ -305,6 +310,7 @@ class SaleViewModel @Inject constructor(
 
                 when (val result = saleRepository.createSale(saleEntity, saleItemEntities)) {
                     is Resource.Success -> {
+                        Timber.tag("BillRef").d("Saved ledger transaction id=$saleId billNumber=${saleEntity.billNumber} billId=${saleEntity.billNumber} referenceId=$saleId")
                         // Save deductions
                         val deductionsToSave = currentDeductionList.map { 
                             it.copy(entryId = saleId, billId = currentBillNumber) 

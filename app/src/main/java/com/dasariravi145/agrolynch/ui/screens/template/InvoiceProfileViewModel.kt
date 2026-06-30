@@ -24,9 +24,41 @@ class InvoiceProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
+    init {
+        ensureProfileInitialized()
+    }
+
     private val _profile = companyRepository.getProfile()
+        .onEach { p ->
+            if (p == null) {
+                Timber.tag("InvoicePreview").d("Profile is NULL in Flow, triggering initialization")
+                ensureProfileInitialized()
+            }
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val profile = _profile
+
+    private fun ensureProfileInitialized() {
+        viewModelScope.launch {
+            try {
+                val current = companyRepository.getProfile().firstOrNull()
+                if (current == null) {
+                    Timber.tag("InvoicePreview").d("Initializing default company profile")
+                    val defaultProfile = CompanyProfileEntity(
+                        id = 1,
+                        companyName = "My Mandi Shop",
+                        address = "Mandi Market",
+                        mobile1 = "",
+                        defaultTemplate = "GK_FRUITS_CLASSIC"
+                    )
+                    companyRepository.updateProfile(defaultProfile)
+                    Timber.tag("InvoicePreview").d("Default profile saved")
+                }
+            } catch (e: Exception) {
+                Timber.tag("InvoicePreview").e(e, "Failed to initialize profile")
+            }
+        }
+    }
 
     private val _previewHtml = MutableStateFlow<String?>(null)
     val previewHtml = _previewHtml.asStateFlow()
@@ -70,7 +102,14 @@ class InvoiceProfileViewModel @Inject constructor(
     }
 
     fun generateLivePreview() {
-        val p = _profile.value ?: return
+        val p = _profile.value
+        if (p == null) {
+            Timber.tag("InvoicePreview").w("Cannot generate preview: profile is NULL")
+            return
+        }
+        
+        Timber.tag("InvoicePreview").d("Generating live preview for template: %s", p.defaultTemplate)
+        
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val businessProfile = BusinessProfile(
@@ -115,10 +154,18 @@ class InvoiceProfileViewModel @Inject constructor(
                     else -> "gk_fruits_classic"
                 }
                 
+                Timber.tag("InvoicePreview").d("Loading template asset: invoice_templates/%s.html", templateId)
                 val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, sampleInvoice)
+                
+                if (html.isBlank()) {
+                    Timber.tag("InvoicePreview").e("Generated HTML is BLANK for template %s", templateId)
+                } else {
+                    Timber.tag("InvoicePreview").d("Live preview HTML generated successfully (%d chars)", html.length)
+                }
+                
                 _previewHtml.value = html
             } catch (e: Exception) {
-                Timber.e(e, "PREVIEW_FAILED")
+                Timber.tag("InvoicePreview").e(e, "PREVIEW_GENERATION_FAILED")
             }
         }
     }

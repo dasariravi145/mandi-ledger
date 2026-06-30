@@ -103,6 +103,7 @@ class ArrivalRepositoryImpl @Inject constructor(
                     )
                     farmerDao.updateFarmer(updated)
                     profileDao.incrementBillNumber()
+                    timber.log.Timber.tag("BillRef").d("Saved ledger transaction id=${arrivals.first().id} billNumber=${arrivals.first().billNumber} billId=${arrivals.first().billNumber} referenceId=${arrivals.first().id}")
                     updated to profile
                 }
                 
@@ -132,21 +133,41 @@ class ArrivalRepositoryImpl @Inject constructor(
                     userId?.let { uid ->
                         try {
                             val batch = firestore.batch()
+                            val arrivalsRef = firestore.collection("users").document(uid).collection("arrivals")
+                            val farmersRef = firestore.collection("users").document(uid).collection("farmers")
+
                             arrivals.forEach { arrival ->
-                                val firestoreData = arrival.javaClass.declaredFields.associate { field ->
-                                    field.isAccessible = true
-                                    field.name to field.get(arrival)
-                                }.toMutableMap()
-                                firestoreData["ownerUserId"] = uid
-                                batch.set(firestore.collection("users").document(uid).collection("arrivals").document(arrival.id), firestoreData)
+                                val arrivalMap = mapOf(
+                                    "id" to arrival.id,
+                                    "farmerId" to arrival.farmerId,
+                                    "farmerName" to arrival.farmerName,
+                                    "productId" to arrival.productId,
+                                    "productName" to arrival.productName,
+                                    "grade" to arrival.grade,
+                                    "quantity" to arrival.quantity,
+                                    "unit" to arrival.unit,
+                                    "netAmount" to arrival.netAmount,
+                                    "grossAmount" to arrival.grossAmount,
+                                    "billNumber" to arrival.billNumber,
+                                    "date" to arrival.date,
+                                    "ownerUserId" to uid
+                                )
+                                batch.set(arrivalsRef.document(arrival.id), arrivalMap)
                             }
-                            // Also for updatedFarmer
-                            val farmerData = updatedFarmer.javaClass.declaredFields.associate { field ->
-                                field.isAccessible = true
-                                field.name to field.get(updatedFarmer)
-                            }.toMutableMap()
-                            farmerData["ownerUserId"] = uid
-                            batch.set(firestore.collection("users").document(uid).collection("farmers").document(updatedFarmer.id), farmerData)
+                            
+                            // Map updatedFarmer explicitly
+                            val farmerMap = mapOf(
+                                "id" to updatedFarmer.id,
+                                "name" to updatedFarmer.name,
+                                "mobileNumber" to updatedFarmer.mobileNumber,
+                                "pendingAmount" to updatedFarmer.pendingAmount,
+                                "advanceAmount" to updatedFarmer.advanceAmount,
+                                "totalArrivals" to updatedFarmer.totalArrivals,
+                                "lastUpdated" to updatedFarmer.lastUpdated,
+                                "ownerUserId" to uid
+                            )
+                            batch.set(farmersRef.document(updatedFarmer.id), farmerMap)
+
                             batch.commit().await()
                             
                             arrivals.forEach { arrivalDao.markAsSynced(it.id) }

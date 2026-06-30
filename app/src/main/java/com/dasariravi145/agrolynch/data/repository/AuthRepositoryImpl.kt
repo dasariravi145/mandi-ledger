@@ -7,10 +7,8 @@ import com.dasariravi145.agrolynch.domain.repository.AuthRepository
 import com.dasariravi145.agrolynch.util.NetworkMonitor
 import com.dasariravi145.agrolynch.util.SecurityManager
 import com.google.firebase.FirebaseException
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.PhoneAuthCredential
-import com.google.firebase.auth.PhoneAuthOptions
-import com.google.firebase.auth.PhoneAuthProvider
+import com.google.firebase.FirebaseTooManyRequestsException
+import com.google.firebase.auth.*
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
@@ -31,26 +29,44 @@ class AuthRepositoryImpl @Inject constructor(
 ) : AuthRepository {
 
     override fun sendOtp(phoneNumber: String, activity: Activity): Flow<Result<String>> = callbackFlow {
-        Timber.d("FIREBASE_INITIALIZED")
-        Timber.d("OTP_FLOW: Request started for $phoneNumber. Package: ${activity.packageName}")
+        android.util.Log.d("PhoneAuth", "DEBUG_INFO: phoneNumber=$phoneNumber")
+        android.util.Log.d("PhoneAuth", "DEBUG_INFO: packageName=${activity.packageName}")
+        android.util.Log.d("PhoneAuth", "DEBUG_INFO: buildType=${com.dasariravi145.agrolynch.BuildConfig.BUILD_TYPE}")
+        android.util.Log.d("PhoneAuth", "DEBUG_INFO: activityIsNull=${activity == null}")
+        android.util.Log.d("PhoneAuth", "Verification start for: $phoneNumber")
         
         val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
             override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-                Timber.d("OTP_FLOW: verificationCompleted. Auto-verification successful.")
+                android.util.Log.d("PhoneAuth", "onVerificationCompleted triggered")
+                android.util.Log.d("PhoneAuth", "Verification completed automatically")
             }
 
-            override fun onVerificationFailed(e: FirebaseException) {
-                Timber.e(e, "FIRESTORE_ERROR_CODE: ${e.message}")
-                Timber.e(e, "OTP_FLOW: verificationFailed. Message: ${e.message}")
-                if (e.message?.contains("reCAPTCHA", ignoreCase = true) == true) {
+            override fun onVerificationFailed(exception: FirebaseException) {
+                android.util.Log.e("PhoneAuth", "Verification Failed", exception)
+                
+                if (exception is FirebaseAuthException) {
+                    android.util.Log.e("PhoneAuth", "ErrorCode=${exception.errorCode}")
+                    android.util.Log.e("PhoneAuth", "Message=${exception.message}")
+                    android.util.Log.e("PhoneAuth", "Cause=${exception.cause}")
+                    android.util.Log.e("PhoneAuth", "Package=${activity.packageName}")
+                    android.util.Log.e("PhoneAuth", "BuildType=${com.dasariravi145.agrolynch.BuildConfig.BUILD_TYPE}")
+                    android.util.Log.e("PhoneAuth", "Phone=$phoneNumber")
+                }
+                
+                if (exception.message?.contains("reCAPTCHA", ignoreCase = true) == true) {
                     Timber.w("OTP_FLOW: reCAPTCHA fallback triggered. This usually means Play Integrity or SHA keys are not configured.")
                 }
-                trySend(Result.failure(e))
+                trySend(Result.failure(exception))
             }
 
             override fun onCodeSent(verificationId: String, token: PhoneAuthProvider.ForceResendingToken) {
-                Timber.d("OTP_FLOW: codeSent. verificationId: $verificationId")
+                android.util.Log.d("PhoneAuth", "onCodeSent triggered")
+                android.util.Log.d("PhoneAuth", "Code sent. verificationId: $verificationId")
                 trySend(Result.success(verificationId))
+            }
+
+            override fun onCodeAutoRetrievalTimeOut(verificationId: String) {
+                android.util.Log.d("PhoneAuth", "onCodeAutoRetrievalTimeOut triggered")
             }
         }
 

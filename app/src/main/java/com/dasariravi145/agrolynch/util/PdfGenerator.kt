@@ -3,7 +3,6 @@ package com.dasariravi145.agrolynch.util
 import android.content.Context
 import android.graphics.*
 import android.graphics.pdf.PdfDocument
-import android.os.Environment
 import androidx.core.content.FileProvider
 import com.dasariravi145.agrolynch.data.local.entity.*
 import com.dasariravi145.agrolynch.data.local.dao.*
@@ -158,8 +157,9 @@ object PdfGenerator {
         return try {
             Timber.d("PendingPaymentsPdf: entries count = ${data.size}")
             val pdf = PdfDocument()
-            val headers = listOf("Name", "Type", "Pending Amount", "Last Payment", "Age")
-            val alignments = listOf(Paint.Align.LEFT, Paint.Align.CENTER, Paint.Align.RIGHT, Paint.Align.CENTER, Paint.Align.RIGHT)
+            // Header order: Name | Type | Last Payment Date | Pending Amount | Age
+            val headers = listOf("Name", "Type", "Last Payment Date", "Pending Amount", "Age")
+            val alignments = listOf(Paint.Align.LEFT, Paint.Align.CENTER, Paint.Align.CENTER, Paint.Align.RIGHT, Paint.Align.RIGHT)
             
             val tableData = if (data.isEmpty()) {
                 Timber.d("PendingPaymentsPdf: Data is empty, creating empty report.")
@@ -168,9 +168,9 @@ object PdfGenerator {
                 data.map { item ->
                     listOf(
                         item.name ?: "Unknown",
-                        item.type ?: "PARTY",
-                        "₹${Formatter.formatCurrencyStrict(item.pendingAmount ?: 0.0)}",
+                        item.type ?: "-",
                         item.lastPaymentDate?.let { formatDateProfessional(it) } ?: "-",
+                        "₹${Formatter.formatCurrencyStrict(item.pendingAmount ?: 0.0)}",
                         "${item.daysPending ?: 0} days"
                     )
                 }
@@ -183,13 +183,22 @@ object PdfGenerator {
                 "AVERAGE AGE" to "${Formatter.formatWeight(avgAge)} Days"
             )
             
-            val title = "PENDING PAYMENTS REPORT"
-            drawProfessionalReport(pdf, profile, title, range, headers, tableData, summary, alignments)
-            val file = savePdf(pdf, context, "Reports", "PendingPayments")
-            Timber.d("PendingPaymentsPdf: pdf created = ${file?.absolutePath}")
-            file
-        } catch (e: Exception) {
-            Timber.e(e, "PendingPaymentsPdf: PDF generation failed")
+            val title = "Pending Payments Report"
+            val emptyMsg = "No pending payments found for selected period"
+            drawProfessionalReport(pdf, profile, title, range, headers, tableData, summary, alignments, emptyMsg)
+            
+            val file = savePdf(pdf, context, "Reports", "Pending_Payments_Report")
+
+            if (file != null && file.exists() && file.length() > 0) {
+                Timber.d("PendingPaymentsPdf: SUCCESS - File exists and size > 0: ${file.absolutePath}")
+                file
+            } else {
+                android.util.Log.e("PendingPaymentsPDF", "PDF generation failed: File missing or empty after saving")
+                null
+            }
+        } catch (exception: Exception) {
+            android.util.Log.e("PendingPaymentsPDF", "FULL ERROR", exception)
+            exception.printStackTrace()
             null
         }
     }
@@ -232,7 +241,8 @@ object PdfGenerator {
         headers: List<String>,
         tableData: List<List<String>>,
         summary: Map<String, String>,
-        alignments: List<Paint.Align>
+        alignments: List<Paint.Align>,
+        emptyMessage: String = "No records found for the selected range."
     ) {
         var pageNumber = 1
         var pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create()
@@ -304,7 +314,7 @@ object PdfGenerator {
         if (tableData.isEmpty()) {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
             paint.color = Color.RED
-            canvas.drawText("No records found for the selected range.", horizontalPadding, y, paint)
+            canvas.drawText(emptyMessage, horizontalPadding, y, paint)
             pdf.finishPage(page)
             return
         }
@@ -514,9 +524,14 @@ object PdfGenerator {
     }
 
     fun savePdf(pdf: PdfDocument, context: Context, dir: String, fileName: String): File? {
-        val root = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "MandiLedger/$dir")
+        // Using context.filesDir for safe internal storage
+        val root = File(context.filesDir, "MandiLedger/$dir")
         if (!root.exists()) root.mkdirs()
-        val file = File(root, "${fileName}_${System.currentTimeMillis()}.pdf")
+        
+        // Remove special characters from file name, allow only alphanumeric and underscores
+        val sanitizedFileName = fileName.replace(Regex("[^a-zA-Z0-9_]"), "")
+        val file = File(root, "${sanitizedFileName}_${System.currentTimeMillis()}.pdf")
+
         return try { 
             FileOutputStream(file).use { pdf.writeTo(it) }
             pdf.close()
@@ -524,7 +539,7 @@ object PdfGenerator {
             file 
         } catch (e: Exception) { 
             pdf.close()
-            Timber.e(e, "PDF_GENERATION_FAILED")
+            Timber.e(e, "PDF_SAVE_FAILED: ${e.message}")
             null 
         }
     }

@@ -63,6 +63,7 @@ class SyncRepositoryImpl @Inject constructor(
 
     private suspend fun syncFarmers(uid: String) {
         val farmers = farmerDao.getAllFarmers().first()
+        val batch = firestore.batch()
         farmers.forEach { farmer ->
             val firestoreFarmer = FirestoreFarmer(
                 farmerId = farmer.id,
@@ -73,12 +74,15 @@ class SyncRepositoryImpl @Inject constructor(
                 createdAt = 0L, 
                 updatedAt = farmer.lastUpdated
             )
-            firestore.collection("users").document(uid).collection("farmers").document(farmer.id).set(firestoreFarmer).await()
+            val docRef = firestore.collection("users").document(uid).collection("farmers").document(farmer.id)
+            batch.set(docRef, firestoreFarmer)
         }
+        batch.commit().await()
     }
 
     private suspend fun syncBuyers(uid: String) {
         val buyers = buyerDao.getAllBuyers().first()
+        val batch = firestore.batch()
         buyers.forEach { buyer ->
             val firestoreBuyer = FirestoreBuyer(
                 buyerId = buyer.id,
@@ -89,8 +93,10 @@ class SyncRepositoryImpl @Inject constructor(
                 createdAt = 0L,
                 updatedAt = buyer.lastUpdated
             )
-            firestore.collection("users").document(uid).collection("buyers").document(buyer.id).set(firestoreBuyer).await()
+            val docRef = firestore.collection("users").document(uid).collection("buyers").document(buyer.id)
+            batch.set(docRef, firestoreBuyer)
         }
+        batch.commit().await()
     }
 
     private suspend fun syncProducts(uid: String) {
@@ -112,63 +118,78 @@ class SyncRepositoryImpl @Inject constructor(
 
     private suspend fun syncArrivals(uid: String) {
         val arrivals = arrivalDao.getAllArrivals().first()
-        arrivals.forEach { arrival ->
-            val firestoreStock = FirestoreStockEntry(
-                stockId = arrival.id,
-                ownerUserId = uid,
-                farmerId = arrival.farmerId,
-                productId = arrival.productId,
-                category = arrival.productCategory,
-                grade = arrival.grade,
-                quantity = arrival.quantity,
-                rate = arrival.purchaseRate,
-                laborCharges = 0.0, 
-                transportCharges = 0.0,
-                grossAmount = arrival.grossAmount,
-                netAmount = arrival.netAmount,
-                createdAt = arrival.date
-            )
-            firestore.collection("users").document(uid).collection("arrivals").document(arrival.id).set(firestoreStock).await()
+        arrivals.chunked(500).forEach { chunk ->
+            val batch = firestore.batch()
+            chunk.forEach { arrival ->
+                val firestoreStock = FirestoreStockEntry(
+                    stockId = arrival.id,
+                    ownerUserId = uid,
+                    farmerId = arrival.farmerId,
+                    productId = arrival.productId,
+                    category = arrival.productCategory,
+                    grade = arrival.grade,
+                    quantity = arrival.quantity,
+                    rate = arrival.purchaseRate,
+                    laborCharges = 0.0, 
+                    transportCharges = 0.0,
+                    grossAmount = arrival.grossAmount,
+                    netAmount = arrival.netAmount,
+                    createdAt = arrival.date
+                )
+                val docRef = firestore.collection("users").document(uid).collection("arrivals").document(arrival.id)
+                batch.set(docRef, firestoreStock)
+            }
+            batch.commit().await()
         }
     }
 
     private suspend fun syncSales(uid: String) {
         val sales = saleDao.getAllSales().first()
-        sales.forEach { sale ->
-            val firestoreSale = FirestoreSale(
-                saleId = sale.id,
-                ownerUserId = uid,
-                buyerId = sale.buyerId,
-                productId = sale.productId,
-                category = "General", 
-                grade = sale.grade,
-                quantity = sale.totalQuantity,
-                rate = 0.0, 
-                grossAmount = sale.totalAmount,
-                commissionAmount = sale.totalCommission,
-                laborCharges = sale.laborCharges,
-                transportCharges = sale.transportCharges,
-                netAmount = sale.totalNetAmount,
-                createdAt = sale.date
-            )
-            firestore.collection("users").document(uid).collection("sales").document(sale.id).set(firestoreSale).await()
+        sales.chunked(500).forEach { chunk ->
+            val batch = firestore.batch()
+            chunk.forEach { sale ->
+                val firestoreSale = FirestoreSale(
+                    saleId = sale.id,
+                    ownerUserId = uid,
+                    buyerId = sale.buyerId,
+                    productId = sale.productId,
+                    category = "General", 
+                    grade = sale.grade,
+                    quantity = sale.totalQuantity,
+                    rate = 0.0, 
+                    grossAmount = sale.totalAmount,
+                    commissionAmount = sale.totalCommission,
+                    laborCharges = sale.laborCharges,
+                    transportCharges = sale.transportCharges,
+                    netAmount = sale.totalNetAmount,
+                    createdAt = sale.date
+                )
+                val docRef = firestore.collection("users").document(uid).collection("sales").document(sale.id)
+                batch.set(docRef, firestoreSale)
+            }
+            batch.commit().await()
         }
     }
 
     private suspend fun syncPayments(uid: String) {
         val payments = paymentDao.getAllPayments().first()
-        payments.forEach { payment ->
-            val firestorePayment = FirestorePayment(
-                paymentId = payment.id,
-                ownerUserId = uid,
-                partyId = payment.partyId,
-                partyType = payment.partyType,
-                amount = payment.amount,
-                paymentMode = payment.paymentMode,
-                remarks = payment.notes,
-                createdAt = payment.date
-            )
-            firestore.collection("users").document(uid).collection("payments").document(payment.id).set(firestorePayment).await()
+        payments.chunked(500).forEach { chunk ->
+            val batch = firestore.batch()
+            chunk.forEach { payment ->
+                val firestorePayment = FirestorePayment(
+                    paymentId = payment.id,
+                    ownerUserId = uid,
+                    partyId = payment.partyId,
+                    partyType = payment.partyType,
+                    amount = payment.amount,
+                    paymentMode = payment.paymentMode,
+                    remarks = payment.notes,
+                    createdAt = payment.date
+                )
+                val docRef = firestore.collection("users").document(uid).collection("payments").document(payment.id)
+                batch.set(docRef, firestorePayment)
+            }
+            batch.commit().await()
         }
     }
 
@@ -259,50 +280,55 @@ class SyncRepositoryImpl @Inject constructor(
                 }
             }
 
-            // Restore Arrivals
+            // Restore Arrivals and recalculate stock (Fixes M1)
             val arrivalDocs = firestore.collection("users").document(uid).collection("arrivals").get().await()
-            arrivalDocs.documents.forEach { doc ->
-                val it = doc.toObject(FirestoreStockEntry::class.java)
-                it?.let {
-                    arrivalDao.insertArrival(com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity(
-                        id = it.stockId,
-                        farmerId = it.farmerId,
-                        productId = it.productId,
-                        productCategory = it.category,
-                        grade = it.grade,
-                        quantity = it.quantity,
-                        remainingQuantity = it.quantity, 
-                        purchaseRate = it.rate,
-                        grossAmount = it.grossAmount,
-                        netAmount = it.netAmount,
-                        date = it.createdAt,
-                        isSynced = true
-                    ))
-                }
+            val saleDocs = firestore.collection("users").document(uid).collection("sales").get().await()
+            
+            val firestoreArrivals = arrivalDocs.documents.mapNotNull { it.toObject(FirestoreStockEntry::class.java) }
+            val firestoreSales = saleDocs.documents.mapNotNull { it.toObject(FirestoreSale::class.java) }
+
+            firestoreArrivals.forEach { arrival ->
+                // Recalculate remaining stock based on sales synced in cloud
+                val totalSoldKg = firestoreSales
+                    .filter { it.productId == arrival.productId && it.grade == arrival.grade }
+                    .sumOf { it.quantity }
+                
+                val remaining = maxOf(0.0, arrival.quantity - totalSoldKg)
+
+                arrivalDao.insertArrival(com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity(
+                    id = arrival.stockId,
+                    farmerId = arrival.farmerId,
+                    productId = arrival.productId,
+                    productCategory = arrival.category,
+                    grade = arrival.grade,
+                    quantity = arrival.quantity,
+                    remainingQuantity = remaining, 
+                    purchaseRate = arrival.rate,
+                    grossAmount = arrival.grossAmount,
+                    netAmount = arrival.netAmount,
+                    date = arrival.createdAt,
+                    isSynced = true
+                ))
             }
 
             // Restore Sales
-            val saleDocs = firestore.collection("users").document(uid).collection("sales").get().await()
-            saleDocs.documents.forEach { doc ->
-                val it = doc.toObject(FirestoreSale::class.java)
-                it?.let {
-                    saleDao.insertSale(com.dasariravi145.agrolynch.data.local.entity.SaleEntity(
-                        id = it.saleId,
-                        buyerId = it.buyerId,
-                        productId = it.productId ?: "",
-                        productName = "Restored Sale",
-                        grade = it.grade ?: "",
-                        totalQuantity = it.quantity,
-                        totalAmount = it.grossAmount,
-                        transportCharges = it.transportCharges,
-                        laborCharges = it.laborCharges,
-                        totalCommission = it.commissionAmount,
-                        totalNetAmount = it.netAmount,
-                        pendingAmount = it.netAmount,
-                        date = it.createdAt,
-                        isSynced = true
-                    ))
-                }
+            firestoreSales.forEach {
+                saleDao.insertSale(com.dasariravi145.agrolynch.data.local.entity.SaleEntity(
+                    id = it.saleId,
+                    buyerId = it.buyerId,
+                    productId = it.productId,
+                    productName = "Restored Sale",
+                    grade = it.grade,
+                    totalQuantity = it.quantity,
+                    totalAmount = it.grossAmount,
+                    transportCharges = it.transportCharges,
+                    laborCharges = it.laborCharges,
+                    totalCommission = it.commissionAmount,
+                    totalNetAmount = it.netAmount,
+                    pendingAmount = it.netAmount,
+                    date = it.createdAt,
+                    isSynced = true
+                ))
             }
 
             // Restore Payments

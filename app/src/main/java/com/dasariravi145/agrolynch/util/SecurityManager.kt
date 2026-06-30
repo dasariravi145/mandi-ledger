@@ -80,7 +80,24 @@ class SecurityManager @Inject constructor(
     fun getUserLocation(): String = sharedPreferences.getString(KEY_USER_LOCATION, "") ?: ""
 
     fun savePin(pin: String) {
-        sharedPreferences.edit().putString(KEY_APP_PIN, pin).apply()
+        val hashedPin = hashPin(pin)
+        sharedPreferences.edit().putString(KEY_APP_PIN, hashedPin).apply()
+    }
+
+    private fun hashPin(pin: String): String {
+        return try {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            val hash = digest.digest(pin.toByteArray())
+            hash.joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            pin // Fallback to plaintext if hashing fails (should not happen)
+        }
+    }
+
+    fun verifyPin(inputPin: String): Boolean {
+        val storedPin = getPin() ?: return false
+        val hashedInput = hashPin(inputPin)
+        return storedPin == hashedInput || storedPin == inputPin // Support legacy plaintext
     }
 
     fun getPin(): String? {

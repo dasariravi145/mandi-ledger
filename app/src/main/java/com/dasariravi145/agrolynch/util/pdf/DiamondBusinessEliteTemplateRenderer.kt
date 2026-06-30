@@ -21,6 +21,7 @@ object DiamondBusinessEliteTemplateRenderer {
         renderedHtml = renderedHtml.replace("{{address}}", profile.address ?: "")
         renderedHtml = renderedHtml.replace("{{mobile}}", profile.mobile ?: "")
         renderedHtml = renderedHtml.replace("{{gstNumber}}", (profile.gstNumber ?: "").uppercase())
+        renderedHtml = renderedHtml.replace("{{gstHidden}}", if (profile.gstNumber.isBlank()) "hidden" else "")
         renderedHtml = renderedHtml.replace("{{tagline}}", profile.tagline ?: "")
         renderedHtml = renderedHtml.replace("{{state}}", "") // Optional in BusinessProfile but good to have
         renderedHtml = renderedHtml.replace("{{email}}", "") // Optional

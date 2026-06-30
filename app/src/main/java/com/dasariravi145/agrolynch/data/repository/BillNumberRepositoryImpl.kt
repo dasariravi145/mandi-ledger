@@ -21,7 +21,26 @@ class BillNumberRepositoryImpl @Inject constructor(
     override suspend fun updateSeries(series: BillNumberSeriesEntity) = seriesDao.insertOrUpdate(series)
 
     override suspend fun generateNextBillNumber(type: String): String {
-        val series = seriesDao.getSeriesByType(type) ?: return "N/A"
+        var series = seriesDao.getSeriesByType(type)
+        if (series == null) {
+            // Initialize missing series
+            series = BillNumberSeriesEntity(
+                seriesType = type,
+                prefix = when(type) {
+                    "STOCK" -> "GK-Farmer"
+                    "SALE" -> "GK-SALE"
+                    "PAYMENT" -> "PAY"
+                    else -> "GEN"
+                },
+                currentNumber = 1,
+                startingNumber = 1,
+                resetYearly = true,
+                financialYearEnabled = true,
+                updatedAt = System.currentTimeMillis()
+            )
+            seriesDao.insertSeries(series)
+            timber.log.Timber.i("Initialized missing bill series for $type")
+        }
         return formatBillNumber(series)
     }
 

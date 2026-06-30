@@ -73,6 +73,7 @@ class PaymentRepositoryImpl @Inject constructor(
                     paymentDao.insertPayment(updatedPayment)
                     farmerDao.updateFarmer(updatedFarmer)
                     profileDao.incrementReceiptNumber()
+                    timber.log.Timber.tag("BillRef").d("Saved ledger transaction id=${updatedPayment.id} billNumber=${updatedPayment.billNumber} billId=${updatedPayment.billNumber} referenceId=${updatedPayment.id}")
                     Triple(updatedFarmer, updatedPayment, profile)
                 }
                 
@@ -81,24 +82,39 @@ class PaymentRepositoryImpl @Inject constructor(
                         try {
                             val batch = firestore.batch()
                             
-                            val paymentMap = updatedPayment.javaClass.declaredFields.associate { field ->
-                                field.isAccessible = true
-                                field.name to field.get(updatedPayment)
-                            }.toMutableMap()
-                            paymentMap["ownerUserId"] = uid
+                            val paymentMap = mapOf(
+                                "id" to updatedPayment.id,
+                                "partyId" to updatedPayment.partyId,
+                                "partyName" to updatedPayment.partyName,
+                                "partyType" to updatedPayment.partyType,
+                                "amount" to updatedPayment.amount,
+                                "paymentMode" to updatedPayment.paymentMode,
+                                "billNumber" to updatedPayment.billNumber,
+                                "remainingBalance" to updatedPayment.remainingBalance,
+                                "advanceAmount" to updatedPayment.advanceAmount,
+                                "date" to updatedPayment.date,
+                                "ownerUserId" to uid
+                            )
                             
-                            val farmerMap = updatedFarmer.javaClass.declaredFields.associate { field ->
-                                field.isAccessible = true
-                                field.name to field.get(updatedFarmer)
-                            }.toMutableMap()
-                            farmerMap["ownerUserId"] = uid
+                            val farmerMap = mapOf(
+                                "id" to updatedFarmer.id,
+                                "name" to updatedFarmer.name,
+                                "mobileNumber" to updatedFarmer.mobileNumber,
+                                "pendingAmount" to updatedFarmer.pendingAmount,
+                                "advanceAmount" to updatedFarmer.advanceAmount,
+                                "totalPayments" to updatedFarmer.totalPayments,
+                                "lastUpdated" to updatedFarmer.lastUpdated,
+                                "ownerUserId" to uid
+                            )
 
                             batch.set(firestore.collection("users").document(uid).collection("payments").document(updatedPayment.id), paymentMap)
                             batch.set(firestore.collection("users").document(uid).collection("farmers").document(updatedFarmer.id), farmerMap)
                             batch.commit().await()
                             paymentDao.markAsSynced(updatedPayment.id)
                             farmerDao.markAsSynced(updatedFarmer.id)
-                        } catch (e: Exception) { }
+                        } catch (e: Exception) { 
+                            timber.log.Timber.e(e, "Firebase sync failed for Payment")
+                        }
                     }
                 }
                 updatedPayment to profile
@@ -116,6 +132,7 @@ class PaymentRepositoryImpl @Inject constructor(
                     paymentDao.insertPayment(updatedPayment)
                     buyerDao.updateBuyer(updatedBuyer)
                     profileDao.incrementReceiptNumber()
+                    timber.log.Timber.tag("BillRef").d("Saved ledger transaction id=${updatedPayment.id} billNumber=${updatedPayment.billNumber} billId=${updatedPayment.billNumber} referenceId=${updatedPayment.id}")
                     Triple(updatedBuyer, updatedPayment, profile)
                 }
 
@@ -124,17 +141,28 @@ class PaymentRepositoryImpl @Inject constructor(
                         try {
                             val batch = firestore.batch()
                             
-                            val paymentMap = updatedPayment.javaClass.declaredFields.associate { field ->
-                                field.isAccessible = true
-                                field.name to field.get(updatedPayment)
-                            }.toMutableMap()
-                            paymentMap["ownerUserId"] = uid
+                            val paymentMap = mapOf(
+                                "id" to updatedPayment.id,
+                                "partyId" to updatedPayment.partyId,
+                                "partyName" to updatedPayment.partyName,
+                                "partyType" to updatedPayment.partyType,
+                                "amount" to updatedPayment.amount,
+                                "paymentMode" to updatedPayment.paymentMode,
+                                "billNumber" to updatedPayment.billNumber,
+                                "remainingBalance" to updatedPayment.remainingBalance,
+                                "date" to updatedPayment.date,
+                                "ownerUserId" to uid
+                            )
                             
-                            val buyerMap = updatedBuyer.javaClass.declaredFields.associate { field ->
-                                field.isAccessible = true
-                                field.name to field.get(updatedBuyer)
-                            }.toMutableMap()
-                            buyerMap["ownerUserId"] = uid
+                            val buyerMap = mapOf(
+                                "id" to updatedBuyer.id,
+                                "name" to updatedBuyer.name,
+                                "mobileNumber" to updatedBuyer.mobileNumber,
+                                "pendingAmount" to updatedBuyer.pendingAmount,
+                                "totalPaid" to updatedBuyer.totalPaid,
+                                "lastUpdated" to updatedBuyer.lastUpdated,
+                                "ownerUserId" to uid
+                            )
 
                             batch.set(firestore.collection("users").document(uid).collection("payments").document(updatedPayment.id), paymentMap)
                             batch.set(firestore.collection("users").document(uid).collection("buyers").document(updatedBuyer.id), buyerMap)

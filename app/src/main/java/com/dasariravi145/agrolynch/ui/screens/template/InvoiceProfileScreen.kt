@@ -46,7 +46,12 @@ fun InvoiceProfileScreen(
     val scrollState = rememberScrollState()
 
     LaunchedEffect(profile) {
-        viewModel.generateLivePreview()
+        if (profile != null) {
+            timber.log.Timber.tag("InvoicePreview").d("Profile updated, triggering preview generation")
+            viewModel.generateLivePreview()
+        } else {
+            timber.log.Timber.tag("InvoicePreview").w("Profile is NULL, cannot generate preview")
+        }
     }
 
     Scaffold(
@@ -84,7 +89,14 @@ fun InvoiceProfileScreen(
                 HtmlPreviewCard(previewHtml!!)
             } else {
                 Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(8.dp))
+                        Text("Generating Preview...", color = Color.Gray, fontSize = 12.sp)
+                        if (profile == null) {
+                            Text("Waiting for company profile...", color = Color.Red, fontSize = 10.sp)
+                        }
+                    }
                 }
             }
 
@@ -123,42 +135,56 @@ fun InvoiceProfileScreen(
 
 @Composable
 fun HtmlPreviewCard(html: String) {
+    var hasError by remember { mutableStateOf(false) }
+    
     Card(
         modifier = Modifier.fillMaxWidth().aspectRatio(0.707f),
         elevation = CardDefaults.cardElevation(8.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(4.dp)
     ) {
-        AndroidView(
-            factory = { context ->
-                WebView(context).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.loadWithOverviewMode = true
-                    settings.useWideViewPort = true
-                    settings.setSupportZoom(false)
-                    settings.textZoom = 100
-                    webViewClient = WebViewClient()
-                }
-            },
-            update = { webView ->
-                // To scale A4 to fit the width of the WebView, we might need a small trick.
-                // Standard A4 is 210mm wide.
-                val scaledHtml = """
-                    <style>
-                        body {
-                            transform: scale(0.38); /* Approximate scale to fit screen, will be adjusted by overview mode */
-                            transform-origin: top left;
+        if (hasError) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Error rendering preview. Please check your branding settings.", color = Color.Red, textAlign = TextAlign.Center)
+            }
+        } else {
+            AndroidView(
+                factory = { context ->
+                    WebView(context).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.loadWithOverviewMode = true
+                        settings.useWideViewPort = true
+                        settings.setSupportZoom(false)
+                        settings.textZoom = 100
+                        webViewClient = object : WebViewClient() {
+                            override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
+                                super.onReceivedError(view, errorCode, description, failingUrl)
+                                timber.log.Timber.tag("InvoicePreview").e("WebView Error: %s", description)
+                                hasError = true
+                            }
                         }
-                    </style>
-                    $html
-                """.trimIndent()
-                
-                // Use scaled HTML for visual preview fit
-                webView.loadDataWithBaseURL(null, scaledHtml, "text/html", "utf-8", null)
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+                    }
+                },
+                update = { webView ->
+                    // To scale A4 to fit the width of the WebView, we might need a small trick.
+                    // Standard A4 is 210mm wide.
+                    val scaledHtml = """
+                        <style>
+                            body {
+                                transform: scale(0.38); /* Approximate scale to fit screen, will be adjusted by overview mode */
+                                transform-origin: top left;
+                            }
+                        </style>
+                        $html
+                    """.trimIndent()
+                    
+                    // Use scaled HTML for visual preview fit
+                    webView.loadDataWithBaseURL(null, scaledHtml, "text/html", "utf-8", null)
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }
 

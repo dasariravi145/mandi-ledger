@@ -87,7 +87,8 @@ class DashboardRepositoryImpl @Inject constructor(
             timber.log.Timber.d("Calculated Today Sales: $todaySales")
 
             val buyerPending = totalSalesNet - totalBuyerPayments
-            val farmerPending = (totalArrivalsNet + totalLegacyTrans) - totalFarmerPayments
+            val farmerPendingRaw = (totalArrivalsNet + totalLegacyTrans) - totalFarmerPayments
+            val farmerPending = kotlin.math.abs(farmerPendingRaw)
             
             // FIXED: Today Commission must only include stock entry commission (arrivals)
             val todayCommission = todayArrivalsComm
@@ -104,7 +105,7 @@ class DashboardRepositoryImpl @Inject constructor(
                 commissionEarned = totalCommission,
                 buyerPending = buyerPending,
                 farmerPending = farmerPending,
-                netBalance = buyerPending - farmerPending,
+                netBalance = buyerPending - farmerPendingRaw,
                 recentTransactions = recent
             )
             _dashboardCache.value = summary

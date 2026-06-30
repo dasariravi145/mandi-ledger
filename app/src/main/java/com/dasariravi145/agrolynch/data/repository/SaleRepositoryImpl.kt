@@ -75,6 +75,7 @@ class SaleRepositoryImpl @Inject constructor(
                     )
                     buyerDao.updateBuyer(updatedBuyer)
                     profileDao.incrementInvoiceNumber()
+                    timber.log.Timber.tag("BillRef").d("Saved ledger transaction id=${sale.id} billNumber=${sale.billNumber} billId=${sale.billNumber} referenceId=${sale.id}")
                     updatedBuyer to profile
                 }
                 
@@ -103,33 +104,51 @@ class SaleRepositoryImpl @Inject constructor(
                     // Background sync
                     userId?.let { uid ->
                         try {
+                            val userSalesRef = firestore.collection("users").document(uid).collection("sales")
+                            val userBuyersRef = firestore.collection("users").document(uid).collection("buyers")
+                            
                             val batch = firestore.batch()
                             
-                            // Convert sale to map and add ownerUserId
-                            val saleMap = sale.javaClass.declaredFields.associate { field ->
-                                field.isAccessible = true
-                                field.name to field.get(sale)
-                            }.toMutableMap()
-                            saleMap["ownerUserId"] = uid
+                            // Map Sale explicitly to avoid reflection/obfuscation issues
+                            val saleMap = mapOf(
+                                "id" to sale.id,
+                                "buyerId" to sale.buyerId,
+                                "buyerName" to sale.buyerName,
+                                "farmerName" to sale.farmerName,
+                                "totalAmount" to sale.totalAmount,
+                                "totalNetAmount" to sale.totalNetAmount,
+                                "paidAmount" to sale.paidAmount,
+                                "pendingAmount" to sale.pendingAmount,
+                                "billNumber" to sale.billNumber,
+                                "date" to sale.date,
+                                "ownerUserId" to uid
+                            )
+                            batch.set(userSalesRef.document(sale.id), saleMap)
                             
-                            batch.set(firestore.collection("users").document(uid).collection("sales").document(sale.id), saleMap)
-                            
-                            // Convert updatedBuyer to map and add ownerUserId
-                            val buyerMap = updatedBuyer.javaClass.declaredFields.associate { field ->
-                                field.isAccessible = true
-                                field.name to field.get(updatedBuyer)
-                            }.toMutableMap()
-                            buyerMap["ownerUserId"] = uid
-
-                            batch.set(firestore.collection("users").document(uid).collection("buyers").document(updatedBuyer.id), buyerMap)
+                            // Map Buyer explicitly
+                            val buyerMap = mapOf(
+                                "id" to updatedBuyer.id,
+                                "name" to updatedBuyer.name,
+                                "mobileNumber" to updatedBuyer.mobileNumber,
+                                "pendingAmount" to updatedBuyer.pendingAmount,
+                                "totalPurchase" to updatedBuyer.totalPurchase,
+                                "lastUpdated" to updatedBuyer.lastUpdated,
+                                "ownerUserId" to uid
+                            )
+                            batch.set(userBuyersRef.document(updatedBuyer.id), buyerMap)
                             
                             for (item in items) {
-                                val itemMap = item.javaClass.declaredFields.associate { field ->
-                                    field.isAccessible = true
-                                    field.name to field.get(item)
-                                }.toMutableMap()
-                                itemMap["ownerUserId"] = uid
-                                batch.set(firestore.collection("users").document(uid).collection("sales").document(sale.id).collection("items").document(item.id), itemMap)
+                                val itemMap = mapOf(
+                                    "id" to item.id,
+                                    "saleId" to item.saleId,
+                                    "productName" to item.productName,
+                                    "grade" to item.grade,
+                                    "quantitySold" to item.quantitySold,
+                                    "saleRate" to item.saleRate,
+                                    "saleAmount" to item.saleAmount,
+                                    "ownerUserId" to uid
+                                )
+                                batch.set(userSalesRef.document(sale.id).collection("items").document(item.id), itemMap)
                             }
                             batch.commit().await()
                             saleDao.markAsSynced(sale.id)

@@ -24,6 +24,7 @@ object TemplateHtmlRenderer {
         renderedHtml = renderedHtml.replace("{{address}}", profile.address)
         renderedHtml = renderedHtml.replace("{{mobile}}", profile.mobile)
         renderedHtml = renderedHtml.replace("{{gstNumber}}", profile.gstNumber)
+        renderedHtml = renderedHtml.replace("{{gstHidden}}", if (profile.gstNumber.isBlank()) "hidden" else "")
         renderedHtml = renderedHtml.replace("{{tagline}}", profile.tagline)
 
         // Invoice Info

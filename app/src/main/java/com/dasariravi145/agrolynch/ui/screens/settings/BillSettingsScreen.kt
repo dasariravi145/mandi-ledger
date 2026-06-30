@@ -25,6 +25,10 @@ fun BillSettingsScreen(
 ) {
     val seriesList by viewModel.seriesList.collectAsStateWithLifecycle()
 
+    LaunchedEffect(Unit) {
+        timber.log.Timber.tag("BillSeries").d("BillSettingsScreen launched")
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -37,13 +41,23 @@ fun BillSettingsScreen(
             )
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            items(seriesList) { series ->
-                SeriesCard(series = series, onSave = viewModel::updateSeries)
+        if (seriesList.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Spacer(Modifier.height(8.dp))
+                    Text("Loading Bill Series...", color = androidx.compose.ui.graphics.Color.Gray)
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(seriesList, key = { it.id }) { series ->
+                    SeriesCard(series = series, onSave = viewModel::updateSeries)
+                }
             }
         }
     }
@@ -65,7 +79,7 @@ fun SeriesCard(
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(text = series.seriesType, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            
+
             OutlinedTextField(
                 value = prefix,
                 onValueChange = { prefix = it },

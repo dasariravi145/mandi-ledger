@@ -218,6 +218,11 @@ class ArrivalViewModel @Inject constructor(
                     selectedProduct.id
                 }
 
+            if (currentBillNumber.isBlank() || currentBillNumber == "N/A") {
+                throw IllegalStateException("billNumber must be generated before ledger insert")
+            }
+            Timber.tag("BillRef").d("Farmer Arrival billNumber=$currentBillNumber billId=$currentBillNumber arrivalId=BATCH")
+
             val arrivals = gradeEntries.mapIndexed { index, entry ->
                 val arrivalId = UUID.randomUUID().toString()
                 val itemGrossAmount = entry.grossAmount
@@ -279,6 +284,10 @@ class ArrivalViewModel @Inject constructor(
 
                 when (val result = arrivalRepository.addArrivalBatch(arrivals)) {
                     is Resource.Success -> {
+                        if (arrivals.isNotEmpty()) {
+                            val first = arrivals.first()
+                            Timber.tag("BillRef").d("Saved ledger transaction id=${first.id} billNumber=${first.billNumber} billId=${first.billNumber} referenceId=${first.id}")
+                        }
                         // Save deductions
                         val currentDeductions = _deductions.value
                         if (arrivals.isNotEmpty()) {

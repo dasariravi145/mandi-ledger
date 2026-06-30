@@ -102,7 +102,11 @@ class PaymentViewModel @Inject constructor(
         if (id == null) flowOf(0.0)
         else {
             if (tab == 0) ledgerRepository.getBuyerLedger(id).map { it.balance }
-            else ledgerRepository.getFarmerLedger(id).map { it.balance }
+            else ledgerRepository.getFarmerLedger(id).map { summary ->
+                val farmerPending = summary.totalDebit - summary.totalCredit
+                Timber.tag("PAY_FARMER").d("selectedFarmer: id=$id, name=${summary.partyName}, totalDebit=${summary.totalDebit}, totalCredit=${summary.totalCredit}, pending=$farmerPending")
+                farmerPending
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
@@ -112,6 +116,7 @@ class PaymentViewModel @Inject constructor(
     }
 
     fun onPartySelected(id: String) {
+        Timber.tag("PAY_FARMER").d("onPartySelected: selectedPartyId=$id, type=${if(selectedTab.value == 0) "BUYER" else "FARMER"}")
         _selectedPartyId.value = id
     }
 
@@ -131,6 +136,11 @@ class PaymentViewModel @Inject constructor(
             _isLoading.value = true
             try {
                 val currentBillNumber = _billNumber.value
+                if (currentBillNumber.isBlank() || currentBillNumber == "N/A") {
+                    throw IllegalStateException("billNumber must be generated before ledger insert")
+                }
+                Timber.tag("BillRef").d("Payment billNumber=$currentBillNumber billId=$currentBillNumber paymentId=NEW")
+
                 val payment = PaymentEntity(
                     id = UUID.randomUUID().toString(),
                     partyId = partyId,
@@ -146,6 +156,7 @@ class PaymentViewModel @Inject constructor(
                 if (result is Resource.Error) {
                     _error.emit(result.message ?: "Failed to save payment")
                 } else {
+                    Timber.tag("BillRef").d("Saved ledger transaction id=${payment.id} billNumber=${payment.billNumber} billId=${payment.billNumber} referenceId=${payment.id}")
                     // Finalize bill number
                     billNumberRepository.incrementBillNumber(Constants.SeriesType.PAYMENT)
                     _saveSuccess.emit(Unit)

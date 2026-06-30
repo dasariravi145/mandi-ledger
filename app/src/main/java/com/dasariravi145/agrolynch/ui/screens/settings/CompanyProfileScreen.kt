@@ -118,11 +118,6 @@ fun CompanyProfileScreen(
             mobile2Error = null
         }
 
-        if ((currentTemplate == BillTemplateType.DIAMOND_BUSINESS_ELITE || currentTemplate == BillTemplateType.EXECUTIVE_GLASS_STYLE) && gstNumber.isBlank()) {
-            scope.launch { snackbarHostState.showSnackbar("GSTIN is required for ${currentTemplate.displayName}") }
-            isValid = false
-        }
-
         return isValid
     }
 
@@ -267,9 +262,8 @@ fun CompanyProfileScreen(
                 )
             }
 
-            // GST is required for Diamond Elite and Executive Glass
-            val isGstRequired = currentTemplate == BillTemplateType.DIAMOND_BUSINESS_ELITE || currentTemplate == BillTemplateType.EXECUTIVE_GLASS_STYLE
-            val gstLabel = if(isGstRequired) "GSTIN *" else "GSTIN (Optional)"
+            // GSTIN is now optional for all templates
+            val gstLabel = "GSTIN (Optional)"
             OutlinedTextField(value = gstNumber, onValueChange = { gstNumber = it }, label = { Text(gstLabel) }, modifier = Modifier.fillMaxWidth())
             
             OutlinedTextField(value = upiId, onValueChange = { upiId = it }, label = { Text("UPI ID (for payments)") }, modifier = Modifier.fillMaxWidth())

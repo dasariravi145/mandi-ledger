@@ -22,9 +22,18 @@ object InvoiceHtmlGenerator {
 
     private fun loadTemplate(context: Context, templateId: String): String {
         return try {
-            context.assets.open("invoice_templates/$templateId.html").bufferedReader().use { it.readText() }
+            val assetPath = "invoice_templates/$templateId.html"
+            val exists = context.assets.list("invoice_templates")?.contains("$templateId.html") ?: false
+            if (!exists) {
+                Timber.tag("InvoiceTemplate").e("Template asset NOT FOUND: %s", assetPath)
+                // Log all available templates
+                val templates = context.assets.list("invoice_templates")?.joinToString(", ")
+                Timber.tag("InvoiceTemplate").d("Available templates in assets: [%s]", templates)
+            }
+            
+            context.assets.open(assetPath).bufferedReader().use { it.readText() }
         } catch (e: Exception) {
-            Timber.e(e, "Failed to load template: $templateId")
+            Timber.tag("InvoiceTemplate").e(e, "Failed to load template: $templateId")
             ""
         }
     }
@@ -157,12 +166,19 @@ object InvoiceHtmlGenerator {
                 val file = File(path)
                 if (file.exists()) {
                     val bitmap = BitmapFactory.decodeFile(path)
+                    if (bitmap == null) {
+                        Timber.w("IMAGE_TO_BASE64: Failed to decode bitmap at $path")
+                        return ""
+                    }
                     val outputStream = ByteArrayOutputStream()
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
                     val byteArray = outputStream.toByteArray()
+                    // Recycled to free memory immediately
+                    bitmap.recycle()
                     "data:image/png;base64," + Base64.encodeToString(byteArray, Base64.NO_WRAP)
                 } else ""
             } catch (e: Exception) {
+                Timber.e(e, "IMAGE_TO_BASE64_ERROR")
                 ""
             }
         }

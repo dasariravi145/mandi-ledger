@@ -22,8 +22,7 @@ class SecurityViewModel @Inject constructor(
     }
 
     fun onPinEntered(pin: String) {
-        val savedPin = securityManager.getPin()
-        if (pin == savedPin) {
+        if (securityManager.verifyPin(pin)) {
             _state.update { it.copy(isAuthenticated = true, error = null) }
             securityManager.updateLastActivityTime()
         } else {
