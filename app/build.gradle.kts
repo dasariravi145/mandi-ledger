@@ -9,8 +9,33 @@ plugins {
 }
 
 android {
+
     namespace = "com.dasariravi145.agrolynch"
     compileSdk = 36
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("D:/AndroidStudio/MandiLedger/release/mandi-ledger.jks")
+            storePassword = "Bfepdrd@145#"
+            keyAlias = "mandiledger"
+            keyPassword = "Bfepdrd@145#"
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            isMinifyEnabled = false
+        }
+    }
 
     defaultConfig {
         applicationId = "com.dasariravi145.agrolynch"
@@ -20,17 +45,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        manifestPlaceholders["admobAppId"] = "ca-app-pub-8131384105009406~2936298879"
     }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21

@@ -22,12 +22,15 @@ class AgroLynchApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        if (BuildConfig.DEBUG) {
-            Timber.plant(Timber.DebugTree())
-        }
-        Timber.d("AgroLynchApp: onCreate - App started")
+        
+        // Plant Timber for Release too, but with a limited tree if needed. 
+        // For now, planting DebugTree to see logs in release via logcat for debugging.
+        Timber.plant(Timber.DebugTree())
+        
+        Timber.tag("AgroLynch").d("App onCreate - Initializing services")
         
         FirebaseApp.initializeApp(this)
+        Timber.tag("AgroLynch").d("Firebase initialized")
         
         // Configure Firestore once at app startup
         try {
