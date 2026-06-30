@@ -22,13 +22,12 @@ import com.google.android.gms.ads.LoadAdError
 
 @Composable
 fun BannerAdView(
-    adUnitId: String = if (com.dasariravi145.agrolynch.BuildConfig.DEBUG) 
-        "ca-app-pub-3940256099942544/6300978111" 
-        else "ca-app-pub-8131384105009406/8365023448",
+    adUnitId: String = "ca-app-pub-3940256099942544/6300978111",
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val tag = "AdMobRelease"
     
     val adView = remember {
         AdView(context).apply {
@@ -37,27 +36,27 @@ fun BannerAdView(
             adListener = object : AdListener() {
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     super.onAdFailedToLoad(error)
-                    Log.e("BannerAdView", "Ad failed to load: ErrorCode=${error.code}, Message=${error.message}")
+                    Log.e(tag, "Banner failed code=${error.code}, domain=${error.domain}, message=${error.message}")
                 }
 
                 override fun onAdLoaded() {
                     super.onAdLoaded()
-                    Log.d("BannerAdView", "Ad loaded successfully")
+                    Log.d(tag, "Banner loaded")
                 }
 
                 override fun onAdOpened() {
                     super.onAdOpened()
-                    Log.d("BannerAdView", "Ad opened")
+                    Log.d(tag, "Banner opened")
                 }
 
                 override fun onAdClicked() {
                     super.onAdClicked()
-                    Log.d("BannerAdView", "Ad clicked")
+                    Log.d(tag, "Banner clicked")
                 }
 
                 override fun onAdClosed() {
                     super.onAdClosed()
-                    Log.d("BannerAdView", "Ad closed")
+                    Log.d(tag, "Banner closed")
                 }
             }
         }
@@ -83,7 +82,7 @@ fun BannerAdView(
         modifier = modifier.fillMaxWidth(),
         factory = { adView },
         update = { 
-            Log.d("BannerAdView", "Loading Banner Ad")
+            Log.d(tag, "Banner loadAd called: adUnitId=$adUnitId")
             it.loadAd(AdRequest.Builder().build())
         }
     )

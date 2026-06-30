@@ -24,21 +24,23 @@ class AdMobManager @Inject constructor(
     private var rewardedAd: RewardedAd? = null
 
     companion object {
-        private const val TAG = "AdMobManager"
+        private const val TAG = "AdMobRelease"
         
-        // Use Test IDs for Debug builds, Real IDs for Release
-        private val INTERSTITIAL_AD_ID = if (com.dasariravi145.agrolynch.BuildConfig.DEBUG) 
-            "ca-app-pub-3940256099942544/1033173712" 
-            else "ca-app-pub-8131384105009406/3313028292"
-            
-        private val REWARDED_AD_ID = if (com.dasariravi145.agrolynch.BuildConfig.DEBUG) 
-            "ca-app-pub-3940256099942544/5224354917" 
-            else "ca-app-pub-8131384105009406/1865910419"
+        // TASK 2: Use Google Test IDs for BOTH Debug and Release temporarily
+        private const val INTERSTITIAL_AD_ID = "ca-app-pub-3940256099942544/1033173712"
+        private const val REWARDED_AD_ID = "ca-app-pub-3940256099942544/5224354917"
     }
 
     fun initialize() {
+        Log.d(TAG, "BuildType=${com.dasariravi145.agrolynch.BuildConfig.BUILD_TYPE}")
+        Log.d(TAG, "MobileAds initialize started")
         MobileAds.initialize(context) { status ->
-            Log.d(TAG, "AdMob Initialized: $status")
+            Log.d(TAG, "MobileAds initialize completed: $status")
+            val initializationMap = status.adapterStatusMap
+            for (adapterClass in initializationMap.keys) {
+                val adapterStatus = initializationMap[adapterClass]
+                Log.d(TAG, "Adapter: $adapterClass, Status: ${adapterStatus?.description}, Latency: ${adapterStatus?.latency}")
+            }
             loadInterstitialAd()
             loadRewardedAd()
         }
@@ -46,22 +48,28 @@ class AdMobManager @Inject constructor(
 
     fun shouldShowAds(): Boolean {
         val isPremium = premiumStateManager.getCachedPremiumStatus()
-        Log.d(TAG, "shouldShowAds: isPremium=$isPremium")
-        return !isPremium
+        Log.d(TAG, "isPremium=$isPremium")
+        val result = !isPremium
+        Log.d(TAG, "shouldShowAds returning $result")
+        return result
     }
 
     fun loadInterstitialAd() {
-        if (!shouldShowAds()) return
+        if (!shouldShowAds()) {
+            Log.d(TAG, "Skipping Interstitial load: user is premium")
+            return
+        }
 
+        Log.d(TAG, "loadInterstitialAd called: adUnitId=$INTERSTITIAL_AD_ID")
         val adRequest = AdRequest.Builder().build()
         InterstitialAd.load(context, INTERSTITIAL_AD_ID, adRequest, object : InterstitialAdLoadCallback() {
             override fun onAdFailedToLoad(adError: LoadAdError) {
-                Log.e(TAG, "Interstitial Ad Failed: Code=${adError.code}, Message=${adError.message}")
+                Log.e(TAG, "Interstitial failed code=${adError.code}, domain=${adError.domain}, message=${adError.message}")
                 interstitialAd = null
             }
 
             override fun onAdLoaded(ad: InterstitialAd) {
-                Log.d(TAG, "Interstitial Ad Loaded")
+                Log.d(TAG, "Interstitial loaded")
                 interstitialAd = ad
             }
         })
@@ -91,17 +99,21 @@ class AdMobManager @Inject constructor(
     }
 
     fun loadRewardedAd() {
-        if (!shouldShowAds()) return
+        if (!shouldShowAds()) {
+            Log.d(TAG, "Skipping Rewarded load: user is premium")
+            return
+        }
 
+        Log.d(TAG, "loadRewardedAd called: adUnitId=$REWARDED_AD_ID")
         val adRequest = AdRequest.Builder().build()
         RewardedAd.load(context, REWARDED_AD_ID, adRequest, object : RewardedAdLoadCallback() {
             override fun onAdFailedToLoad(adError: LoadAdError) {
-                Log.e(TAG, "Rewarded Ad Failed: Code=${adError.code}, Message=${adError.message}")
+                Log.e(TAG, "Rewarded failed code=${adError.code}, domain=${adError.domain}, message=${adError.message}")
                 rewardedAd = null
             }
 
             override fun onAdLoaded(ad: RewardedAd) {
-                Log.d(TAG, "Rewarded Ad Loaded")
+                Log.d(TAG, "Rewarded loaded")
                 rewardedAd = ad
             }
         })
