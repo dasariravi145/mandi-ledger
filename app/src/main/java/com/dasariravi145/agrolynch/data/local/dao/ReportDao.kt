@@ -190,6 +190,9 @@ interface ReportDao {
     """)
     fun getPaymentReport(startDate: Long, endDate: Long): Flow<List<PaymentReportModel>>
 
+    @Query("SELECT * FROM expenses WHERE date BETWEEN :startDate AND :endDate AND isDeleted = 0 ORDER BY date DESC")
+    fun getExpenseReport(startDate: Long, endDate: Long): Flow<List<com.dasariravi145.agrolynch.data.local.entity.ExpenseEntity>>
+
     @Query("""
         SELECT 
             id, 
@@ -228,6 +231,15 @@ interface ReportDao {
 
     @Query("SELECT SUM(grossAmount) FROM arrivals WHERE date BETWEEN :start AND :end AND isDeleted = 0")
     fun getTotalPurchases(start: Long, end: Long): Flow<Double?>
+
+    @Query("SELECT SUM(amount) FROM expenses WHERE date BETWEEN :start AND :end AND isDeleted = 0")
+    fun getTotalExpenses(start: Long, end: Long): Flow<Double?>
+
+    @Query("SELECT SUM(amount) FROM payments WHERE partyType = 'FARMER' AND date BETWEEN :start AND :end AND isDeleted = 0")
+    fun getFarmerPayments(start: Long, end: Long): Flow<Double?>
+
+    @Query("SELECT SUM(amount) FROM payments WHERE partyType = 'BUYER' AND date BETWEEN :start AND :end AND isDeleted = 0")
+    fun getBuyerCollections(start: Long, end: Long): Flow<Double?>
 
     @Query("""
         SELECT 

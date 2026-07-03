@@ -26,6 +26,9 @@ class ReportRepositoryImpl @Inject constructor(
     override fun getPaymentReport(startDate: Long, endDate: Long): Flow<List<PaymentReportModel>> =
         reportDao.getPaymentReport(startDate, endDate)
 
+    override fun getExpenseReport(startDate: Long, endDate: Long): Flow<List<com.dasariravi145.agrolynch.data.local.entity.ExpenseEntity>> =
+        reportDao.getExpenseReport(startDate, endDate)
+
     override fun getCommissionReport(startDate: Long, endDate: Long): Flow<List<CommissionReportModel>> =
         reportDao.getCommissionReport(startDate, endDate)
 
@@ -35,6 +38,12 @@ class ReportRepositoryImpl @Inject constructor(
     override fun getTotalSales(start: Long, end: Long): Flow<Double?> = reportDao.getTotalSales(start, end)
 
     override fun getTotalPurchases(start: Long, end: Long): Flow<Double?> = reportDao.getTotalPurchases(start, end)
+
+    override fun getTotalExpenses(start: Long, end: Long): Flow<Double?> = reportDao.getTotalExpenses(start, end)
+
+    override fun getFarmerPayments(start: Long, end: Long): Flow<Double?> = reportDao.getFarmerPayments(start, end)
+
+    override fun getBuyerCollections(start: Long, end: Long): Flow<Double?> = reportDao.getBuyerCollections(start, end)
 
     override fun getTotalCommission(start: Long, end: Long): Flow<Double?> = reportDao.getTotalCommission(start, end)
 

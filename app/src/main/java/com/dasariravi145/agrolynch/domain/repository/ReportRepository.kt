@@ -10,11 +10,15 @@ interface ReportRepository {
     fun getProductPerformanceReport(): Flow<List<ProductPerformanceModel>>
     fun getOutstandingAgingReport(): Flow<List<OutstandingAgingModel>>
     fun getPaymentReport(startDate: Long, endDate: Long): Flow<List<PaymentReportModel>>
+    fun getExpenseReport(startDate: Long, endDate: Long): Flow<List<com.dasariravi145.agrolynch.data.local.entity.ExpenseEntity>>
     fun getCommissionReport(startDate: Long, endDate: Long): Flow<List<CommissionReportModel>>
     fun getSalesTrend(sinceDate: Long): Flow<List<ChartDataModel>>
     
     fun getTotalSales(start: Long, end: Long): Flow<Double?>
     fun getTotalPurchases(start: Long, end: Long): Flow<Double?>
+    fun getTotalExpenses(start: Long, end: Long): Flow<Double?>
+    fun getFarmerPayments(start: Long, end: Long): Flow<Double?>
+    fun getBuyerCollections(start: Long, end: Long): Flow<Double?>
     fun getTotalCommission(start: Long, end: Long): Flow<Double?>
     fun getBuyerPendingTotal(): Flow<Double?>
     fun getFarmerPendingTotal(): Flow<Double?>
