@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.ui.components.AuthLogo
+import com.dasariravi145.agrolynch.util.findActivity
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -12,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,7 +26,8 @@ fun ForgotPinScreen(
     onBack: () -> Unit
 ) {
     val state by viewModel.state.collectAsState()
-    val activity = LocalActivity.current as Activity
+    val context = LocalContext.current
+    val activity = context.findActivity()
     val phoneNumber = viewModel.getCurrentUserPhoneNumber() ?: ""
 
     LaunchedEffect(state.isOtpSent) {
@@ -83,7 +86,7 @@ fun ForgotPinScreen(
 
             Button(
                 onClick = { 
-                    if (phoneNumber.isNotEmpty()) {
+                    if (phoneNumber.isNotEmpty() && activity != null) {
                         viewModel.onEvent(AuthEvent.SendOtp(phoneNumber, activity, isForgotPin = true))
                     }
                 },

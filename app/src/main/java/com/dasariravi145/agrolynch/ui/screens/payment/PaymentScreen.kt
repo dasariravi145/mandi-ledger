@@ -157,10 +157,12 @@ fun PaymentScreen(
                             isPrinting = isPrinting == billNo,
                             isSharing = isSharing == billNo,
                             onPrint = { 
+                                android.util.Log.d("PaymentBill", "Print clicked paymentId=${payment.id}")
                                 android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
                                 viewModel.printPayment(context, payment)
                             },
                             onShare = {
+                                android.util.Log.d("PaymentBill", "Share clicked paymentId=${payment.id}")
                                 android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
                                 viewModel.sharePayment(context, payment)
                             }

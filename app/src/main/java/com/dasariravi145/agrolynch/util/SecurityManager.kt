@@ -39,19 +39,20 @@ class SecurityManager @Inject constructor(
         private const val SESSION_TIMEOUT = 5 * 60 * 1000 // 5 minutes
     }
 
-    fun saveSession(uid: String, phone: String, name: String, location: String, pin: String) {
+    fun saveSession(uid: String, phone: String, name: String, location: String, pin: String, isHashed: Boolean = false) {
+        val pinToSave = if (isHashed) pin else hashPin(pin)
         sharedPreferences.edit()
             .putBoolean(KEY_IS_LOGGED_IN, true)
             .putString(KEY_USER_ID, uid)
             .putString(KEY_PHONE_NUMBER, phone)
             .putString(KEY_USER_NAME, name)
             .putString(KEY_USER_LOCATION, location)
-            .putString(KEY_APP_PIN, pin)
+            .putString(KEY_APP_PIN, pinToSave)
             .putBoolean(KEY_PIN_CREATED, true)
             .putBoolean(KEY_PROFILE_CREATED, true)
             .putBoolean(KEY_IS_REGISTERED, true)
             .apply()
-        timber.log.Timber.d("SESSION_SAVE_SUCCESS")
+        timber.log.Timber.tag("ProfileRestoreFlow").d("SESSION_SAVE_SUCCESS for UID: $uid")
         timber.log.Timber.d("PROFILE_CREATED_LOCAL_TRUE")
     }
 
@@ -122,6 +123,16 @@ class SecurityManager @Inject constructor(
         val lastActivity = sharedPreferences.getLong(KEY_LAST_ACTIVITY, 0L)
         if (lastActivity == 0L) return false
         return (System.currentTimeMillis() - lastActivity) > SESSION_TIMEOUT
+    }
+
+    fun clear() {
+        val biometricWasEnabled = isBiometricEnabled()
+        sharedPreferences.edit().clear().apply()
+        // Preserve biometric preference even after local session clear to ensure consistent UI state
+        // until the next successful Firestore sync or user manual change.
+        if (biometricWasEnabled) {
+            setBiometricEnabled(true)
+        }
     }
 
     fun clearSession() {

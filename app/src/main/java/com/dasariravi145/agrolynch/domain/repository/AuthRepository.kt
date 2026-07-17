@@ -2,6 +2,7 @@ package com.dasariravi145.agrolynch.domain.repository
 
 import android.app.Activity
 import com.dasariravi145.agrolynch.data.local.entity.UserEntity
+import com.dasariravi145.agrolynch.data.remote.model.FirestoreUserProfile
 import kotlinx.coroutines.flow.Flow
 
 interface AuthRepository {
@@ -9,17 +10,15 @@ interface AuthRepository {
     fun verifyOtp(verificationId: String, otp: String): Flow<Result<Unit>>
     fun isUserLoggedIn(): Boolean
     fun logout()
-    fun getCurrentUserId(): String?
     fun getCurrentUserPhoneNumber(): String?
-    suspend fun registerUser(user: UserEntity): Result<Unit>
-    suspend fun getUserProfile(uid: String): UserEntity?
-    suspend fun savePin(uid: String, pin: String)
-    suspend fun getSavedPin(): String?
-    suspend fun hasSavedPin(): Boolean
-    suspend fun updatePin(newPin: String)
-    fun setPendingProfileSync(pending: Boolean)
-    fun hasPendingProfileSync(): Boolean
-    fun saveSession(uid: String, phone: String, name: String, location: String, pin: String)
-    fun isProfileCreated(): Boolean
-    fun isPinCreated(): Boolean
+    fun getCurrentUserId(): String?
+    
+    suspend fun checkUserExists(uid: String): Result<FirestoreUserProfile?>
+    suspend fun registerUser(fullName: String, address: String, pin: String): Result<Unit>
+    suspend fun verifyPin(pin: String): Boolean
+    suspend fun syncLocalProfile(profile: FirestoreUserProfile)
+    suspend fun getLocalUser(): UserEntity?
+    fun hashPin(pin: String): String
+    suspend fun updatePin(newPin: String): Result<Unit>
+    suspend fun updateBiometricEnabled(enabled: Boolean): Result<Unit>
 }

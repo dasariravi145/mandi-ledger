@@ -1,11 +1,15 @@
 package com.dasariravi145.agrolynch.ui.screens.auth
 
 import android.app.Activity
+import android.content.Context
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.dasariravi145.agrolynch.data.local.entity.UserEntity
 import com.dasariravi145.agrolynch.domain.repository.AuthRepository
+import com.dasariravi145.agrolynch.domain.repository.SyncRepository
+import com.dasariravi145.agrolynch.util.BiometricAuth
+import com.dasariravi145.agrolynch.util.Resource
 import com.dasariravi145.agrolynch.util.SecurityManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -16,6 +20,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val repository: AuthRepository,
+    private val syncRepository: SyncRepository,
     private val securityManager: SecurityManager,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -25,183 +30,220 @@ class AuthViewModel @Inject constructor(
 
     init {
         val savedId: String? = savedStateHandle["verificationId"]
+        val isForgot: Boolean = savedStateHandle["isForgotPin"] ?: false
         _state.update { 
             it.copy(
                 isBiometricEnabled = securityManager.isBiometricEnabled(),
-                verificationId = savedId
+                verificationId = savedId,
+                isForgotPinFlow = isForgot
             )
         }
-        syncPendingProfile()
+        Timber.tag("FirebaseInit").d("AuthViewModel initialized. verificationId: $savedId, isForgot: $isForgot")
+        loadUser()
     }
 
-    private fun syncPendingProfile() {
-        if (repository.hasPendingProfileSync() && repository.isUserLoggedIn()) {
-            val uid = repository.getCurrentUserId() ?: return
-            viewModelScope.launch {
-                val user = repository.getUserProfile(uid)
-                if (user != null) {
-                    repository.registerUser(user)
-                }
-            }
+    private fun loadUser() {
+        viewModelScope.launch {
+            val localUser = repository.getLocalUser()
+            _state.update { it.copy(user = localUser) }
         }
-    }
-
-    fun checkBiometricAvailability(context: android.content.Context) {
-        val available = com.dasariravi145.agrolynch.util.BiometricAuth.isBiometricAvailable(context)
-        Timber.d("BIOMETRIC_AVAILABLE: $available")
-        _state.update { it.copy(isBiometricAvailable = available) }
     }
 
     fun onEvent(event: AuthEvent) {
         when (event) {
             is AuthEvent.SendOtp -> sendOtp(event.phoneNumber, event.activity, event.isForgotPin)
             is AuthEvent.VerifyOtp -> verifyOtp(event.otp)
-            is AuthEvent.Logout -> logout()
             is AuthEvent.RegisterUser -> registerUser(event.name, event.location, event.pin)
             is AuthEvent.VerifyPin -> verifyPin(event.pin)
+            is AuthEvent.Logout -> logout()
             is AuthEvent.ClearError -> _state.update { it.copy(error = null) }
         }
     }
 
-    private fun registerUser(name: String, location: String, pin: String) {
-        Timber.d("PROFILE_SAVE_CLICKED")
-        
-        // 1. Validation
-        if (name.isBlank() || location.isBlank() || pin.length != 4) {
-            Timber.e("PROFILE_VALIDATE_FAILED")
-            _state.update { it.copy(error = "Please fill all fields correctly.") }
-            return
-        }
-        Timber.d("PROFILE_VALIDATE_SUCCESS")
-
-        val uid = repository.getCurrentUserId()
-        if (uid == null) {
-            Timber.e("AUTH_UID_NULL_BEFORE_FIRESTORE")
-            _state.update { it.copy(error = "Login session expired. Please login again.") }
-            return
-        }
-        
-        val phone = repository.getCurrentUserPhoneNumber() ?: ""
-        
-        // 2. Local Session & PIN Save FIRST
-        Timber.d("LOCAL_SESSION_SAVE_START")
-        repository.saveSession(uid, phone, name, location, pin)
-        Timber.d("LOCAL_SESSION_SAVE_SUCCESS")
-
-        // 3. Navigate Home IMMEDIATELY after local save
-        Timber.d("NAVIGATE_HOME_NOW")
-        val available = com.dasariravi145.agrolynch.util.BiometricAuth.isBiometricAvailable(securityManager.context)
-        if (available) {
-            _state.update { it.copy(showBiometricPrompt = true) }
-        } else {
-            _state.update { it.copy(isRegistered = true) }
-        }
-
-        // 4. Firestore sync in BACKGROUND
+    private fun sendOtp(phoneNumber: String, activity: Activity, isForgotPin: Boolean = false) {
+        Timber.tag("OtpFlow").d("Send OTP started for: $phoneNumber, isForgotPin: $isForgotPin")
         viewModelScope.launch {
-            Timber.d("FIRESTORE_PROFILE_SYNC_START")
-            val user = UserEntity(id = uid, name = name, phoneNumber = phone, location = location)
-            val result = repository.registerUser(user)
-            if (result.isSuccess) {
-                if (!repository.hasPendingProfileSync()) {
-                    Timber.d("FIRESTORE_PROFILE_SYNC_SUCCESS")
-                } else {
-                    // This means it was marked as pending due to timeout or error but handled internally
-                }
-            } else {
-                Timber.e("FIRESTORE_PROFILE_SYNC_FAILED")
-            }
-        }
-    }
-
-    private fun sendOtp(phoneNumber: String, activity: Activity, isForgotPin: Boolean) {
-        Timber.d("AUTH_REGISTER_CLICKED")
-        Timber.d("AUTH_SEND_OTP_STARTED")
-        Timber.d("AUTH_PHONE_NUMBER: $phoneNumber")
-        viewModelScope.launch {
-            _state.update { 
+            _state.update {
                 it.copy(
-                    isLoading = true, 
-                    loadingMessage = "Sending OTP...", 
-                    error = null, 
+                    isLoading = true,
+                    loadingMessage = "Sending OTP...",
+                    error = null,
                     phoneNumber = phoneNumber,
                     isForgotPinFlow = isForgotPin
-                ) 
+                )
             }
-            
-            // Show robot verification message after a small delay if still loading
-            viewModelScope.launch {
-                kotlinx.coroutines.delay(2000)
-                if (_state.value.isLoading) {
-                    Timber.d("AUTH_RECAPTCHA_STARTED")
-                    _state.update { 
-                        it.copy(loadingMessage = "Verifying phone number...\nPlease complete verification if prompted.") 
-                    }
-                }
-            }
-
             repository.sendOtp(phoneNumber, activity).collect { result ->
-                result.onSuccess { verificationId ->
-                    Timber.d("AUTH_RECAPTCHA_COMPLETED")
-                    Timber.d("AUTH_CODE_SENT")
-                    Timber.d("AUTH_VERIFICATION_ID: $verificationId")
-                    savedStateHandle["verificationId"] = verificationId
-                    _state.update { 
-                        it.copy(
-                            isLoading = false, 
-                            loadingMessage = null,
-                            verificationId = verificationId, 
-                            isOtpSent = true 
-                        ) 
-                    }
+                result.onSuccess { id ->
+                    Timber.tag("OtpFlow").d("OTP code sent successfully. Verification ID: $id")
+                    savedStateHandle["verificationId"] = id
+                    _state.update { it.copy(isLoading = false, verificationId = id, isOtpSent = true) }
                 }.onFailure { e ->
-                    Timber.e("AUTH_SEND_OTP_FAILED: ${e.message}")
-                    val errorMessage = if (e.message?.contains("reCAPTCHA", ignoreCase = true) == true) {
-                        "Phone verification was cancelled. Please try again."
-                    } else {
-                        e.message ?: "Failed to send OTP"
-                    }
-                    _state.update { it.copy(isLoading = false, loadingMessage = null, error = errorMessage) }
+                    Timber.tag("OtpFlow").e(e, "OTP send failed")
+                    _state.update { it.copy(isLoading = false, error = e.message ?: "Failed to send OTP") }
                 }
             }
         }
     }
 
     private fun verifyOtp(otp: String) {
-        Timber.d("AUTH_OTP_CLICKED")
-        Timber.d("AUTH_OTP_CODE_LENGTH: ${otp.length}")
-        val verificationId = _state.value.verificationId
-        if (verificationId == null) {
-            _state.update { it.copy(error = "OTP session expired. Please resend OTP.") }
+        val verificationId = _state.value.verificationId ?: return
+        Timber.tag("OtpFlow").d("Verify OTP clicked")
+        viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, loadingMessage = "Verifying OTP...", error = null) }
+            repository.verifyOtp(verificationId, otp).collect { result ->
+                result.onSuccess {
+                    Timber.tag("ProfileCheck").d("OTP verified")
+                    handleUserFlow()
+                }.onFailure { e ->
+                    Timber.tag("OtpFlow").e(e, "OTP verification failed")
+                    _state.update { it.copy(isLoading = false, error = e.message ?: "Verification failed") }
+                }
+            }
+        }
+    }
+
+    private suspend fun handleUserFlow() {
+        val uid = repository.getCurrentUserId()
+        if (uid == null) {
+            Timber.tag("ProfileCheck").e("Verification succeeded but UID is null!")
+            _state.update { it.copy(isLoading = false, error = "Authentication error: UID not found") }
             return
         }
         
-        viewModelScope.launch {
-            Timber.d("AUTH_SIGN_IN_START")
-            _state.update { it.copy(isLoading = true, loadingMessage = "Verifying...", error = null) }
-            repository.verifyOtp(verificationId, otp).collect { result ->
-                result.onSuccess {
-                    val uid = repository.getCurrentUserId() ?: ""
-                    Timber.d("AUTH_SIGN_IN_SUCCESS")
-                    Timber.d("AUTH_UID: $uid")
-                    Timber.d("AUTH_CURRENT_USER_UID: $uid")
-                    
-                    val pinExists = repository.hasSavedPin()
-                    Timber.d("AUTH_PIN_EXISTS: $pinExists")
-                    
-                    _state.update { 
-                        it.copy(
-                            isLoading = false, 
-                            loadingMessage = null,
-                            isVerified = true, 
-                            isRegistered = pinExists 
-                        ) 
-                    }
-                    Timber.d("AUTH_NAVIGATION")
-                }.onFailure { e ->
-                    Timber.e("AUTH_SIGN_IN_FAILED: ${e.message}")
-                    _state.update { it.copy(isLoading = false, loadingMessage = null, error = e.message) }
+        Timber.tag("ProfileCheck").d("UID: $uid")
+        Timber.tag("ProfileCheck").d("Checking users/$uid")
+        
+        repository.checkUserExists(uid).onSuccess { profile ->
+            if (profile != null && profile.isProfileCompleted) {
+                Timber.tag("ProfileCheck").d("Profile exists and is completed")
+                repository.syncLocalProfile(profile)
+                
+                // Fetch local user and update state to ensure navigation has data
+                val localUser = repository.getLocalUser()
+                _state.update { 
+                    it.copy(
+                        isLoading = false, 
+                        isVerified = true, 
+                        isRegistered = true,
+                        user = localUser,
+                        loadingMessage = null,
+                        isBiometricEnabled = securityManager.isBiometricEnabled()
+                    ) 
                 }
+                Timber.tag("ProfileCheck").d("Navigate Dashboard")
+            } else {
+                Timber.tag("ProfileCheck").d("Profile missing or incomplete")
+                _state.update { 
+                    it.copy(
+                        isLoading = false, 
+                        isVerified = true, 
+                        isRegistered = false,
+                        loadingMessage = null
+                    ) 
+                }
+                Timber.tag("ProfileCheck").d("Navigate Create Profile")
+            }
+        }.onFailure { e ->
+            Timber.tag("ProfileCheck").e(e, "Failed to check user profile")
+            _state.update { it.copy(isLoading = false, error = e.message ?: "Network error. Please try again.") }
+        }
+    }
+
+    private fun registerUser(name: String, address: String, pin: String) {
+        Timber.tag("RegistrationFlow").d("Registration button clicked")
+        
+        if (name.isBlank() || address.isBlank() || pin.length != 4) {
+            _state.update { it.copy(error = "Please fill all fields correctly.") }
+            return
+        }
+
+        Timber.tag("RegistrationFlow").d("Validation success")
+
+        viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, loadingMessage = "Creating account...", error = null) }
+            try {
+                Timber.tag("RegistrationFlow").d("Saving profile...")
+                val result = repository.registerUser(name, address, pin)
+                if (result.isSuccess) {
+                    Timber.tag("BiometricFlow").d("Profile saved. Checking biometric availability.")
+                    if (_state.value.isBiometricAvailable) {
+                        Timber.tag("BiometricFlow").d("Biometric available. Showing setup dialog.")
+                        _state.update { it.copy(showBiometricSetupDialog = true) }
+                    } else {
+                        Timber.tag("BiometricFlow").d("Biometric unavailable. Skipping setup.")
+                        _state.update { it.copy(isRegistered = true) }
+                    }
+                } else {
+                    val error = result.exceptionOrNull()
+                    Timber.tag("RegistrationFlow").e(error, "Save failed")
+                    _state.update { it.copy(error = error?.message ?: "Registration failed") }
+                }
+            } catch (e: Exception) {
+                Timber.tag("RegistrationFlow").e(e, "Unexpected error in registration")
+                _state.update { it.copy(error = "Unexpected error: ${e.message}") }
+            } finally {
+                _state.update { it.copy(isLoading = false) }
+            }
+        }
+    }
+
+    fun enableBiometric(enable: Boolean, activity: FragmentActivity? = null) {
+        viewModelScope.launch {
+            Timber.tag("BiometricFlow").d("enableBiometric called: $enable")
+            if (enable && activity != null) {
+                Timber.tag("BiometricFlow").d("Prompt launched for setup")
+                BiometricAuth.showBiometricPrompt(
+                    activity = activity,
+                    title = "Enable Biometric",
+                    subtitle = "Verify identity to enable biometric login",
+                    negativeButtonText = "Cancel",
+                    errorAuthFailed = "Authentication failed",
+                    onSuccess = {
+                        viewModelScope.launch {
+                            Timber.tag("BiometricFlow").d("Authentication succeeded. Persisting preference: true")
+                            repository.updateBiometricEnabled(true)
+                            _state.update { it.copy(showBiometricSetupDialog = false, isBiometricEnabled = true, isRegistered = true) }
+                        }
+                    },
+                    onError = { error ->
+                        Timber.tag("BiometricFlow").e("Authentication failed: $error")
+                        // If it fails, we keep the setup dialog open or close it and don't enable
+                        _state.update { it.copy(error = error) }
+                    }
+                )
+            } else {
+                Timber.tag("BiometricFlow").d("Persisting preference: false")
+                repository.updateBiometricEnabled(false)
+                _state.update { it.copy(showBiometricSetupDialog = false, isBiometricEnabled = false, isRegistered = true) }
+            }
+        }
+    }
+
+    fun resetPin(newPin: String) {
+        Timber.tag("ForgotPinFlow").d("resetPin called")
+        if (newPin.length != 4) {
+            _state.update { it.copy(error = "PIN must be exactly 4 digits.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, loadingMessage = "Updating PIN...", error = null) }
+            try {
+                val result = repository.updatePin(newPin)
+                if (result.isSuccess) {
+                    Timber.tag("ForgotPinFlow").d("PIN updated successfully")
+                    // We can reuse a flag or add a new one for navigation
+                    _state.update { it.copy(isPinCorrect = true) } 
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "Failed to update PIN"
+                    Timber.tag("ForgotPinFlow").e("PIN update failed: $error")
+                    _state.update { it.copy(error = error) }
+                }
+            } catch (e: Exception) {
+                Timber.tag("ForgotPinFlow").e(e, "Error resetting PIN")
+                _state.update { it.copy(error = e.message) }
+            } finally {
+                _state.update { it.copy(isLoading = false) }
             }
         }
     }
@@ -209,36 +251,77 @@ class AuthViewModel @Inject constructor(
     private fun verifyPin(pin: String) {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
-            val savedPin = repository.getSavedPin()
-            if (savedPin == pin) {
-                Timber.d("PIN_LOGIN_SUCCESS")
-                _state.update { it.copy(isLoading = false, isPinCorrect = true) }
+            val isCorrect = repository.verifyPin(pin)
+            if (isCorrect) {
+                handleAuthSuccess()
             } else {
-                Timber.e("PIN_LOGIN_FAILED")
                 _state.update { it.copy(isLoading = false, error = "Incorrect PIN") }
             }
         }
     }
 
-    fun setBiometricEnabled(enabled: Boolean) {
-        securityManager.setBiometricEnabled(enabled)
-        Timber.d("BIOMETRIC_ENABLED: $enabled")
+    private suspend fun handleAuthSuccess() {
+        val user = repository.getLocalUser()
+        if (user?.isPremium == true && user.cloudBackupEnabled) {
+            _state.update { it.copy(loadingMessage = "Restoring cloud data...") }
+            try {
+                when (val restore = syncRepository.restoreAllData()) {
+                    is Resource.Success -> {
+                        _state.update { it.copy(isLoading = false, isPinCorrect = true) }
+                    }
+                    is Resource.Error -> {
+                        val sanitizedMessage = if (restore.message?.contains("PERMISSION_DENIED", true) == true) {
+                            "Sync is currently restricted for your account. You can manually restore data from Settings -> Backup once logged in."
+                        } else {
+                            restore.message ?: "Unable to sync cloud data."
+                        }
+                        _state.update {
+                            it.copy(
+                                isLoading = false,
+                                isPinCorrect = true,
+                                error = sanitizedMessage
+                            )
+                        }
+                    }
+                    else -> {
+                        _state.update { it.copy(isLoading = false, isPinCorrect = true) }
+                    }
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(isLoading = false, isPinCorrect = true, error = "Backup restore failed: ${e.message}") }
+            }
+        } else {
+            _state.update { it.copy(isLoading = false, isPinCorrect = true) }
+        }
     }
 
-    fun isBiometricEnabled() = securityManager.isBiometricEnabled()
-
     fun onBiometricSuccess() {
-        Timber.d("BIOMETRIC_AUTH_SUCCESS")
-        _state.update { it.copy(isPinCorrect = true) }
+        viewModelScope.launch {
+            handleAuthSuccess()
+        }
     }
 
     fun onBiometricFailure(error: String) {
-        Timber.e("BIOMETRIC_AUTH_FAILED: $error")
         _state.update { it.copy(error = error) }
     }
 
-    fun dismissBiometricPrompt() {
-        _state.update { it.copy(showBiometricPrompt = false, isRegistered = true) }
+    fun checkBiometricAvailability(context: Context) {
+        val available = BiometricAuth.isBiometricAvailable(context)
+        _state.update { it.copy(isBiometricAvailable = available) }
+    }
+
+    fun isUserLoggedIn() = repository.isUserLoggedIn()
+    fun isProfileCreated() = securityManager.isProfileCreated()
+    fun isPinCreated() = securityManager.isPinCreated()
+    fun getCurrentUserPhoneNumber() = repository.getCurrentUserPhoneNumber()
+    fun hasSavedPin() = securityManager.isPinSet()
+    suspend fun getLocalUser() = repository.getLocalUser()
+
+    fun fetchUserProfile(mobile: String) {
+        viewModelScope.launch {
+            val user = repository.getLocalUser()
+            _state.update { it.copy(user = user) }
+        }
     }
 
     private fun logout() {
@@ -248,25 +331,14 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun isUserLoggedIn() = repository.isUserLoggedIn()
-
-    fun isProfileCreated() = repository.isProfileCreated()
-
-    fun isPinCreated() = repository.isPinCreated()
-
-    fun getCurrentUserId() = repository.getCurrentUserId()
-
-    fun getCurrentUserPhoneNumber() = repository.getCurrentUserPhoneNumber()
-
-    fun fetchUserProfile(uid: String) {
-        viewModelScope.launch {
-            _state.update { it.copy(isInitialLoading = true, error = null) }
-            val user = repository.getUserProfile(uid)
-            _state.update { it.copy(isInitialLoading = false, user = user) }
-        }
+    suspend fun checkAndRestoreProfile(uid: String): Boolean {
+        return repository.checkUserExists(uid).getOrNull()?.let { profile ->
+            if (profile.isProfileCompleted) {
+                repository.syncLocalProfile(profile)
+                true
+            } else false
+        } ?: false
     }
-
-    suspend fun hasSavedPin() = repository.hasSavedPin()
 }
 
 sealed class AuthEvent {

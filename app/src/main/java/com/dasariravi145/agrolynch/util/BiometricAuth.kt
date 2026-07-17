@@ -39,6 +39,7 @@ object BiometricAuth {
             .setTitle(title)
             .setSubtitle(subtitle)
             .setNegativeButtonText(negativeButtonText)
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK)
             .build()
 
         biometricPrompt.authenticate(promptInfo)
@@ -46,6 +47,16 @@ object BiometricAuth {
 
     fun isBiometricAvailable(context: Context): Boolean {
         val biometricManager = BiometricManager.from(context)
-        return biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK
+        val result = biometricManager.canAuthenticate(authenticators)
+        
+        return when (result) {
+            BiometricManager.BIOMETRIC_SUCCESS -> true
+            else -> {
+                // BIOMETRIC_ERROR_NO_HARDWARE, BIOMETRIC_ERROR_HW_UNAVAILABLE, 
+                // BIOMETRIC_ERROR_NONE_ENROLLED, etc.
+                false
+            }
+        }
     }
 }

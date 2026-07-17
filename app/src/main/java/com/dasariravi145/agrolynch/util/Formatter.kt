@@ -52,11 +52,17 @@ object Formatter {
      * 12500.5 -> 12,500.50
      */
     fun formatCurrency(value: Double): String {
-        return if (value % 1.0 == 0.0) {
-            currencyWholeFormat.format(value)
+        // Normalize tiny floating-point residue (like -0.0000001) to 0.0
+        val normalizedValue = if (kotlin.math.abs(value) < 0.005) 0.0 else value
+        
+        val formatted = if (normalizedValue % 1.0 == 0.0) {
+            currencyWholeFormat.format(normalizedValue)
         } else {
-            currencyDecimalFormat.format(value)
+            currencyDecimalFormat.format(normalizedValue)
         }
+        
+        // Strip negative sign from zero values (e.g., "-0.00" -> "0.00")
+        return if (formatted == "-0" || formatted == "-0.00") formatted.removePrefix("-") else formatted
     }
 
     /**
@@ -70,7 +76,12 @@ object Formatter {
      * Formats currency strictly with 2 decimal places
      */
     fun formatCurrencyStrict(value: Double): String {
-        return currencyDecimalFormat.format(value)
+        // Normalize tiny floating-point residue to 0.0
+        val normalizedValue = if (kotlin.math.abs(value) < 0.005) 0.0 else value
+        val formatted = currencyDecimalFormat.format(normalizedValue)
+        
+        // Strip negative sign from zero values (e.g., "-0.00" -> "0.00")
+        return if (formatted == "-0.00") formatted.removePrefix("-") else formatted
     }
 
     fun formatDate(timestamp: Long): String {

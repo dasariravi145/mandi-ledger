@@ -1,7 +1,19 @@
 package com.dasariravi145.agrolynch.domain.model
 
+/**
+ * Represents a premium subscription plan.
+ *
+ * @property basePlanId The base plan identifier in Google Play Console (monthly, 3-months, 6-months, yearly).
+ * @property name Display name of the plan.
+ * @property price Numeric price (fallback).
+ * @property formattedPrice Display price (fallback).
+ * @property monthlyPrice Calculated monthly equivalent (fallback).
+ * @property durationText Description of the validity period.
+ * @property badge Marketing badge for the plan.
+ * @property durationDays Total validity duration in days.
+ */
 data class PremiumPlan(
-    val productId: String,
+    val basePlanId: String,
     val name: String,
     val price: Double,
     val formattedPrice: String,
@@ -13,7 +25,7 @@ data class PremiumPlan(
 
 val PREMIUM_PLANS = listOf(
     PremiumPlan(
-        productId = "premium_1_month",
+        basePlanId = "monthly",
         name = "Monthly",
         price = 149.0,
         formattedPrice = "₹149",
@@ -23,7 +35,7 @@ val PREMIUM_PLANS = listOf(
         durationDays = 30
     ),
     PremiumPlan(
-        productId = "premium_3_months",
+        basePlanId = "3-months",
         name = "3 Months",
         price = 399.0,
         formattedPrice = "₹399",
@@ -33,7 +45,7 @@ val PREMIUM_PLANS = listOf(
         durationDays = 90
     ),
     PremiumPlan(
-        productId = "premium_6_months",
+        basePlanId = "6-months",
         name = "6 Months",
         price = 699.0,
         formattedPrice = "₹699",
@@ -43,7 +55,7 @@ val PREMIUM_PLANS = listOf(
         durationDays = 180
     ),
     PremiumPlan(
-        productId = "premium_1_year",
+        basePlanId = "yearly",
         name = "Yearly",
         price = 1299.0,
         formattedPrice = "₹1299",

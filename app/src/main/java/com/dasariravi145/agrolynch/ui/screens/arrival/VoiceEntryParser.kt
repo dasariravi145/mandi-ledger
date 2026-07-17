@@ -23,7 +23,8 @@ data class ParsedArrivalVoiceData(
     val commission: Double? = null,
     val transport: Double? = null,
     val labor: Double? = null,
-    val otherDeduction: Double? = null
+    val otherDeduction: Double? = null,
+    val waste: Double? = null
 )
 
 object VoiceEntryParser {
@@ -31,12 +32,13 @@ object VoiceEntryParser {
     private val mangoKeywords = listOf("mango", "mamidi", "మామిడి", "aam", "आम", "maanga", "மாம்பழம்", "mavina hannu", "ಮಾವಿನ ಹಣ್ಣು")
     private val tonKeywords = listOf("ton", "tonne", "tons", "టన్ను", "టన్నులు", "टन", "டன்", "ಟನ್")
     private val kgKeywords = listOf("kg", "kilo", "kilos", "కిలో", "किलो", "கிலோ", "ಕೆಜಿ")
-    private val rateKeywords = listOf("rate", "price", "రేట్", "ధర", "रेट", "भाव", "விலை", "ದರ")
+    private val rateKeywords = listOf("rate", "price", "రేట్", "ధర", "रेट", "భావం", "விலை", "ದರ")
     private val gradeKeywords = listOf("grade", "గ్రేడ్", "ग्रेड", "தரம்", "ಗ್ರೇಡ್")
-    private val commissionKeywords = listOf("commission", "کమిషన్", "ಕಮಿಷನ್", "கமிஷன்", "ಕಮಿಷನ್")
-    private val transportKeywords = listOf("transport", "ట్రాన్స్‌పోర్ట్", "किराया", "வண்டி செலவு", "ಸಾರಿಗೆ")
-    private val laborKeywords = listOf("labour", "labor", "కూలి", "मजदूरी", "கூலி")
+    private val commissionKeywords = listOf("commission", "కమిషన్", "కమిషన్", "கமிஷன்", "ಕಮಿಷನ್")
+    private val transportKeywords = listOf("transport", "ట్రాన్స్‌పోర్ట్", "కిరాయా", "வண்டி செலవు", "ಸಾರಿಗೆ")
+    private val laborKeywords = listOf("labour", "labor", "కూలి", "మజూరి", "கூலி")
     private val deductionKeywords = listOf("cat", "cutting", "deduction", "కటింగ్", "कटौती", "கழிவு", "ಕಡಿತ")
+    private val wasteKeywords = listOf("waste", "wastage", "spoilage", "తరుగు", "खराबी", "कचरा", "சேதம்", "ಹಾಳಾಗುವುದು")
 
     fun parse(text: String): ParsedArrivalVoiceData {
         val lower = text.lowercase(Locale.getDefault())
@@ -52,6 +54,7 @@ object VoiceEntryParser {
         var transport: Double? = null
         var labor: Double? = null
         var deduction: Double? = null
+        var waste: Double? = null
 
         // 1. Extract Product
         for (keyword in mangoKeywords) {
@@ -112,6 +115,10 @@ object VoiceEntryParser {
             val match = Regex("$k\\s*(\\d+\\.?\\d*)").find(lower)
             if (match != null) deduction = match.groupValues[1].toDoubleOrNull()
         }
+        wasteKeywords.forEach { k ->
+            val match = Regex("$k\\s*(\\d+\\.?\\d*)").find(lower)
+            if (match != null) waste = match.groupValues[1].toDoubleOrNull()
+        }
 
         // 6. Farmer Name (Fallback: assume first word if not a keyword/number)
         if (words.isNotEmpty()) {
@@ -132,7 +139,8 @@ object VoiceEntryParser {
             commission = commission,
             transport = transport,
             labor = labor,
-            otherDeduction = deduction
+            otherDeduction = deduction,
+            waste = waste
         )
     }
 }

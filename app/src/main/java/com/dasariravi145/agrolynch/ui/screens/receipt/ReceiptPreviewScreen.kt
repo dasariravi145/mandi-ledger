@@ -21,10 +21,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dasariravi145.agrolynch.domain.model.ReceiptData
-import com.dasariravi145.agrolynch.util.PdfGenerator
 import com.dasariravi145.agrolynch.util.Formatter
+import com.dasariravi145.agrolynch.util.PdfActionManager
+import com.dasariravi145.agrolynch.util.PdfGenerator
+import com.dasariravi145.agrolynch.util.PdfPrintHelper
 import com.dasariravi145.agrolynch.util.findActivity
-import com.dasariravi145.agrolynch.util.pdf.TemplateInvoicePdfService
+import com.dasariravi145.agrolynch.ui.screens.template.PdfPreviewCard
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -42,9 +44,10 @@ fun ReceiptPreviewScreen(
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
 
     // Trigger PDF generation for actual renderer logic
-    LaunchedEffect(profile) {
-        // Since we refactored the service, the PDF generation logic in ViewModel 
-        // will now use the new rendering engine.
+    LaunchedEffect(profile, data) {
+        if (profile != null) {
+            viewModel.generatePdf(context, data)
+        }
     }
 
     Scaffold(
@@ -71,8 +74,8 @@ fun ReceiptPreviewScreen(
                     Button(
                         onClick = { 
                             viewModel.generatedPdfFile.value?.let { file ->
-                                val uri = com.dasariravi145.agrolynch.util.PdfGenerator.getUriFromFile(context, file)
-                                com.dasariravi145.agrolynch.util.PdfActionManager.sharePdf(context, uri)
+                                val uri = PdfGenerator.getUriFromFile(context, file)
+                                PdfActionManager.sharePdf(context, uri)
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -86,12 +89,12 @@ fun ReceiptPreviewScreen(
                     Button(
                         onClick = { 
                             viewModel.generatedPdfFile.value?.let { file ->
-                                val uri = com.dasariravi145.agrolynch.util.PdfGenerator.getUriFromFile(context, file)
+                                val uri = PdfGenerator.getUriFromFile(context, file)
                                 val activity = context.findActivity()
                                 if (activity != null) {
                                     android.util.Log.d("PRINT_DEBUG", "context=${context::class.java.name}, activity=${activity::class.java.name}")
                                     activity.runOnUiThread {
-                                        com.dasariravi145.agrolynch.util.PdfPrintHelper.print(activity, uri)
+                                        PdfPrintHelper.print(activity, uri)
                                     }
                                 } else {
                                     android.widget.Toast.makeText(context, "Print requires active screen", android.widget.Toast.LENGTH_SHORT).show()
@@ -121,7 +124,7 @@ fun ReceiptPreviewScreen(
         ) {
             // Actual PDF Preview or visual card
             if (previewFile != null) {
-                com.dasariravi145.agrolynch.ui.screens.template.PdfPreviewCard(previewFile!!)
+                PdfPreviewCard(previewFile!!)
                 Spacer(Modifier.height(16.dp))
             }
 

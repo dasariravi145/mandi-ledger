@@ -31,7 +31,7 @@ class NotificationHelper(private val context: Context) {
             val summaryChannel = NotificationChannel(
                 CHANNEL_DAILY_SUMMARY,
                 context.getString(R.string.daily_summary),
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Daily business performance and expense summary"
             }
@@ -39,7 +39,7 @@ class NotificationHelper(private val context: Context) {
             val paymentChannel = NotificationChannel(
                 CHANNEL_PAYMENT_ALERTS,
                 context.getString(R.string.payment_alerts),
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Alerts for new payments and receipts"
             }
@@ -71,7 +71,8 @@ class NotificationHelper(private val context: Context) {
             .setSmallIcon(android.R.drawable.ic_dialog_info) // Replace with app icon
             .setContentTitle(title)
             .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 

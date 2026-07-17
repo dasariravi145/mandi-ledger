@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.ui.components.AuthLogo
+import com.dasariravi145.agrolynch.util.findActivity
 
 @Composable
 fun LoginScreen(
@@ -83,7 +84,10 @@ fun LoginScreen(
         Button(
             onClick = { 
                 if (phoneNumber.length == 10) {
-                    viewModel.onEvent(AuthEvent.SendOtp("+91$phoneNumber", context as Activity))
+                    val activity = context.findActivity()
+                    if (activity != null) {
+                        viewModel.onEvent(AuthEvent.SendOtp("+91$phoneNumber", activity))
+                    }
                 }
             },
             modifier = Modifier

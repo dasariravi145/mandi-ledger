@@ -6,8 +6,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -19,6 +18,7 @@ import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.util.LanguageManager
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 data class Language(val name: String, val nativeName: String, val code: String)
 
@@ -37,6 +37,7 @@ fun LanguageSelectionScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var isProcessing by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -70,9 +71,19 @@ fun LanguageSelectionScreen(
             ) {
                 items(languages) { lang ->
                     LanguageCard(lang = lang, onClick = { 
-                        scope.launch {
-                            LanguageManager.saveLanguageCode(context, lang.code)
-                            onLanguageSelected(lang.code)
+                        if (!isProcessing) {
+                            isProcessing = true
+                            scope.launch {
+                                try {
+                                    Timber.d("LANGUAGE_SELECTION_CLICKED: ${lang.code}")
+                                    LanguageManager.saveLanguageCode(context, lang.code)
+                                    Timber.d("LANGUAGE_SAVE_SUCCESS: ${lang.code}")
+                                    onLanguageSelected(lang.code)
+                                } catch (e: Exception) {
+                                    Timber.e(e, "LANGUAGE_SELECTION_FAILED")
+                                    isProcessing = false
+                                }
+                            }
                         }
                     })
                 }

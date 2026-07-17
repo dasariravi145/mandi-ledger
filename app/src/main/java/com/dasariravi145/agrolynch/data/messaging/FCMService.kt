@@ -30,6 +30,10 @@ class FCMService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
+        // Fix: Background messages (data messages) only work on Android 12+ if priority is 'high'.
+        // If the app is in background/killed state and message priority is 'normal', 
+        // the FCM service might not be allowed to start (BackgroundServiceStartNotAllowedException).
+
         val title = message.notification?.title ?: message.data["title"] ?: "AgroLynch Update"
         val body = message.notification?.body ?: message.data["body"] ?: "New market notification"
         val channelId = message.data["channelId"] ?: NotificationHelper.CHANNEL_DAILY_SUMMARY

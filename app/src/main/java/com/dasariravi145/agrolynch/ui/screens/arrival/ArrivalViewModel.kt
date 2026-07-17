@@ -176,6 +176,12 @@ class ArrivalViewModel @Inject constructor(
                     return
                 }
             }
+            if (entry.unit == "KG" || entry.unit == "Ton") {
+                if (entry.spoilage < 0 || entry.spoilage > 100) {
+                    viewModelScope.launch { _error.emit("Waste percentage cannot be more than 100 for ${entry.grade}") }
+                    return
+                }
+            }
         }
 
         if (gradeEntries.any { it.totalNetWeightKg <= 0 }) {
@@ -272,7 +278,7 @@ class ArrivalViewModel @Inject constructor(
                     totalWeightTon = if(entry.unit == "Boxes" || entry.unit == "Ton") entry.quantity else 0.0,
                     emptyBoxWeightPerBox = if(entry.unit == "Boxes") entry.avgGrossWeight else 0.0,
                     totalEmptyBoxWeightKg = if(entry.unit == "Boxes") entry.totalTareWeightKg else 0.0,
-                    spoilagePercentage = if (entry.unit == "Boxes") entry.spoilage else 0.0,
+                    spoilagePercentage = if (entry.unit == "Boxes" || entry.unit == "KG") entry.spoilage else 0.0,
                     spoilageKg = entry.calculatedTotalSpoilageKg,
                     grossWeightKg = entry.totalGrossWeightKg,
                     weightAfterEmptyBoxesKg = entry.balanceKgBeforeSpoilage,
@@ -334,8 +340,9 @@ class ArrivalViewModel @Inject constructor(
         val totalTareWeightKg: Double get() = if (unit == "Boxes") boxCount * avgGrossWeight else boxCount * tareWeight
         val balanceKgBeforeSpoilage: Double get() = (totalGrossWeightKg - totalTareWeightKg).coerceAtLeast(0.0)
         val calculatedTotalSpoilageKg: Double get() = when(unit) {
-            "Ton" -> quantity * spoilage
+            "Ton" -> totalGrossWeightKg * spoilage / 100
             "Boxes" -> balanceKgBeforeSpoilage * spoilage / 100
+            "KG" -> quantity * spoilage / 100
             else -> spoilage
         }
         val totalNetWeightKg: Double get() = (balanceKgBeforeSpoilage - calculatedTotalSpoilageKg).coerceAtLeast(0.0)

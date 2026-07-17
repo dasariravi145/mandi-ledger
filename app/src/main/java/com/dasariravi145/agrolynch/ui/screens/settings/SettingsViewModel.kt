@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.domain.repository.AuthRepository
 import com.dasariravi145.agrolynch.domain.repository.SettingsRepository
+import com.dasariravi145.agrolynch.domain.repository.SyncRepository
 import com.dasariravi145.agrolynch.domain.repository.UserRepository
 import com.dasariravi145.agrolynch.util.PremiumStateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,6 +16,7 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
+    private val syncRepository: SyncRepository,
     private val premiumStateManager: PremiumStateManager,
     private val userRepository: UserRepository
 ) : ViewModel() {
@@ -30,32 +32,62 @@ class SettingsViewModel @Inject constructor(
         
     val isPremium = premiumStateManager.isPremium
 
+    val userPhone = flow {
+        emit(authRepository.getCurrentUserPhoneNumber() ?: "Unknown")
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+
+    val lastBackupDate = userRepository.getUserProfile().map { user ->
+        if (user == null || user.lastUpdatedAt == 0L) "Never"
+        else com.dasariravi145.agrolynch.util.Formatter.formatDate(user.lastUpdatedAt)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Never")
+
     private val _isPremiumPopupEnabled = MutableStateFlow(true)
     val isPremiumPopupEnabled = _isPremiumPopupEnabled.asStateFlow()
 
-    init {
+    private val _syncMessage = MutableSharedFlow<String>()
+    val syncMessage = _syncMessage.asSharedFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing = _isSyncing.asStateFlow()
+
+    fun syncNow() {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUserId()
-            if (userId != null) {
-                _isPremiumPopupEnabled.value = !premiumStateManager.isPopupDisabledForUser(userId)
+            _isSyncing.value = true
+            when (val result = syncRepository.syncAllData()) {
+                is com.dasariravi145.agrolynch.util.Resource.Success -> _syncMessage.emit("Cloud backup successful")
+                is com.dasariravi145.agrolynch.util.Resource.Error -> _syncMessage.emit(result.message ?: "Sync failed")
+                else -> {}
             }
+            _isSyncing.value = false
+        }
+    }
+
+    fun restoreNow() {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            when (val result = syncRepository.restoreAllData()) {
+                is com.dasariravi145.agrolynch.util.Resource.Success -> _syncMessage.emit("Restore successful")
+                is com.dasariravi145.agrolynch.util.Resource.Error -> _syncMessage.emit(result.message ?: "Restore failed")
+                else -> {}
+            }
+            _isSyncing.value = false
         }
     }
 
     fun togglePremiumPopup(enabled: Boolean) {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUserId()
-            if (userId != null) {
-                premiumStateManager.setPopupDisabledForUser(userId, !enabled)
+            val phone = authRepository.getCurrentUserPhoneNumber()
+            if (phone != null) {
+                premiumStateManager.setPopupDisabledForUser(phone, !enabled)
                 _isPremiumPopupEnabled.value = enabled
             }
         }
     }
 
-    fun updateLanguage(code: String) {
-        timber.log.Timber.i("SettingsViewModel: Updating language to: $code")
+    fun updateLanguage(code: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             settingsRepository.updateLanguage(code)
+            onComplete()
         }
     }
 
@@ -89,27 +121,11 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val profile = userRepository.getUserProfile().first()
             profile?.let {
-                if (newState) {
-                    userRepository.saveProfile(it.copy(
-                        isPremium = true,
-                        premiumPlan = "LIFETIME",
-                        premiumExpiryDate = 0L,
-                        premiumExpiry = 0L,
-                        cloudBackupEnabled = true,
-                        multiDeviceSyncEnabled = true,
-                        voiceEntryEnabled = true,
-                        ocrEnabled = true,
-                        ocrCloudStorageEnabled = true,
-                        pdfCloudStorageEnabled = true
-                    ))
-                } else {
-                    userRepository.saveProfile(it.copy(
-                        isPremium = false,
-                        premiumPlan = "",
-                        premiumExpiryDate = 0L,
-                        premiumExpiry = 0L
-                    ))
-                }
+                userRepository.saveProfile(it.copy(
+                    isPremium = newState,
+                    premiumPlan = if (newState) "LIFETIME" else "",
+                    cloudBackupEnabled = newState
+                ))
             }
         }
     }

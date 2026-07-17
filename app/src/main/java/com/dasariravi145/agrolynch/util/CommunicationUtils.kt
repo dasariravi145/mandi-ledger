@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import com.dasariravi145.agrolynch.util.findActivity
 
 object CommunicationUtils {
 
@@ -16,7 +17,13 @@ object CommunicationUtils {
             val intent = Intent(Intent.ACTION_DIAL).apply {
                 data = Uri.parse("tel:$phoneNumber")
             }
-            context.startActivity(intent)
+            val activity = context.findActivity()
+            if (activity != null) {
+                activity.startActivity(intent)
+            } else {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            }
         } catch (e: Exception) {
             Toast.makeText(context, "Unable to open dialer", Toast.LENGTH_SHORT).show()
         }
@@ -36,10 +43,17 @@ object CommunicationUtils {
         val url = "https://wa.me/$finalNumber"
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
         
+        val activity = context.findActivity()
+
         // 1. Try normal WhatsApp
         try {
             val waIntent = Intent(intent).apply { setPackage("com.whatsapp") }
-            context.startActivity(waIntent)
+            if (activity != null) {
+                activity.startActivity(waIntent)
+            } else {
+                waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(waIntent)
+            }
             return
         } catch (e: Exception) {
             // com.whatsapp not found
@@ -48,7 +62,12 @@ object CommunicationUtils {
         // 2. Try WhatsApp Business
         try {
             val w4bIntent = Intent(intent).apply { setPackage("com.whatsapp.w4b") }
-            context.startActivity(w4bIntent)
+            if (activity != null) {
+                activity.startActivity(w4bIntent)
+            } else {
+                w4bIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(w4bIntent)
+            }
             return
         } catch (e: Exception) {
             // com.whatsapp.w4b not found
@@ -56,9 +75,46 @@ object CommunicationUtils {
         
         // 3. Fallback to Browser / any other app that can handle wa.me
         try {
-            context.startActivity(intent)
+            if (activity != null) {
+                activity.startActivity(intent)
+            } else {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            }
         } catch (e: Exception) {
             Toast.makeText(context, "Unable to open WhatsApp.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun shareFileToWhatsApp(context: Context, fileUri: Uri, phoneNumber: String? = null) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_STREAM, fileUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        if (!phoneNumber.isNullOrBlank()) {
+            val cleanNumber = phoneNumber.replace(Regex("[^0-9]"), "")
+            val finalNumber = if (cleanNumber.length == 10) "91$cleanNumber" else cleanNumber
+            intent.putExtra("jid", "$finalNumber@s.whatsapp.net")
+        }
+
+        val packages = listOf("com.whatsapp", "com.whatsapp.w4b")
+        var started = false
+        for (pkg in packages) {
+            try {
+                val pkgIntent = Intent(intent).apply { setPackage(pkg) }
+                pkgIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(pkgIntent)
+                started = true
+                break
+            } catch (e: Exception) {
+                // Try next package
+            }
+        }
+
+        if (!started) {
+            Toast.makeText(context, "WhatsApp is not installed.", Toast.LENGTH_SHORT).show()
         }
     }
 }

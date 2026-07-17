@@ -3,6 +3,7 @@ import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kotlinAndroid)
+    alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.kotlinCompose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
@@ -13,7 +14,7 @@ plugins {
 android {
 
     namespace = "com.dasariravi145.agrolynch"
-    compileSdk = 36
+    compileSdk = 35
 
     signingConfigs {
         create("release") {
@@ -27,8 +28,8 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -45,9 +46,9 @@ android {
     defaultConfig {
         applicationId = "com.dasariravi145.agrolynch"
         minSdk = 24
-        targetSdk = 36
-        versionCode = 11
-        versionName = "1.0.10"
+        targetSdk = 35
+        versionCode = 18
+        versionName = "1.0.18"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -94,9 +95,9 @@ dependencies {
     implementation(libs.firebase.storage)
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.crashlytics)
-    implementation("com.google.firebase:firebase-appcheck-playintegrity:19.1.0")
-    implementation("com.google.firebase:firebase-appcheck:19.1.0")
-    debugImplementation("com.google.firebase:firebase-appcheck-debug:19.1.0")
+    implementation(libs.firebase.appcheck.playintegrity)
+    implementation(libs.firebase.appcheck)
+    debugImplementation(libs.firebase.appcheck.debug)
 
     // Navigation
     implementation(libs.navigation.compose)
@@ -117,6 +118,7 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+    implementation(libs.guava)
     implementation(libs.mlkit.text.recognition)
     implementation(libs.generativeai)
     implementation(libs.androidx.biometric)
@@ -126,7 +128,9 @@ dependencies {
     // Billing & Ads
     implementation("com.android.billingclient:billing-ktx:7.0.0")
     implementation("com.google.android.gms:play-services-ads:23.6.0")
+    implementation("com.google.android.gms:play-services-base:18.5.0")
     implementation(libs.gson)
+    implementation(libs.kotlinxSerializationJson)
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

@@ -3,20 +3,20 @@ package com.dasariravi145.agrolynch.data.repository
 import android.app.Activity
 import com.dasariravi145.agrolynch.data.local.dao.UserDao
 import com.dasariravi145.agrolynch.data.local.entity.UserEntity
+import com.dasariravi145.agrolynch.data.remote.model.FirestoreUserProfile
 import com.dasariravi145.agrolynch.domain.repository.AuthRepository
-import com.dasariravi145.agrolynch.util.NetworkMonitor
+import com.dasariravi145.agrolynch.domain.repository.SettingsRepository
 import com.dasariravi145.agrolynch.util.SecurityManager
+import com.dasariravi145.agrolynch.util.PremiumStateManager
 import com.google.firebase.FirebaseException
-import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.*
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withTimeout
 import timber.log.Timber
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -25,48 +25,25 @@ class AuthRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val userDao: UserDao,
     private val securityManager: SecurityManager,
-    private val networkMonitor: NetworkMonitor
+    private val settingsRepository: SettingsRepository,
+    private val premiumStateManager: PremiumStateManager
 ) : AuthRepository {
 
     override fun sendOtp(phoneNumber: String, activity: Activity): Flow<Result<String>> = callbackFlow {
-        android.util.Log.d("PhoneAuth", "DEBUG_INFO: phoneNumber=$phoneNumber")
-        android.util.Log.d("PhoneAuth", "DEBUG_INFO: packageName=${activity.packageName}")
-        android.util.Log.d("PhoneAuth", "DEBUG_INFO: buildType=${com.dasariravi145.agrolynch.BuildConfig.BUILD_TYPE}")
-        android.util.Log.d("PhoneAuth", "DEBUG_INFO: activityIsNull=${activity == null}")
-        android.util.Log.d("PhoneAuth", "Verification start for: $phoneNumber")
-        
+        Timber.tag("OtpFlow").d("Send OTP started for: $phoneNumber")
         val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
             override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-                android.util.Log.d("PhoneAuth", "onVerificationCompleted triggered")
-                android.util.Log.d("PhoneAuth", "Verification completed automatically")
+                Timber.tag("OtpFlow").d("OTP_AUTO_VERIFIED")
             }
 
             override fun onVerificationFailed(exception: FirebaseException) {
-                android.util.Log.e("PhoneAuth", "Verification Failed", exception)
-                
-                if (exception is FirebaseAuthException) {
-                    android.util.Log.e("PhoneAuth", "ErrorCode=${exception.errorCode}")
-                    android.util.Log.e("PhoneAuth", "Message=${exception.message}")
-                    android.util.Log.e("PhoneAuth", "Cause=${exception.cause}")
-                    android.util.Log.e("PhoneAuth", "Package=${activity.packageName}")
-                    android.util.Log.e("PhoneAuth", "BuildType=${com.dasariravi145.agrolynch.BuildConfig.BUILD_TYPE}")
-                    android.util.Log.e("PhoneAuth", "Phone=$phoneNumber")
-                }
-                
-                if (exception.message?.contains("reCAPTCHA", ignoreCase = true) == true) {
-                    Timber.w("OTP_FLOW: reCAPTCHA fallback triggered. This usually means Play Integrity or SHA keys are not configured.")
-                }
+                Timber.tag("OtpFlow").e(exception, "OTP_SEND_FAILED")
                 trySend(Result.failure(exception))
             }
 
             override fun onCodeSent(verificationId: String, token: PhoneAuthProvider.ForceResendingToken) {
-                android.util.Log.d("PhoneAuth", "onCodeSent triggered")
-                android.util.Log.d("PhoneAuth", "Code sent. verificationId: $verificationId")
+                Timber.tag("OtpFlow").d("OTP_CODE_SENT: $verificationId")
                 trySend(Result.success(verificationId))
-            }
-
-            override fun onCodeAutoRetrievalTimeOut(verificationId: String) {
-                android.util.Log.d("PhoneAuth", "onCodeAutoRetrievalTimeOut triggered")
             }
         }
 
@@ -77,38 +54,27 @@ class AuthRepositoryImpl @Inject constructor(
                 .setActivity(activity)
                 .setCallbacks(callbacks)
                 .build()
-            
             PhoneAuthProvider.verifyPhoneNumber(options)
         } catch (e: Exception) {
-            Timber.e(e, "OTP_FLOW: verifyPhoneNumber exception")
+            Timber.tag("OtpFlow").e(e, "Error initiating verifyPhoneNumber")
             trySend(Result.failure(e))
         }
-
-        awaitClose { Timber.d("OTP_FLOW: callbackFlow closed") }
+        awaitClose { }
     }
 
     override fun verifyOtp(verificationId: String, otp: String): Flow<Result<Unit>> = callbackFlow {
-        Timber.d("AUTH_OTP_CLICKED")
-        Timber.d("AUTH_OTP_CODE_LENGTH: ${otp.length}")
-        Timber.d("AUTH_SIGN_IN_START")
-        
+        Timber.tag("OtpFlow").d("Verify OTP started")
         val credential = PhoneAuthProvider.getCredential(verificationId, otp)
         auth.signInWithCredential(credential)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    val uid = auth.currentUser?.uid
-                    Timber.d("AUTH_SIGN_IN_SUCCESS")
-                    Timber.d("AUTH_UID: $uid")
-                    Timber.d("AUTH_CURRENT_USER_UID: $uid")
+                    Timber.tag("ProfileCheck").d("OTP Verified")
                     trySend(Result.success(Unit))
-                    close()
                 } else {
-                    val error = task.exception?.message ?: "Verification failed"
-                    Timber.e("AUTH_SIGN_IN_FAILED: $error")
-                    Timber.e("FIRESTORE_ERROR_MESSAGE: $error")
-                    trySend(Result.failure(task.exception ?: Exception(error)))
-                    close()
+                    Timber.tag("OtpFlow").e(task.exception, "OTP verification failed")
+                    trySend(Result.failure(task.exception ?: Exception("Verification failed")))
                 }
+                close()
             }
         awaitClose { }
     }
@@ -117,133 +83,161 @@ class AuthRepositoryImpl @Inject constructor(
 
     override fun logout() {
         auth.signOut()
+        securityManager.clear()
     }
-
-    override fun getCurrentUserId(): String? = auth.currentUser?.uid
 
     override fun getCurrentUserPhoneNumber(): String? = auth.currentUser?.phoneNumber
 
-    override suspend fun registerUser(user: UserEntity): Result<Unit> {
+    override fun getCurrentUserId(): String? = auth.currentUser?.uid
+
+    override suspend fun checkUserExists(uid: String): Result<FirestoreUserProfile?> {
+        Timber.tag("ProfileCheck").d("Current UID: $uid")
+        Timber.tag("ProfileCheck").d("Firestore path: users/$uid")
+        
         return try {
-            val uid = auth.currentUser?.uid
-            if (uid == null) {
-                Timber.e("AUTH_UID_NULL_BEFORE_FIRESTORE")
-                throw Exception("Login session expired. Please login again.")
-            }
+            val doc = firestore.collection("users").document(uid).get().await()
+            if (doc.exists()) {
+                Timber.tag("ProfileCheck").d("Document exists: true")
+                val data = doc.data
+                Timber.tag("ProfileCheck").d("Document fields: $data")
 
-            // Always ensure local Room database is updated
-            userDao.insertUser(user)
-            
-            // Try Firestore sync with timeout
-            val isOnline = networkMonitor.isNetworkAvailable()
-            if (isOnline) {
-                Timber.d("FIRESTORE_PROFILE_SYNC_START")
-                try {
-                    withTimeout(5000L) {
-                        val userRef = firestore.collection("users").document(uid)
-                        
-                        val firestoreData = hashMapOf(
-                            "userId" to uid,
-                            "fullName" to user.name,
-                            "marketName" to user.location,
-                            "phoneNumber" to (auth.currentUser?.phoneNumber ?: user.phoneNumber),
-                            "role" to "AGENT",
-                            "pinCreated" to true,
-                            "profileCreated" to true,
-                            "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                        )
+                val profile = doc.toObject(FirestoreUserProfile::class.java)
+                
+                // Comprehensive completion check
+                val isCompleted = profile?.let {
+                    it.isProfileCompleted || 
+                    (it.fullName.isNotBlank() && it.mobileNumber.isNotBlank() && it.address.isNotBlank() && it.pinHash.isNotBlank())
+                } ?: false
 
-                        userRef.set(firestoreData, SetOptions.merge()).await()
-                        Timber.d("FIRESTORE_PROFILE_SYNC_SUCCESS")
-                        securityManager.setPendingProfileSync(false)
-                    }
-                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                    Timber.e("FIRESTORE_PROFILE_SYNC_TIMEOUT")
-                    securityManager.setPendingProfileSync(true)
-                } catch (e: Exception) {
-                    Timber.e(e, "FIRESTORE_PROFILE_SYNC_FAILED")
-                    securityManager.setPendingProfileSync(true)
-                }
+                Timber.tag("ProfileCheck").d("Completion flag (isProfileCompleted): ${profile?.isProfileCompleted}")
+                Timber.tag("ProfileCheck").d("Final completion result: $isCompleted")
+
+                Result.success(profile?.copy(isProfileCompleted = isCompleted))
             } else {
-                securityManager.setPendingProfileSync(true)
+                Timber.tag("ProfileCheck").d("Document exists: false")
+                Result.success(null)
             }
-            
-            Result.success(Unit)
         } catch (e: Exception) {
-            Timber.e(e, "PROFILE_SAVE_FAILED")
+            Timber.tag("ProfileCheck").e(e, "Firestore check failed")
             Result.failure(e)
         }
     }
 
-    override fun saveSession(uid: String, phone: String, name: String, location: String, pin: String) {
-        securityManager.saveSession(uid, phone, name, location, pin)
-    }
+    override suspend fun registerUser(fullName: String, address: String, pin: String): Result<Unit> {
+        val currentUser = auth.currentUser ?: return Result.failure(Exception("Not authenticated"))
 
-    override fun isProfileCreated(): Boolean = securityManager.isProfileCreated()
-
-    override fun isPinCreated(): Boolean = securityManager.isPinCreated()
-
-    override suspend fun getUserProfile(uid: String): UserEntity? {
-        val local = userDao.getUserById(uid)
-        if (local != null) return local
-
-        Timber.d("CURRENT_UID: $uid")
+        val uid = currentUser.uid
+        val mobile = currentUser.phoneNumber ?: ""
         
-        try {
-            val doc = firestore.collection("users").document(uid).get(com.google.firebase.firestore.Source.CACHE).await()
-            if (doc.exists()) {
-                val name = doc.getString("fullName") ?: doc.getString("name") ?: ""
-                val phone = doc.getString("phoneNumber") ?: doc.getString("phone") ?: ""
-                val location = doc.getString("marketName") ?: doc.getString("location") ?: ""
-                val user = UserEntity(id = uid, name = name, phoneNumber = phone, location = location)
-                userDao.insertUser(user)
-                return user
-            }
-        } catch (e: Exception) {
-            Timber.d("FIRESTORE_READ_CACHE_FAILED: ${e.message}")
-        }
-
-        if (!networkMonitor.isNetworkAvailable()) {
-            return null
-        }
+        val profile = FirestoreUserProfile(
+            mobileNumber = mobile,
+            fullName = fullName,
+            address = address,
+            pinHash = hashPin(pin),
+            isProfileCompleted = true,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
 
         return try {
-            Timber.d("FIRESTORE_READ_START")
-            val doc = firestore.collection("users").document(uid).get().await()
-            if (doc.exists()) {
-                Timber.d("FIRESTORE_READ_SUCCESS")
-                val name = doc.getString("fullName") ?: doc.getString("name") ?: ""
-                val phone = doc.getString("phoneNumber") ?: doc.getString("phone") ?: ""
-                val location = doc.getString("marketName") ?: doc.getString("location") ?: ""
-                val user = UserEntity(id = uid, name = name, phoneNumber = phone, location = location)
-                userDao.insertUser(user)
-                user
-            } else null
+            firestore.collection("users").document(uid).set(profile).await()
+            syncLocalProfileWithUid(uid, profile)
+            Result.success(Unit)
         } catch (e: Exception) {
-            Timber.e(e, "FIRESTORE_READ_FAILED")
-            null
+            Timber.tag("RegistrationFlow").e(e, "Firestore write failed")
+            Result.failure(e)
         }
     }
 
-    override suspend fun savePin(uid: String, pin: String) {
-        securityManager.savePin(pin)
+    override suspend fun verifyPin(pin: String): Boolean {
+        val localUser = getLocalUser() ?: return false
+        return localUser.pinHash == hashPin(pin)
     }
 
-    override suspend fun getSavedPin(): String? = securityManager.getPin()
-
-    override suspend fun hasSavedPin(): Boolean {
-        val exists = securityManager.isPinSet()
-        Timber.d("PIN_EXISTS: $exists")
-        return exists
+    override suspend fun syncLocalProfile(profile: FirestoreUserProfile) {
+        val uid = getCurrentUserId() ?: profile.mobileNumber
+        syncLocalProfileWithUid(uid, profile)
+    }
+    
+    private suspend fun syncLocalProfileWithUid(uid: String, profile: FirestoreUserProfile) {
+        val userEntity = UserEntity(
+            id = uid,
+            name = profile.fullName,
+            phoneNumber = profile.mobileNumber,
+            location = profile.address,
+            pinHash = profile.pinHash,
+            isPremium = profile.isPremium,
+            cloudBackupEnabled = profile.backupEnabled,
+            isProfileCompleted = profile.isProfileCompleted,
+            createdAt = profile.createdAt
+        )
+        userDao.insertUser(userEntity)
+        securityManager.saveSession(
+            uid, 
+            profile.mobileNumber, 
+            profile.fullName, 
+            profile.address, 
+            profile.pinHash,
+            isHashed = true
+        )
+        // Ensure biometric preference is synced from Firestore during profile restore
+        securityManager.setBiometricEnabled(profile.biometricEnabled)
+        settingsRepository.updateLanguage(profile.language)
+        
+        // Restore premium status locally from Firestore profile
+        premiumStateManager.updatePremiumStatus(profile.isPremium, profile.premiumExpiry)
+        
+        Timber.tag("ProfileCheck").d("Profile synced: biometricEnabled=${profile.biometricEnabled}, isPremium=${profile.isPremium}")
+        Timber.tag("ProfileCheck").d("Saved Locally")
     }
 
-    override suspend fun updatePin(newPin: String) {
-        securityManager.savePin(newPin)
+    override suspend fun getLocalUser(): UserEntity? {
+        val uid = getCurrentUserId() ?: return null
+        return userDao.getUserById(uid)
     }
 
-    override fun setPendingProfileSync(pending: Boolean) {
-        securityManager.setPendingProfileSync(pending)
+    override fun hashPin(pin: String): String {
+        return MessageDigest.getInstance("SHA-256")
+            .digest(pin.toByteArray())
+            .joinToString("") { "%02x".format(it) }
     }
 
-    override fun hasPendingProfileSync(): Boolean = securityManager.hasPendingProfileSync()
+    override suspend fun updatePin(newPin: String): Result<Unit> {
+        val uid = getCurrentUserId() ?: return Result.failure(Exception("Not authenticated"))
+        val hashedPin = hashPin(newPin)
+        return try {
+            firestore.collection("users").document(uid)
+                .update(
+                    "pinHash", hashedPin,
+                    "updatedAt", System.currentTimeMillis()
+                )
+                .await()
+            
+            val localUser = userDao.getUserById(uid)
+            localUser?.let {
+                userDao.insertUser(it.copy(pinHash = hashedPin))
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Timber.tag("RegistrationFlow").e(e, "UPDATE_PIN_FAILED")
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun updateBiometricEnabled(enabled: Boolean): Result<Unit> {
+        val uid = getCurrentUserId() ?: return Result.failure(Exception("Not authenticated"))
+        return try {
+            firestore.collection("users").document(uid)
+                .update(
+                    "biometricEnabled", enabled,
+                    "updatedAt", System.currentTimeMillis()
+                )
+                .await()
+            securityManager.setBiometricEnabled(enabled)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Timber.tag("BiometricFlow").e(e, "UPDATE_BIOMETRIC_FAILED")
+            Result.failure(e)
+        }
+    }
 }

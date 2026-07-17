@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.ui.platform.LocalContext
 import com.dasariravi145.agrolynch.util.BiometricAuth
+import com.dasariravi145.agrolynch.util.findActivity
 
 @Composable
 fun SecurityScreen(
@@ -35,10 +36,19 @@ fun SecurityScreen(
     var pin by remember { mutableStateOf("") }
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
-    val activity = context as? FragmentActivity
+    val activity = remember(context) { context.findActivity() as? FragmentActivity }
+
+    val biometricLoginTitle = stringResource(R.string.biometric_login)
+    val biometricSubtitle = stringResource(R.string.biometric_subtitle)
+    val usePinText = stringResource(R.string.use_pin)
+    val biometricFailedText = stringResource(R.string.biometric_failed)
+    val invalidPinText = stringResource(R.string.invalid_pin)
+    val forgotPinText = stringResource(R.string.forgot_pin_q)
+
+    val appContext = remember(context) { context.applicationContext }
 
     LaunchedEffect(Unit) {
-        viewModel.checkBiometricAvailability(context)
+        viewModel.checkBiometricAvailability(appContext)
     }
 
     LaunchedEffect(state.isPinCorrect) {
@@ -47,17 +57,25 @@ fun SecurityScreen(
         }
     }
 
+    var hasPromptedAuto by remember { mutableStateOf(false) }
+
     // Auto-show biometric if enabled
     LaunchedEffect(state.isBiometricEnabled, state.isBiometricAvailable) {
-        if (state.isBiometricEnabled && state.isBiometricAvailable && activity != null) {
+        if (!hasPromptedAuto && state.isBiometricEnabled && state.isBiometricAvailable && activity != null) {
+            hasPromptedAuto = true
             BiometricAuth.showBiometricPrompt(
                 activity = activity,
-                title = context.getString(R.string.biometric_login),
-                subtitle = context.getString(R.string.biometric_subtitle),
-                negativeButtonText = context.getString(R.string.use_pin),
-                errorAuthFailed = context.getString(R.string.biometric_failed),
+                title = biometricLoginTitle,
+                subtitle = biometricSubtitle,
+                negativeButtonText = usePinText,
+                errorAuthFailed = biometricFailedText,
                 onSuccess = { viewModel.onBiometricSuccess() },
-                onError = { viewModel.onBiometricFailure(it) }
+                onError = { errorMsg ->
+                    // Remain on PIN screen, don't show error if it's just a cancellation or negative button
+                    if (!errorMsg.contains("cancel", true) && !errorMsg.contains("pin", true)) {
+                        viewModel.onBiometricFailure(errorMsg)
+                    }
+                }
             )
         }
     }
@@ -74,7 +92,14 @@ fun SecurityScreen(
             
             Spacer(modifier = Modifier.height(32.dp))
             
-            Text(stringResource(R.string.enter_pin), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            val userName = state.user?.name ?: ""
+            if (userName.isNotEmpty()) {
+                Text("Welcome,", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
+                Text(userName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            
+            Text("Enter Security PIN", style = MaterialTheme.typography.titleMedium)
             
             Spacer(modifier = Modifier.height(32.dp))
             
@@ -86,7 +111,7 @@ fun SecurityScreen(
             }
             
             if (state.error != null) {
-                val errorMessage = if (state.error == "invalid_pin") stringResource(R.string.invalid_pin) else state.error!!
+                val errorMessage = if (state.error == "invalid_pin") invalidPinText else state.error!!
                 Text(errorMessage, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 16.dp))
             }
 
@@ -94,15 +119,15 @@ fun SecurityScreen(
                 Spacer(modifier = Modifier.height(24.dp))
                 IconButton(
                     onClick = {
-                        if (activity != null) {
+                        activity?.let { activeActivity ->
                             BiometricAuth.showBiometricPrompt(
-                                activity = activity,
-                                title = context.getString(R.string.biometric_login),
-                                subtitle = context.getString(R.string.biometric_subtitle),
-                                negativeButtonText = context.getString(R.string.use_pin),
-                                errorAuthFailed = context.getString(R.string.biometric_failed),
+                                activity = activeActivity,
+                                title = biometricLoginTitle,
+                                subtitle = biometricSubtitle,
+                                negativeButtonText = usePinText,
+                                errorAuthFailed = biometricFailedText,
                                 onSuccess = { viewModel.onBiometricSuccess() },
-                                onError = { viewModel.onBiometricFailure(it) }
+                                onError = { errorMsg -> viewModel.onBiometricFailure(errorMsg) }
                             )
                         }
                     },
@@ -166,7 +191,7 @@ fun SecurityScreen(
                 onClick = onForgotPin,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
-                Text(stringResource(R.string.forgot_pin_q), color = Color(0xFF16A34A), fontWeight = FontWeight.Bold)
+                Text(forgotPinText, color = Color(0xFF16A34A), fontWeight = FontWeight.Bold)
             }
         }
         

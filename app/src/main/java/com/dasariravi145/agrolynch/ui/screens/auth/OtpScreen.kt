@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -25,10 +26,12 @@ fun OtpScreen(
 ) {
     var otp by remember { mutableStateOf("") }
     val state by viewModel.state.collectAsState()
+    var navigationTriggered by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(state.isVerified) {
-        if (state.isVerified) {
-            Timber.d("OTP_VERIFY_SUCCESS")
+    LaunchedEffect(state.isVerified, state.isLoading, state.error) {
+        if (state.isVerified && !state.isLoading && state.error == null && !navigationTriggered) {
+            Timber.tag("ProfileCheck").d("OTP verified and profile check completed. Navigating...")
+            navigationTriggered = true
             onVerified()
         }
     }

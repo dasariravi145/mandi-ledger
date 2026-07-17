@@ -15,14 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.graphics.Bitmap
-import android.graphics.pdf.PdfRenderer
-import android.os.ParcelFileDescriptor
-import androidx.compose.ui.graphics.asImageBitmap
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -33,7 +30,6 @@ import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import com.dasariravi145.agrolynch.domain.model.BillTemplateType
 import com.dasariravi145.agrolynch.ui.screens.settings.AssetPicker
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,30 +41,31 @@ fun InvoiceProfileScreen(
     val previewHtml by viewModel.previewHtml.collectAsState()
     val scrollState = rememberScrollState()
 
+    // Automatically refresh preview when profile or template changes
     LaunchedEffect(profile) {
         if (profile != null) {
-            timber.log.Timber.tag("InvoicePreview").d("Profile updated, triggering preview generation")
             viewModel.generateLivePreview()
-        } else {
-            timber.log.Timber.tag("InvoicePreview").w("Profile is NULL, cannot generate preview")
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Professional Invoice Setup") },
+                title = { Text("Professional Invoice Setup", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 },
                 actions = {
-                    Button(onClick = { 
-                        viewModel.saveAll()
-                        onBack()
-                    }) {
-                        Icon(Icons.Default.Save, null)
+                    Button(
+                        onClick = { 
+                            viewModel.saveAll()
+                            onBack()
+                        },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Done, null)
                         Spacer(Modifier.width(8.dp))
                         Text("Save Profile")
                     }
@@ -82,50 +79,55 @@ fun InvoiceProfileScreen(
                 .padding(padding)
                 .verticalScroll(scrollState)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Live Preview Section
+            // Section: Template Preview
+            SectionTitle("Selected Template Preview")
+            
             if (previewHtml != null) {
-                HtmlPreviewCard(previewHtml!!)
+                HtmlPreviewCard(
+                    html = previewHtml!!, 
+                    templateName = profile?.defaultTemplate ?: "Default"
+                )
             } else {
-                Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(500.dp)
+                        .background(Color.White, RoundedCornerShape(8.dp))
+                        .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(8.dp))
-                        Text("Generating Preview...", color = Color.Gray, fontSize = 12.sp)
-                        if (profile == null) {
-                            Text("Waiting for company profile...", color = Color.Red, fontSize = 10.sp)
-                        }
+                        CircularProgressIndicator(strokeWidth = 3.dp)
+                        Spacer(Modifier.height(16.dp))
+                        Text("Loading Preview...", color = Color.Gray)
                     }
                 }
             }
 
-            HorizontalDivider()
-
-            // 1. Business Information
-            SectionTitle("1. Business Information")
-            profile?.let { p ->
-                BusinessInfoSection(p) { viewModel.updateProfile(it) }
-            }
-
-            // 2. Branding Assets
-            SectionTitle("2. Branding Assets")
-            BrandingAssetsSection(profile) { type, uri -> viewModel.saveAssetLocally(uri, type) }
-
-            // 3. Template Selection
-            SectionTitle("3. Template Selection")
+            // TASK 1 & 3: Template Selection (No more business info fields here)
+            SectionTitle("1. Select Invoice Template")
             TemplateSelectionSection(profile?.defaultTemplate ?: "GK_FRUITS_CLASSIC") { 
                 viewModel.updateProfile { p -> p.copy(defaultTemplate = it) }
             }
+
+            // TASK 1: Branding Assets
+            SectionTitle("2. Branding Assets")
+            BrandingAssetsSection(profile) { type, uri -> viewModel.saveAssetLocally(uri, type) }
             
             Button(
                 onClick = { viewModel.generateLivePreview() },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             ) {
                 Icon(Icons.Default.Refresh, null)
                 Spacer(Modifier.width(8.dp))
-                Text("Refresh Preview")
+                Text("Force Refresh Preview")
             }
             
             Spacer(modifier = Modifier.height(32.dp))
@@ -134,53 +136,91 @@ fun InvoiceProfileScreen(
 }
 
 @Composable
-fun HtmlPreviewCard(html: String) {
+fun HtmlPreviewCard(html: String, templateName: String) {
     var hasError by remember { mutableStateOf(false) }
     
     Card(
-        modifier = Modifier.fillMaxWidth().aspectRatio(0.707f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(650.dp),
         elevation = CardDefaults.cardElevation(8.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(4.dp)
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(2.dp, Color(0xFF1B5E20)) // Professional Green Border
     ) {
-        if (hasError) {
+        if (hasError || html.isBlank()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Error rendering preview. Please check your branding settings.", color = Color.Red, textAlign = TextAlign.Center)
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+                    Icon(Icons.Default.ImageNotSupported, null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Preview not available", fontWeight = FontWeight.Bold, color = Color.DarkGray)
+                    Text(templateName, color = Color.Gray, fontSize = 12.sp)
+                    Spacer(Modifier.height(16.dp))
+                    Text("Check your branding assets and try again.", textAlign = TextAlign.Center, fontSize = 12.sp, color = Color.Gray)
+                }
             }
         } else {
             AndroidView(
                 factory = { context ->
                     WebView(context).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.loadWithOverviewMode = true
-                        settings.useWideViewPort = true
-                        settings.setSupportZoom(false)
-                        settings.textZoom = 100
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            useWideViewPort = true
+                            loadWithOverviewMode = true
+                            builtInZoomControls = false
+                            displayZoomControls = false
+                            setSupportZoom(false)
+                            textZoom = 100
+                        }
+                        setBackgroundColor(android.graphics.Color.WHITE)
                         webViewClient = object : WebViewClient() {
-                            override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
-                                super.onReceivedError(view, errorCode, description, failingUrl)
-                                timber.log.Timber.tag("InvoicePreview").e("WebView Error: %s", description)
+                            override fun onReceivedError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                error: WebResourceError?
+                            ) {
+                                super.onReceivedError(view, request, error)
                                 hasError = true
                             }
                         }
                     }
                 },
                 update = { webView ->
-                    // To scale A4 to fit the width of the WebView, we might need a small trick.
-                    // Standard A4 is 210mm wide.
-                    val scaledHtml = """
-                        <style>
-                            body {
-                                transform: scale(0.38); /* Approximate scale to fit screen, will be adjusted by overview mode */
-                                transform-origin: top left;
-                            }
-                        </style>
-                        $html
+                    // viewport width=794 without initial-scale allows loadWithOverviewMode to fit it to screen width
+                    val styledHtml = """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta name="viewport" content="width=794">
+                            <style>
+                                * { -webkit-print-color-adjust: exact; }
+                                body { 
+                                    margin: 0; 
+                                    padding: 0; 
+                                    background-color: white; 
+                                    display: flex; 
+                                    justify-content: center;
+                                }
+                                .preview-wrapper {
+                                    background-color: white;
+                                    width: 794px; /* Standard A4 width at 96dpi */
+                                    min-height: 1123px; /* Standard A4 height */
+                                    box-sizing: border-box;
+                                    overflow: hidden;
+                                }
+                                /* Ensure images fit correctly */
+                                img { max-width: 100%; height: auto; }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="preview-wrapper">
+                                $html
+                            </div>
+                        </body>
+                        </html>
                     """.trimIndent()
-                    
-                    // Use scaled HTML for visual preview fit
-                    webView.loadDataWithBaseURL(null, scaledHtml, "text/html", "utf-8", null)
+                    webView.loadDataWithBaseURL(null, styledHtml, "text/html", "utf-8", null)
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -189,65 +229,23 @@ fun HtmlPreviewCard(html: String) {
 }
 
 @Composable
-fun PdfPreviewCard(file: File) {
-    val bitmap = remember(file) {
-        try {
-            val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-            val renderer = PdfRenderer(pfd)
-            val page = renderer.openPage(0)
-            val b = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
-            page.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            page.close()
-            renderer.close()
-            pfd.close()
-            b
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-        elevation = CardDefaults.cardElevation(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(4.dp)
-    ) {
-        if (bitmap != null) {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = "PDF Preview",
-                modifier = Modifier.fillMaxWidth(),
-                contentScale = ContentScale.FillWidth
-            )
-        } else {
-            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                Text("Failed to load PDF preview", color = Color.Gray)
-            }
-        }
-    }
-}
-
-@Composable
-fun BusinessInfoSection(profile: CompanyProfileEntity, onUpdate: ((CompanyProfileEntity) -> CompanyProfileEntity) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(value = profile.companyName, onValueChange = { v -> onUpdate { it.copy(companyName = v) } }, label = { Text("Shop Name") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = profile.address, onValueChange = { v -> onUpdate { it.copy(address = v) } }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = profile.mobile1, onValueChange = { v -> onUpdate { it.copy(mobile1 = v) } }, label = { Text("Mobile Number") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = profile.gstNumber, onValueChange = { v -> onUpdate { it.copy(gstNumber = v) } }, label = { Text("GST Number") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = profile.tagline, onValueChange = { v -> onUpdate { it.copy(tagline = v) } }, label = { Text("Tagline") }, modifier = Modifier.fillMaxWidth())
-    }
-}
-
-@Composable
 fun BrandingAssetsSection(profile: CompanyProfileEntity?, onAssetSelected: (String, android.net.Uri) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
-            AssetPicker("Company Logo", profile?.logoPath) { onAssetSelected("logo", it) }
-            AssetPicker("God Image", profile?.godImagePath) { onAssetSelected("god", it) }
+        Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.weight(1f)) {
+                AssetPicker("Company Logo", profile?.logoPath) { onAssetSelected("logo", it) }
+            }
+            Box(Modifier.weight(1f)) {
+                AssetPicker("God Image", profile?.godImagePath) { onAssetSelected("god", it) }
+            }
         }
-        Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
-            AssetPicker("Signature", profile?.signaturePath) { onAssetSelected("signature", it) }
-            AssetPicker("Company Stamp", profile?.stampPath) { onAssetSelected("stamp", it) }
+        Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.weight(1f)) {
+                AssetPicker("Signature", profile?.signaturePath) { onAssetSelected("signature", it) }
+            }
+            Box(Modifier.weight(1f)) {
+                AssetPicker("Company Stamp", profile?.stampPath) { onAssetSelected("stamp", it) }
+            }
         }
         AssetPicker("UPI QR Code", profile?.upiQrPath) { onAssetSelected("upi_qr", it) }
     }
@@ -267,17 +265,22 @@ fun TemplateSelectionSection(selectedId: String, onSelected: (String) -> Unit) {
 
 @Composable
 fun TemplateCard(template: BillTemplateType, isSelected: Boolean, onClick: () -> Unit) {
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.LightGray.copy(alpha = 0.5f)
+    val borderWidth = if (isSelected) 3.dp else 1.dp
+    
     Card(
         modifier = Modifier
             .width(160.dp)
             .clickable { onClick() }
             .border(
-                width = if (isSelected) 3.dp else 0.dp,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                width = borderWidth,
+                color = borderColor,
                 shape = RoundedCornerShape(12.dp)
             ),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surface
+        )
     ) {
         Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             AsyncImage(
@@ -285,20 +288,38 @@ fun TemplateCard(template: BillTemplateType, isSelected: Boolean, onClick: () ->
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(100.dp)
+                    .height(110.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color.White),
                 contentScale = ContentScale.Fit,
                 error = painterResource(R.drawable.ic_launcher_foreground)
             )
             Spacer(Modifier.height(8.dp))
-            Text(template.displayName, fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 1)
-            Text(if (template.isPremium) "Premium" else "Free", fontSize = 10.sp, color = if (template.isPremium) Color(0xFFFF9800) else Color(0xFF4CAF50))
+            Text(
+                template.displayName, 
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, 
+                fontSize = 12.sp, 
+                textAlign = TextAlign.Center, 
+                maxLines = 1,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                if (template.isPremium) "Premium" else "Free", 
+                fontSize = 10.sp, 
+                fontWeight = FontWeight.Bold,
+                color = if (template.isPremium) Color(0xFFFF9800) else Color(0xFF4CAF50)
+            )
         }
     }
 }
 
 @Composable
 fun SectionTitle(title: String) {
-    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+    Text(
+        title, 
+        style = MaterialTheme.typography.titleMedium, 
+        fontWeight = FontWeight.ExtraBold, 
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(vertical = 4.dp)
+    )
 }

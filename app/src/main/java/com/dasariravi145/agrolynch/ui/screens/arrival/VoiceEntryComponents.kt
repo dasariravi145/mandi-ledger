@@ -90,6 +90,7 @@ fun VoiceEntryReviewDialog(
                 ReviewItem("Commission", data.commission?.toString(), "%")
                 ReviewItem("Transport", data.transport?.toString())
                 ReviewItem("Labour", data.labor?.toString())
+                ReviewItem("Waste", data.waste?.toString(), if (data.unit == "KG") "%" else if (data.unit == "Ton") "Ton" else "KG")
                 ReviewItem("CAT/Other", data.otherDeduction?.toString())
             }
         },

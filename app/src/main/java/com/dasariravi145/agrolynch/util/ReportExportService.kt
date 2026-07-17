@@ -57,10 +57,26 @@ class ReportExportService @Inject constructor() {
                 "Generated on ${df.format(Date(now))}"
             }
 
+            val filterRange = if (reportName.contains(" - ")) {
+                reportName.substringAfterLast(" - ")
+            } else range
+
             val firstItem = data.firstOrNull()
             Timber.d("REPORT_EXPORT_PDF: name=$reportName, items=${data.size}, firstItemType=${firstItem?.javaClass?.simpleName}")
 
             when {
+                (firstItem is Pair<*, *>) || reportName.contains("Overall Business", true) -> {
+                    Timber.d("REPORT_EXPORT: Overall Business branch selected for $reportName")
+                    val totals = data.mapNotNull { item ->
+                        val pair = item as? Pair<*, *> ?: return@mapNotNull null
+                        val label = pair.first as? String ?: return@mapNotNull null
+                        val amount = pair.second as? Number ?: return@mapNotNull null
+                        label to amount.toDouble()
+                    }.toMap()
+
+                    Timber.d("REPORT_EXPORT: Parsed total count: ${totals.size}")
+                    PdfGenerator.generateBusinessSummaryReport(context, profile, totals, filterRange)
+                }
                 firstItem is DetailedArrivalReportModel || reportName.contains("Farmer", true) -> {
                     PdfGenerator.generateFarmerReport(context, profile, FarmerEntity(), data.filterIsInstance<DetailedArrivalReportModel>(), range)
                 }

@@ -2,9 +2,11 @@ package com.dasariravi145.agrolynch.ui.screens.settings
 
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -43,6 +45,15 @@ fun SettingsScreen(
     val isAutoBackupEnabled by viewModel.isAutoBackupEnabled.collectAsState()
     val isPremiumPopupEnabled by viewModel.isPremiumPopupEnabled.collectAsState()
     val isPremium by viewModel.isPremium.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    LaunchedEffect(Unit) {
+        viewModel.syncMessage.collect { msg ->
+            snackbarHostState.showSnackbar(msg)
+        }
+    }
 
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showChangePinDialog by remember { mutableStateOf(false) }
@@ -52,6 +63,7 @@ fun SettingsScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.settings)) },
@@ -88,6 +100,54 @@ fun SettingsScreen(
 
             // Account Section
             SettingsSectionTitle(stringResource(R.string.account))
+            
+            // TASK Implement Cloud Account info
+            val userPhone = viewModel.userPhone.collectAsState().value
+            val lastBackup = viewModel.lastBackupDate.collectAsState().value
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Cloud, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Cloud Account", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Mobile: $userPhone", fontSize = 14.sp)
+                    Text("Status: ${if(isPremium) "Premium" else "Free"}", fontSize = 14.sp)
+                    Text("Last Backup: ${lastBackup ?: "Never"}", fontSize = 14.sp)
+                    
+                    if (isPremium) {
+                        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { viewModel.syncNow() },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Backup Now", fontSize = 12.sp)
+                            }
+                            OutlinedButton(
+                                onClick = { viewModel.restoreNow() },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Restore", fontSize = 12.sp)
+                            }
+                        }
+                    } else {
+                        Text(
+                            "Cloud backup is a premium feature.", 
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+            }
+
             SettingsItem(
                 title = stringResource(R.string.user_profile),
                 subtitle = stringResource(R.string.user_profile_sub),
@@ -207,16 +267,29 @@ fun SettingsScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
         }
+
+        if (isSyncing) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .clickable(enabled = false) {},
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            }
+        }
     }
 
     if (showLanguageDialog) {
         LanguageSelectionDialog(
             currentCode = languageCode,
             onDismiss = { showLanguageDialog = false },
-            onSelect = { 
-                viewModel.updateLanguage(it)
+            onSelect = { selectedCode ->
+                viewModel.updateLanguage(selectedCode) {
+                    onLanguageChanged()
+                }
                 showLanguageDialog = false
-                onLanguageChanged()
             }
         )
     }

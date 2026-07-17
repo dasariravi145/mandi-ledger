@@ -337,12 +337,13 @@ fun NewArrivalScreen(
             onConfirm = { d ->
                 if (!d.farmerName.isNullOrEmpty()) farmerName = d.farmerName
                 if (!d.product.isNullOrEmpty()) viewModel.onProductQueryChange(d.product)
-                if (!d.grade.isNullOrEmpty() || d.quantity != null || d.rate != null) {
+                if (!d.grade.isNullOrEmpty() || d.quantity != null || d.rate != null || d.waste != null) {
                     gradeEntries = listOf(ArrivalViewModel.GradeEntry(
                         grade = d.grade ?: "Grade A",
                         quantity = d.quantity ?: 0.0,
                         rate = d.rate ?: 0.0,
-                        unit = d.unit ?: "KG"
+                        unit = d.unit ?: "KG",
+                        spoilage = d.waste ?: 0.0
                     ))
                 }
                 if (d.commission != null) commissionInput = Formatter.formatWeight(d.commission)
@@ -861,7 +862,13 @@ fun GradeEntryRow(
                             spoilageInput = it
                             onEntryChange(entry.copy(spoilage = it.toDoubleOrNull() ?: 0.0)) 
                         },
-                        label = { Text(if (entry.unit == "Ton") "Spoilage per Ton (KG)" else stringResource(R.string.spoilage) + " (KG)") },
+                        label = { 
+                            Text(
+                                if (entry.unit == "Ton") "Waste (%)"
+                                else if (entry.unit == "KG") stringResource(R.string.spoilage) + " (%)" 
+                                else stringResource(R.string.spoilage) + " (KG)"
+                            ) 
+                        },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )

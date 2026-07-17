@@ -24,5 +24,6 @@ data class UserEntity(
     val ocrEnabled: Boolean = false,
     val ocrCloudStorageEnabled: Boolean = false,
     val pdfCloudStorageEnabled: Boolean = false,
+    val isProfileCompleted: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )

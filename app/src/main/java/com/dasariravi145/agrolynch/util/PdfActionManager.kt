@@ -33,11 +33,16 @@ object PdfActionManager {
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(pdfUri, "application/pdf")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             
             Timber.d("PDF_OPEN_LAUNCHED")
-            context.startActivity(intent)
+            val activity = context.findActivity()
+            if (activity != null) {
+                activity.startActivity(intent)
+            } else {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            }
         } catch (e: Exception) {
             Timber.e(e, "PDF_ACTION_FAILED")
             Toast.makeText(context, "Cannot open PDF: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -71,11 +76,18 @@ object PdfActionManager {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, pdfUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             
             Timber.d("PDF_SHARE_LAUNCHED")
-            context.startActivity(Intent.createChooser(intent, "Share Bill"))
+            val chooserIntent = Intent.createChooser(intent, "Share Bill")
+            
+            val activity = context.findActivity()
+            if (activity != null) {
+                activity.startActivity(chooserIntent)
+            } else {
+                chooserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(chooserIntent)
+            }
         } catch (e: Exception) {
             Timber.e(e, "PDF_ACTION_FAILED")
             Toast.makeText(context, "Failed to share PDF: ${e.message}", Toast.LENGTH_SHORT).show()

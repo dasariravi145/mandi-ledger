@@ -12,5 +12,5 @@ data class InvoiceWizardConfig(
     val stampPosition: String = "HIDE", // TOP_RIGHT, BOTTOM_RIGHT, HIDE
     val theme: String = "GREEN",
     val showGst: Boolean = true,
-    val showTagline: Boolean = true
+    val showTagline: Boolean = true,
 )

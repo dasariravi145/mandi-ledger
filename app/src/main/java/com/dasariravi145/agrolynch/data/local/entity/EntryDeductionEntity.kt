@@ -12,12 +12,12 @@ import androidx.room.PrimaryKey
 )
 data class EntryDeductionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val entryId: String,
-    val entryType: String, // STOCK, SALE, PAYMENT
-    val billId: String,
-    val deductionType: String, // CAT, Paper, Advance, etc.
+    val entryId: String = "",
+    val entryType: String = "", // STOCK, SALE, PAYMENT
+    val billId: String = "",
+    val deductionType: String = "", // CAT, Paper, Advance, etc.
     val customName: String = "",
-    val amount: Double,
+    val amount: Double = 0.0,
     val notes: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )

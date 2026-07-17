@@ -7,9 +7,9 @@ import com.dasariravi145.agrolynch.data.local.entity.FarmerEntity
 import com.dasariravi145.agrolynch.data.local.entity.PaymentEntity
 import com.dasariravi145.agrolynch.domain.repository.*
 import com.dasariravi145.agrolynch.util.*
-import android.content.Context
 import android.app.Activity
-import com.dasariravi145.agrolynch.util.findActivity
+import android.content.Context
+import android.util.Log
 import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -172,10 +172,19 @@ class PaymentViewModel @Inject constructor(
 
     fun printPayment(context: Context, payment: PaymentEntity) {
         val billNo = payment.billNumber.ifEmpty { payment.id }
+        Log.d("PaymentBill", "Print clicked paymentId=${payment.id}")
         viewModelScope.launch {
             try {
                 _isPrinting.value = billNo
-                
+                Log.d("PaymentBill", "Preparing payment bill")
+
+                // Task 6: Payment data check
+                if (payment.id.isBlank() || payment.partyName.isBlank() || payment.amount <= 0 || payment.paymentMode.isBlank()) {
+                    Log.e("PaymentBill", "Payment validation failed: id=${payment.id}, party=${payment.partyName}, amount=${payment.amount}")
+                    _error.emit("Cannot generate bill: Missing payment details")
+                    return@launch
+                }
+
                 if (!premiumStateManager.getCachedPremiumStatus()) {
                     _exportStatus.emit("PREMIUM_REQUIRED")
                     return@launch
@@ -192,16 +201,19 @@ class PaymentViewModel @Inject constructor(
                     exportService.exportPaymentToPdf(context, profile, payment, payment.partyType)
                 }
 
-                if (file != null && file.exists()) {
+                if (file != null && file.exists() && file.length() > 0) {
+                    Log.d("PaymentBill", "Generated file path=${file.absolutePath}")
+                    Log.d("PaymentBill", "File exists=${file.exists()}, length=${file.length()}")
                     withContext(Dispatchers.Main) {
                         val uri = PdfGenerator.getUriFromFile(context, file)
                         PdfPrintHelper.print(activity, uri)
                     }
                 } else {
-                    _exportStatus.emit("FAILED: PDF generation failed")
+                    Log.e("PaymentBill", "Bill file not generated or empty")
+                    _error.emit("Bill file not generated")
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Print failed")
+                Log.e("PaymentBill", "Payment bill generation failed", e)
                 _exportStatus.emit("FAILED: ${e.message}")
             } finally {
                 _isPrinting.value = null
@@ -211,10 +223,19 @@ class PaymentViewModel @Inject constructor(
 
     fun sharePayment(context: Context, payment: PaymentEntity) {
         val billNo = payment.billNumber.ifEmpty { payment.id }
+        Log.d("PaymentBill", "Share clicked paymentId=${payment.id}")
         viewModelScope.launch {
             try {
                 _isSharing.value = billNo
-                
+                Log.d("PaymentBill", "Preparing payment bill")
+
+                // Task 6: Payment data check
+                if (payment.id.isBlank() || payment.partyName.isBlank() || payment.amount <= 0 || payment.paymentMode.isBlank()) {
+                    Log.e("PaymentBill", "Payment validation failed: id=${payment.id}, party=${payment.partyName}, amount=${payment.amount}")
+                    _error.emit("Cannot generate bill: Missing payment details")
+                    return@launch
+                }
+
                 if (!premiumStateManager.getCachedPremiumStatus()) {
                     _exportStatus.emit("PREMIUM_REQUIRED")
                     return@launch
@@ -225,16 +246,19 @@ class PaymentViewModel @Inject constructor(
                     exportService.exportPaymentToPdf(context, profile, payment, payment.partyType)
                 }
 
-                if (file != null && file.exists()) {
+                if (file != null && file.exists() && file.length() > 0) {
+                    Log.d("PaymentBill", "Generated file path=${file.absolutePath}")
+                    Log.d("PaymentBill", "File exists=${file.exists()}, length=${file.length()}")
                     withContext(Dispatchers.Main) {
                         val uri = PdfGenerator.getUriFromFile(context, file)
                         PdfActionManager.sharePdf(context, uri)
                     }
                 } else {
-                    _exportStatus.emit("FAILED: PDF generation failed")
+                    Log.e("PaymentBill", "Bill file not generated or empty")
+                    _error.emit("Bill file not generated")
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Share failed")
+                Log.e("PaymentBill", "Payment bill generation failed", e)
                 _exportStatus.emit("FAILED: ${e.message}")
             } finally {
                 _isSharing.value = null

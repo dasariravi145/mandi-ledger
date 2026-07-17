@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.dasariravi145.agrolynch.R
 import com.dasariravi145.agrolynch.data.local.entity.SubscriptionEntity
+import com.dasariravi145.agrolynch.util.findActivity
+import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -35,7 +37,8 @@ fun PremiumScreen(
     val uiState by viewModel.uiState.collectAsState()
     val isPremium by viewModel.isPremium.collectAsState()
     val subscriptionHistory by viewModel.subscriptionHistory.collectAsState()
-    val activity = LocalActivity.current as Activity
+    val context = LocalContext.current
+    val activity = context.findActivity()
 
     Scaffold(
         topBar = {
@@ -86,15 +89,16 @@ fun PremiumScreen(
             Spacer(modifier = Modifier.height(32.dp))
             
             if (!isPremium) {
-                val billingProductDetails = viewModel.productDetailsList.collectAsState().value
+                val billingProductDetails by viewModel.productDetailsList.collectAsState()
+                val premiumProduct = billingProductDetails.find { it.productId == "premium" }
                 
-                if (billingProductDetails.isEmpty() && uiState !is PremiumUiState.Loading) {
+                if (premiumProduct == null && uiState !is PremiumUiState.Loading) {
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                     ) {
                         Text(
-                            text = "Premium plan not available. Please check Play Console product setup.",
+                            text = "Premium plans not available. Please check your internet connection.",
                             modifier = Modifier.padding(16.dp),
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             textAlign = TextAlign.Center
@@ -102,20 +106,27 @@ fun PremiumScreen(
                     }
                 }
 
-                com.dasariravi145.agrolynch.domain.model.PREMIUM_PLANS.forEach { plan ->
-                    val details = billingProductDetails.find { it.productId == plan.productId }
-                    val formattedPrice = details?.subscriptionOfferDetails?.get(0)?.pricingPhases?.pricingPhaseList?.get(0)?.formattedPrice 
-                        ?: plan.formattedPrice
+                premiumProduct?.subscriptionOfferDetails?.forEach { offer ->
+                    val plan = com.dasariravi145.agrolynch.domain.model.PREMIUM_PLANS.find { 
+                        it.basePlanId == offer.basePlanId 
+                    }
+                    
+                    if (plan != null) {
+                        val formattedPrice = offer.pricingPhases.pricingPhaseList.lastOrNull()?.formattedPrice 
+                            ?: plan.formattedPrice
 
-                    PremiumPlanCard(
-                        plan = plan,
-                        formattedPrice = formattedPrice,
-                        isLoading = uiState is PremiumUiState.Loading,
-                        onSubscribe = { 
-                            details?.let { viewModel.subscribe(activity, it) }
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                        PremiumPlanCard(
+                            plan = plan,
+                            formattedPrice = formattedPrice,
+                            isLoading = uiState is PremiumUiState.Loading,
+                            onSubscribe = { 
+                                activity?.let {
+                                    viewModel.subscribe(it, premiumProduct, offer.basePlanId)
+                                }
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                 }
                 
                 TextButton(onClick = { viewModel.restorePurchases() }) {
@@ -202,7 +213,7 @@ fun PremiumPlanCard(
                 verticalAlignment = Alignment.Bottom
             ) {
                 Text(text = formattedPrice, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
-                if (plan.productId != "premium_1_month") {
+                if (plan.basePlanId != "monthly") {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = "(${plan.monthlyPrice})", fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 6.dp))
                 }

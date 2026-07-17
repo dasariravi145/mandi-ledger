@@ -3,15 +3,20 @@ package com.dasariravi145.agrolynch
 import android.content.Context
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
 import com.dasariravi145.agrolynch.util.LanguageManager
@@ -65,23 +70,31 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             val context = LocalContext.current
-            val languageCode by settingsRepository.languageCode.collectAsState(initial = "en")
+            val languageCode by settingsRepository.languageCode.collectAsState(initial = LanguageManager.getLanguageCodeSync(context))
             val isDarkMode by settingsRepository.isDarkMode.collectAsState(initial = false)
             
             // Re-apply locale if it changes during runtime
-            val localizedContext = LanguageManager.applyLocale(context, languageCode)
+            val localizedContext = remember(languageCode) {
+                LanguageManager.applyLocale(context, languageCode)
+            }
 
-            MandiLedgerTheme(darkTheme = isDarkMode) {
-                NotificationPermissionHandler()
-                val navController = rememberNavController()
-                
-                DisposableEffect(Unit) {
-                    onDispose {
-                        securityViewModel.logout() // Clear session on close
+            CompositionLocalProvider(
+                LocalContext provides localizedContext,
+                LocalConfiguration provides localizedContext.resources.configuration,
+                LocalActivityResultRegistryOwner provides this@MainActivity
+            ) {
+                MandiLedgerTheme(darkTheme = isDarkMode) {
+                    NotificationPermissionHandler()
+                    val navController = rememberNavController()
+                    
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            securityViewModel.logout() // Clear session on close
+                        }
                     }
-                }
 
-                SetupNavGraph(navController = navController)
+                    SetupNavGraph(navController = navController)
+                }
             }
         }
         timber.log.Timber.d("MainActivity: onCreate finished in ${System.currentTimeMillis() - startTime}ms")

@@ -1,10 +1,13 @@
 package com.dasariravi145.agrolynch.data.remote.model
 
 data class FirestoreUserProfile(
-    val userId: String = "",
-    val name: String = "",
-    val phone: String = "",
-    val role: String = "AGENT",
+    val mobileNumber: String = "",
+    val fullName: String = "",
+    val address: String = "",
+    val pinHash: String = "",
+    val biometricEnabled: Boolean = false,
+    val language: String = "en",
+    val isProfileCompleted: Boolean = false,
     val isPremium: Boolean = false,
     val premiumPlan: String = "",
     val premiumStartDate: Long = 0L,
@@ -12,14 +15,15 @@ data class FirestoreUserProfile(
     val purchaseToken: String = "",
     val productId: String = "",
     val premiumExpiry: Long = 0L,
-    val cloudBackupEnabled: Boolean = false,
+    val backupEnabled: Boolean = false,
     val multiDeviceSyncEnabled: Boolean = false,
     val voiceEntryEnabled: Boolean = false,
     val ocrEnabled: Boolean = false,
     val ocrCloudStorageEnabled: Boolean = false,
     val pdfCloudStorageEnabled: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val lastLogin: Long = System.currentTimeMillis()
 )
 
 data class FirestoreFarmer(

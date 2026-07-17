@@ -1,6 +1,8 @@
 package com.dasariravi145.agrolynch.ui.navigation
 
+import android.app.Activity
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -45,6 +47,7 @@ import com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileScreen
 import com.dasariravi145.agrolynch.util.ocr.ExtractedBillData
 import com.dasariravi145.agrolynch.util.ocr.ExtractedBillItem
 import com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileViewModel
+import com.dasariravi145.agrolynch.util.findActivity
 import timber.log.Timber
 
 @Composable
@@ -81,8 +84,15 @@ fun SetupNavGraph(
             )
         }
         composable(route = Screen.LanguageSelection.route) {
-            LanguageSelectionScreen(onLanguageSelected = {
-                navController.navigate(Screen.Login.route)
+            val context = LocalContext.current
+            LanguageSelectionScreen(onLanguageSelected = { code ->
+                Timber.d("LANGUAGE_COMPLETION_SAVED: $code")
+                Timber.d("LANGUAGE_NAVIGATION_STARTED: ${Screen.Splash.route}")
+                navController.navigate(Screen.Splash.route) {
+                    popUpTo(0) { inclusive = true }
+                }
+                Timber.d("LANGUAGE_ACTIVITY_RECREATE_REQUESTED")
+                context.findActivity()?.recreate()
             })
         }
         composable(route = Screen.Login.route) {
@@ -92,36 +102,50 @@ fun SetupNavGraph(
                 onOtpSent = {
                     val verificationId = authViewModel.state.value.verificationId ?: ""
                     val phone = authViewModel.state.value.phoneNumber ?: ""
-                    navController.navigate("otp/$verificationId/$phone")
+                    navController.navigate("otp/$verificationId/$phone?isForgotPin=false")
                 }
             )
         }
         composable(
-            route = "otp/{verificationId}/{phone}",
+            route = "otp/{verificationId}/{phone}?isForgotPin={isForgotPin}",
             arguments = listOf(
                 navArgument("verificationId") { type = NavType.StringType },
-                navArgument("phone") { type = NavType.StringType }
+                navArgument("phone") { type = NavType.StringType },
+                navArgument("isForgotPin") { type = NavType.BoolType; defaultValue = false }
             )
         ) { backStackEntry ->
+            val isForgotPinFromArgs = backStackEntry.arguments?.getBoolean("isForgotPin") ?: false
             val authViewModel: AuthViewModel = hiltViewModel()
+            
             OtpScreen(
                 viewModel = authViewModel,
                 onVerified = {
-                    val isForgotPin = authViewModel.state.value.isForgotPinFlow
-                    val pinExists = authViewModel.state.value.isRegistered
+                    val profileExists = authViewModel.state.value.isRegistered
                     
-                    val route = if (isForgotPin) {
-                        Screen.Register.route
-                    } else if (pinExists) {
-                        Screen.Dashboard.route
-                    } else {
-                        Screen.Register.route
+                    val route = when {
+                        isForgotPinFromArgs -> "reset_pin"
+                        profileExists -> Screen.Dashboard.route
+                        else -> Screen.Register.route
                     }
+
+                    Timber.tag("ProfileCheck").d("Navigating from OTP. isForgotPin=$isForgotPinFromArgs, profileExists=$profileExists. Route: $route")
 
                     navController.navigate(route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 }
+            )
+        }
+        composable(route = "reset_pin") {
+            val authViewModel: AuthViewModel = hiltViewModel()
+            ResetPinScreen(
+                viewModel = authViewModel,
+                onPinReset = {
+                    navController.navigate(Screen.Security.route) {
+                        popUpTo("reset_pin") { inclusive = true }
+                    }
+                },
+                onBack = { navController.popBackStack() }
             )
         }
         composable(route = Screen.Register.route) {
@@ -151,7 +175,7 @@ fun SetupNavGraph(
                 onViewLedger = { navController.navigate(Screen.Ledger.route) },
                 onViewExpenses = { navController.navigate(Screen.Expense.route) },
                 onViewAnalytics = { navController.navigate(Screen.Analytics.route) },
-                onViewReports = { navController.navigate(Screen.ReportsDashboard.route) },
+                onViewReports = { navController.navigate(Screen.BusinessReport.route) },
                 onViewSecurity = { navController.navigate(Screen.Security.route) },
                 onViewBackup = { navController.navigate(Screen.Backup.route) },
                 onViewSettings = { navController.navigate(Screen.Settings.route) },
@@ -515,7 +539,7 @@ fun SetupNavGraph(
                 onOtpSent = {
                     val verificationId = authViewModel.state.value.verificationId ?: ""
                     val phone = authViewModel.state.value.phoneNumber ?: ""
-                    navController.navigate("otp/$verificationId/$phone")
+                    navController.navigate("otp/$verificationId/$phone?isForgotPin=true")
                 },
                 onBack = { navController.popBackStack() }
             )
@@ -537,6 +561,7 @@ fun SetupNavGraph(
             )
         }
         composable(route = Screen.Settings.route) {
+            val context = LocalContext.current
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             SettingsScreen(
                 viewModel = settingsViewModel,
@@ -547,7 +572,9 @@ fun SetupNavGraph(
                 onViewBackup = { navController.navigate(Screen.Backup.route) },
                 onViewSubscription = { navController.navigate(Screen.Premium.route) },
                 onViewDeveloperOptions = { navController.navigate(Screen.DeveloperOptions.route) },
-                onLanguageChanged = { /* Restart activity if needed */ },
+                onLanguageChanged = { 
+                    context.findActivity()?.recreate()
+                },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(0) { inclusive = true }
@@ -602,6 +629,10 @@ fun SetupNavGraph(
                 onNavigateToOutstandingReport = { navController.navigate(Screen.OutstandingReport.route) },
                 onNavigateToProductPerformance = { navController.navigate(Screen.ProductPerformance.route) }
             )
+        }
+        composable(route = Screen.BusinessReport.route) {
+            val reportViewModel: ReportViewModel = hiltViewModel()
+            BusinessReportScreen(viewModel = reportViewModel, onBack = { navController.popBackStack() })
         }
         composable(route = Screen.StockReport.route) {
             val reportViewModel: ReportViewModel = hiltViewModel()

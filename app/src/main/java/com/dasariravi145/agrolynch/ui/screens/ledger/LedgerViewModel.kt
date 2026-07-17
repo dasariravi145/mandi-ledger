@@ -7,12 +7,15 @@ import com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity
 import com.dasariravi145.agrolynch.domain.model.*
 import com.dasariravi145.agrolynch.domain.repository.LedgerRepository
 import com.dasariravi145.agrolynch.domain.repository.CompanyRepository
+import com.dasariravi145.agrolynch.domain.repository.FarmerRepository
+import com.dasariravi145.agrolynch.domain.repository.BuyerRepository
 import com.dasariravi145.agrolynch.util.LedgerExportService
 import com.dasariravi145.agrolynch.util.PremiumStateManager
 import com.dasariravi145.agrolynch.util.findActivity
 import com.dasariravi145.agrolynch.util.PdfGenerator
 import com.dasariravi145.agrolynch.util.PdfPrintHelper
 import com.dasariravi145.agrolynch.util.PdfActionManager
+import com.dasariravi145.agrolynch.util.CommunicationUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -29,10 +32,16 @@ data class LedgerFilter(
     val transactionType: TransactionType? = null
 )
 
+enum class ShareType {
+    WHATSAPP, PDF, OTHER
+}
+
 @HiltViewModel
 class LedgerViewModel @Inject constructor(
     private val repository: LedgerRepository,
     private val companyRepository: CompanyRepository,
+    private val farmerRepository: FarmerRepository,
+    private val buyerRepository: BuyerRepository,
     private val premiumStateManager: PremiumStateManager,
     private val exportService: LedgerExportService
 ) : ViewModel() {
@@ -129,7 +138,13 @@ class LedgerViewModel @Inject constructor(
         }
     }
 
-    fun shareLedgerEntry(context: Context, entry: LedgerEntry, partyType: String) {
+    fun shareLedgerEntry(
+        context: Context, 
+        entry: LedgerEntry, 
+        partyType: String,
+        shareType: ShareType = ShareType.OTHER,
+        phoneNumber: String? = null
+    ) {
         val billNo = entry.details?.billNumber?.ifEmpty { entry.id } ?: entry.id
         viewModelScope.launch {
             try {
@@ -143,7 +158,17 @@ class LedgerViewModel @Inject constructor(
                 if (file != null && file.exists()) {
                     withContext(kotlinx.coroutines.Dispatchers.Main) {
                         val uri = PdfGenerator.getUriFromFile(context, file)
-                        PdfActionManager.sharePdf(context, uri)
+                        when (shareType) {
+                            ShareType.WHATSAPP -> {
+                                CommunicationUtils.shareFileToWhatsApp(context, uri, phoneNumber)
+                            }
+                            ShareType.PDF -> {
+                                PdfActionManager.openPdf(context, uri)
+                            }
+                            ShareType.OTHER -> {
+                                PdfActionManager.sharePdf(context, uri)
+                            }
+                        }
                     }
                 } else {
                     _exportStatus.emit("FAILED: PDF generation failed")
@@ -154,6 +179,14 @@ class LedgerViewModel @Inject constructor(
             } finally {
                 _isSharing.value = null
             }
+        }
+    }
+
+    suspend fun getPartyMobileNumber(partyId: String, partyType: String): String? {
+        return if (partyType == "FARMER") {
+            farmerRepository.getFarmerById(partyId)?.mobileNumber
+        } else {
+            buyerRepository.getBuyerById(partyId)?.mobileNumber
         }
     }
 

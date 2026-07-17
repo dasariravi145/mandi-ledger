@@ -11,6 +11,7 @@ data class AuthState(
     val isBiometricEnabled: Boolean = false,
     val isBiometricAvailable: Boolean = false,
     val showBiometricPrompt: Boolean = false,
+    val showBiometricSetupDialog: Boolean = false,
     val verificationId: String? = null,
     val phoneNumber: String = "",
     val isForgotPinFlow: Boolean = false,

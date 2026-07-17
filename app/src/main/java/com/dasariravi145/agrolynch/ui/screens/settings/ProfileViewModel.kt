@@ -1,22 +1,19 @@
 package com.dasariravi145.agrolynch.ui.screens.settings
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.data.local.entity.UserEntity
-import com.dasariravi145.agrolynch.domain.repository.AuthRepository
+import com.dasariravi145.agrolynch.domain.repository.UserRepository
 import com.dasariravi145.agrolynch.util.PremiumStateManager
+import com.dasariravi145.agrolynch.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val authRepository: AuthRepository,
+    private val userRepository: UserRepository,
     private val premiumStateManager: PremiumStateManager
 ) : ViewModel() {
 
@@ -36,9 +33,10 @@ class ProfileViewModel @Inject constructor(
     }
 
     private fun loadProfile() {
-        val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            _user.value = authRepository.getUserProfile(uid)
+            userRepository.getUserProfile().collect { profile ->
+                _user.value = profile
+            }
         }
     }
 
@@ -47,12 +45,15 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             val updated = current.copy(name = name, location = location)
-            val result = authRepository.registerUser(updated) // Re-uses same DAO method for simplicity
-            if (result.isSuccess) {
-                _user.value = updated
-                _message.emit("Profile updated successfully")
-            } else {
-                _message.emit("Failed to update profile")
+            val result = userRepository.saveProfile(updated)
+            when (result) {
+                is Resource.Success -> {
+                    _message.emit("Profile updated successfully")
+                }
+                is Resource.Error -> {
+                    _message.emit(result.message ?: "Failed to update profile")
+                }
+                else -> {}
             }
             _isLoading.value = false
         }

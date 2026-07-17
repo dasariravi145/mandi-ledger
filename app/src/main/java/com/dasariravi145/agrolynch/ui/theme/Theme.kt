@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.dasariravi145.agrolynch.util.findActivity
 
 private val DarkColorScheme = darkColorScheme(
     primary = PrimaryGreen,
@@ -64,9 +65,14 @@ fun MandiLedgerTheme(
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+            val context = view.context
+            val activity = context.findActivity()
+            
+            activity?.let {
+                val window = it.window
+                window.statusBarColor = colorScheme.primary.toArgb()
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+            }
         }
     }
 

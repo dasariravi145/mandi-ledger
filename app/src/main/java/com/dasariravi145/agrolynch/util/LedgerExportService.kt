@@ -21,6 +21,6 @@ class LedgerExportService @Inject constructor(
     }
 
     suspend fun exportPaymentToPdf(context: Context, profile: CompanyProfileEntity, payment: com.dasariravi145.agrolynch.data.local.entity.PaymentEntity, partyType: String): File? {
-        return pdfService.generatePaymentReceiptPdf(context, profile, payment, partyType == "Farmer")
+        return pdfService.generatePaymentReceiptPdf(context, profile, payment, partyType.equals("FARMER", ignoreCase = true))
     }
 }

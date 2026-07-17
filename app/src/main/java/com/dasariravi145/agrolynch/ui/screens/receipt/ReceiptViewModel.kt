@@ -1,8 +1,11 @@
 package com.dasariravi145.agrolynch.ui.screens.receipt
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dasariravi145.agrolynch.domain.model.ReceiptData
 import com.dasariravi145.agrolynch.domain.repository.CompanyRepository
+import com.dasariravi145.agrolynch.util.pdf.TemplateInvoicePdfService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -16,6 +19,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ReceiptViewModel @Inject constructor(
     private val companyRepository: CompanyRepository,
+    private val pdfService: TemplateInvoicePdfService,
     private val premiumStateManager: com.dasariravi145.agrolynch.util.PremiumStateManager
 ) : ViewModel() {
 
@@ -32,6 +36,15 @@ class ReceiptViewModel @Inject constructor(
         viewModelScope.launch {
             _companyProfile.value?.let { profile ->
                 companyRepository.updateProfile(profile.copy(defaultTemplate = templateId))
+            }
+        }
+    }
+
+    fun generatePdf(context: Context, data: ReceiptData) {
+        viewModelScope.launch {
+            _companyProfile.value?.let { profile ->
+                val file = pdfService.generatePaymentReceiptPdf(context, profile, data)
+                _generatedPdfFile.value = file
             }
         }
     }

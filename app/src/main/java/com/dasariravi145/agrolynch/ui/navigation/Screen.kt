@@ -73,6 +73,7 @@ sealed class Screen(val route: String) {
         fun passArgs(id: String, bg: String) = "invoice_mapper/$id/$bg"
     }
     object ReportsDashboard : Screen("reports_dashboard")
+    object BusinessReport : Screen("business_report")
     object StockReport : Screen("stock_report")
     object DailySalesReport : Screen("daily_sales_report")
     object MonthlySalesReport : Screen("monthly_sales_report")

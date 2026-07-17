@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.data.local.entity.BackupEntity
 import com.dasariravi145.agrolynch.domain.repository.BackupRepository
+import com.dasariravi145.agrolynch.domain.repository.SyncRepository
 import com.dasariravi145.agrolynch.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -14,7 +15,8 @@ import timber.log.Timber
 
 @HiltViewModel
 class BackupViewModel @Inject constructor(
-    private val repository: BackupRepository
+    private val repository: BackupRepository,
+    private val syncRepository: SyncRepository
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(false)
@@ -43,14 +45,23 @@ class BackupViewModel @Inject constructor(
     fun performManualBackup() {
         viewModelScope.launch {
             _isLoading.value = true
-            // 1. Create Local Backup
+            
+            // 1. Sync Entities to Firestore (Document-based Backup)
+            val syncResult = syncRepository.syncAllData()
+            if (syncResult is Resource.Error) {
+                Timber.e("Firestore sync failed: ${syncResult.message}")
+                // We continue with file-based backup even if firestore sync fails, 
+                // but we might want to notify user.
+            }
+
+            // 2. Create Local File Backup
             when (val localResult = repository.createLocalBackup("MANUAL")) {
                 is Resource.Success -> {
                     val file = localResult.data
                     if (file != null && file.exists()) {
                         // Find the local record we just created to get its ID
                         val lastLocal = repository.getBackupHistory().first().find { it.fileName == file.name && it.type == "LOCAL" }
-                        // 2. Upload to Cloud
+                        // 3. Upload File to Cloud Storage
                         when (val cloudResult = repository.uploadBackupToCloud(file, "MANUAL", lastLocal?.id)) {
                             is Resource.Success -> _message.emit("backup_complete_success")
                             is Resource.Error -> _message.emit("Cloud upload failed: ${cloudResult.message}")

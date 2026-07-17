@@ -325,8 +325,14 @@ object PdfGenerator {
         
         // Dynamic column width distribution
         headers.forEachIndexed { index, _ ->
-            // Use 1.0 weight as default, but Name columns get more
-            val weight = if (headers[index].contains("Name", true) || headers[index].contains("Product", true) || headers[index].contains("Buyer", true) || headers[index].contains("Farmer", true)) 2.0f else 1.0f
+            val header = headers[index]
+            // Use weights to distribute width. Bill/Invoice and Name columns get more space.
+            val weight = when {
+                header.contains("Name", true) || header.contains("Buyer", true) || header.contains("Farmer", true) -> 2.0f
+                header.contains("Product", true) -> 2.0f
+                header.contains("Bill", true) || header.contains("Invoice", true) -> 1.5f
+                else -> 1.0f
+            }
             colWidths.add(weight)
         }
         val totalWeight = colWidths.sum()
@@ -365,12 +371,15 @@ object PdfGenerator {
         
         tableData.forEachIndexed { rowIndex, row ->
             // Calculate height needed for this row (support wrapping)
-            var maxLines = 1
+            var maxLinesInRow = 1
             row.forEachIndexed { colIndex, text ->
-                val lines = paint.breakTextProfessional(text ?: "", colWidths[colIndex] - 10f)
-                maxLines = maxOf(maxLines, lines)
+                val header = headers.getOrNull(colIndex) ?: ""
+                // Requirement: Limit Bill/Invoice numbers to 2 lines to prevent layout breaking
+                val maxLinesLimit = if (header.contains("Bill", true) || header.contains("Invoice", true)) 2 else Int.MAX_VALUE
+                val lines = paint.breakTextProfessional(text ?: "", colWidths[colIndex] - 10f, maxLinesLimit)
+                maxLinesInRow = maxOf(maxLinesInRow, lines)
             }
-            val rowHeight = (maxLines * 12f) + 10f
+            val rowHeight = (maxLinesInRow * 12f) + 10f
             
             // Page overflow check
             if (y + rowHeight > PAGE_HEIGHT - 60f) {
@@ -409,6 +418,7 @@ object PdfGenerator {
                 y += headerHeight
                 paint.typeface = Typeface.DEFAULT
                 paint.color = Color.BLACK
+                paint.textSize = 8f
             }
 
             // Alternate row shading
@@ -418,8 +428,11 @@ object PdfGenerator {
             
             currentX = horizontalPadding
             row.forEachIndexed { colIndex, text ->
+                val header = headers.getOrNull(colIndex) ?: ""
+                val maxLinesLimit = if (header.contains("Bill", true) || header.contains("Invoice", true)) 2 else Int.MAX_VALUE
                 val align = alignments.getOrElse(colIndex) { Paint.Align.LEFT }
-                drawWrappedText(canvas, text ?: "", currentX + 5f, y, colWidths[colIndex] - 10f, paint, align)
+                
+                drawWrappedText(canvas, text ?: "", currentX + 5f, y, colWidths[colIndex] - 10f, paint, align, maxLinesLimit)
                 
                 // Cell borders
                 canvas.drawRect(currentX, y - 18f, currentX + colWidths[colIndex], y + rowHeight - 18f, borderPaint)
@@ -443,24 +456,31 @@ object PdfGenerator {
         canvas.drawText(text, drawX, y, paint)
     }
 
-    private fun drawWrappedText(canvas: Canvas, text: String, x: Float, y: Float, width: Float, paint: Paint, align: Paint.Align): Int {
-        val words = text.split(" ")
-        val lines = mutableListOf<String>()
-        var currentLine = StringBuilder()
+    private fun drawWrappedText(canvas: Canvas, text: String, x: Float, y: Float, width: Float, paint: Paint, align: Paint.Align, maxLines: Int = Int.MAX_VALUE): Int {
+        val originalTextSize = paint.textSize
+        var currentLines = calculateLines(text, width, paint)
         
-        for (word in words) {
-            val testLine = if (currentLine.isEmpty()) word else "${currentLine} $word"
-            if (paint.measureText(testLine) <= width) {
-                currentLine.append(if (currentLine.isEmpty()) "" else " ").append(word)
-            } else {
-                lines.add(currentLine.toString())
-                currentLine = StringBuilder(word)
+        // Requirement: If text (like long bill numbers) doesn't fit in available lines, reduce font size
+        if (currentLines.size > maxLines && maxLines > 0) {
+            paint.textSize = originalTextSize * 0.85f
+            currentLines = calculateLines(text, width, paint)
+            
+            if (currentLines.size > maxLines) {
+                paint.textSize = originalTextSize * 0.75f // Safe minimum
+                currentLines = calculateLines(text, width, paint)
             }
         }
-        if (currentLine.isNotEmpty()) lines.add(currentLine.toString())
-        
+
+        // Requirement: Truncate if still exceeding maxLines
+        if (currentLines.size > maxLines && maxLines > 0) {
+            val truncated = currentLines.take(maxLines).toMutableList()
+            val lastLine = truncated.last()
+            truncated[maxLines - 1] = if (lastLine.length > 3) lastLine.substring(0, lastLine.length - 3) + "..." else "..."
+            currentLines = truncated
+        }
+
         var currentY = y
-        lines.forEach { line ->
+        currentLines.forEach { line ->
             paint.textAlign = align
             val drawX = when (align) {
                 Paint.Align.LEFT -> x
@@ -468,27 +488,76 @@ object PdfGenerator {
                 Paint.Align.RIGHT -> x + width
             }
             canvas.drawText(line, drawX, currentY, paint)
-            currentY += 12f
+            currentY += 12f // Fixed line spacing as per original layout
         }
-        return lines.size
+        
+        val linesCount = currentLines.size
+        paint.textSize = originalTextSize // Restore
+        return linesCount
     }
 
-    private fun Paint.breakTextProfessional(text: String, maxWidth: Float): Int {
+    private fun Paint.breakTextProfessional(text: String, maxWidth: Float, maxLines: Int = Int.MAX_VALUE): Int {
+        val lines = calculateLines(text, maxWidth, this)
+        return if (lines.size > maxLines) maxLines else maxOf(1, lines.size)
+    }
+
+    private fun calculateLines(text: String, maxWidth: Float, paint: Paint): List<String> {
         val words = text.split(" ")
-        if (words.isEmpty()) return 1
-        var lines = 0
+        val lines = mutableListOf<String>()
         var currentLine = StringBuilder()
+        
         for (word in words) {
             val testLine = if (currentLine.isEmpty()) word else "${currentLine} $word"
-            if (measureText(testLine) <= maxWidth) {
+            if (paint.measureText(testLine) <= maxWidth) {
                 currentLine.append(if (currentLine.isEmpty()) "" else " ").append(word)
             } else {
-                lines++
-                currentLine = StringBuilder(word)
+                if (currentLine.isNotEmpty()) {
+                    lines.add(currentLine.toString())
+                    currentLine = StringBuilder()
+                }
+                
+                // Handle long words/IDs without spaces (e.g., GK-Farmer-26-27-000001)
+                var remainingWord = word
+                while (paint.measureText(remainingWord) > maxWidth) {
+                    val breakIndex = findBestBreakIndex(remainingWord, maxWidth, paint)
+                    lines.add(remainingWord.substring(0, breakIndex))
+                    remainingWord = remainingWord.substring(breakIndex)
+                    if (remainingWord.isEmpty()) break
+                }
+                if (remainingWord.isNotEmpty()) {
+                    currentLine.append(remainingWord)
+                }
             }
         }
-        if (currentLine.isNotEmpty()) lines++
-        return maxOf(1, lines)
+        if (currentLine.isNotEmpty()) lines.add(currentLine.toString())
+        return lines
+    }
+
+    private fun findBestBreakIndex(word: String, maxWidth: Float, paint: Paint): Int {
+        // Preferred break characters
+        val breakChars = listOf('-', '/', '_', '.', ',')
+        for (i in word.indices.reversed()) {
+            if (word[i] in breakChars) {
+                if (paint.measureText(word.substring(0, i + 1)) <= maxWidth) {
+                    return i + 1
+                }
+            }
+        }
+        
+        // Hard character break if no preferred break character found
+        var low = 1
+        var high = word.length
+        var best = 1
+        while (low <= high) {
+            val mid = (low + high) / 2
+            if (paint.measureText(word.substring(0, mid)) <= maxWidth) {
+                best = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        return best
     }
 
     private fun drawFooter(canvas: Canvas, page: Int) {
@@ -521,6 +590,106 @@ object PdfGenerator {
         
         drawProfessionalReport(pdf, profile, "DASHBOARD SUMMARY", range, headers, tableData, summ, alignments)
         return savePdf(pdf, context, "Reports", "DashboardSummary")
+    }
+
+    fun generateBusinessSummaryReport(
+        context: Context,
+        profile: CompanyProfileEntity,
+        totals: Map<String, Double>,
+        range: String
+    ): File? {
+        return try {
+            val pdf = PdfDocument()
+            val pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, 1).create()
+            val page = pdf.startPage(pageInfo)
+            val canvas = page.canvas
+            
+            val paint = Paint()
+            val borderPaint = Paint().apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 0.5f
+                color = Color.LTGRAY
+            }
+            
+            val horizontalPadding = 40f
+            var y = 50f
+    
+            // 1. HEADER (Existing Convention)
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 20f
+            paint.color = Color.parseColor("#1B5E20")
+            canvas.drawText(profile.companyName ?: "MANDI LEDGER", horizontalPadding, y, paint)
+            y += 25f
+            
+            paint.typeface = Typeface.DEFAULT
+            paint.textSize = 14f
+            paint.color = Color.BLACK
+            canvas.drawText("Business Performance Summary", horizontalPadding, y, paint)
+            y += 18f
+            
+            paint.textSize = 10f
+            paint.color = Color.DKGRAY
+            val timestamp = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())
+            canvas.drawText("Generated On: $timestamp", horizontalPadding, y, paint)
+            y += 15f
+            canvas.drawText("Filter Range: $range", horizontalPadding, y, paint)
+            y += 20f
+            
+            canvas.drawLine(horizontalPadding, y, PAGE_WIDTH - horizontalPadding, y, borderPaint)
+            y += 40f
+    
+            // 2. BUSINESS TOTALS
+            val reportItems = listOf(
+                "Total Sales" to (totals["Total Sales"] ?: 0.0),
+                "Total Arrivals" to (totals["Total Arrivals"] ?: 0.0),
+                "Total Commission" to (totals["Total Commission"] ?: 0.0),
+                "Total Expenses" to (totals["Total Expenses"] ?: 0.0),
+                "Farmer Payments" to (totals["Farmer Payments"] ?: 0.0),
+                "Buyer Collections" to (totals["Buyer Collections"] ?: 0.0),
+                "Farmer Pending" to (totals["Farmer Pending"] ?: 0.0),
+                "Buyer Pending" to (totals["Buyer Pending"] ?: 0.0)
+            )
+    
+            paint.textSize = 12f
+            reportItems.forEach { (label, value) ->
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.color = Color.BLACK
+                canvas.drawText(label, horizontalPadding, y, paint)
+                
+                paint.typeface = Typeface.DEFAULT
+                canvas.drawText(Formatter.formatAmount(value), horizontalPadding + 220f, y, paint)
+                y += 25f
+            }
+    
+            y += 10f
+            canvas.drawLine(horizontalPadding, y, horizontalPadding + 400f, y, borderPaint)
+            y += 35f
+    
+            // Net Profit/Loss with success/error styling
+            val netProfit = totals["Net Profit/Loss"] ?: 0.0
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 14f
+            paint.color = Color.BLACK
+            canvas.drawText("Net Profit/Loss", horizontalPadding, y, paint)
+            
+            if (netProfit >= 0) {
+                paint.color = Color.parseColor("#1B5E20") // Success green
+            } else {
+                paint.color = Color.RED // Error red
+            }
+            canvas.drawText(Formatter.formatAmount(netProfit), horizontalPadding + 220f, y, paint)
+            
+            // 3. FOOTER
+            drawFooter(canvas, 1)
+            
+            pdf.finishPage(page)
+            val file = savePdf(pdf, context, "Reports", "BusinessSummaryReport")
+            Timber.d("BusinessSummaryReport: PDF created = ${file?.absolutePath}")
+            file
+        } catch (e: Exception) {
+            Timber.e(e, "BusinessSummaryReport: PDF generation failed")
+            null
+        }
     }
 
     fun savePdf(pdf: PdfDocument, context: Context, dir: String, fileName: String): File? {

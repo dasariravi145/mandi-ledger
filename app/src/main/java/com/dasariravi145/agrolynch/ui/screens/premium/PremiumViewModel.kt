@@ -46,9 +46,13 @@ class PremiumViewModel @Inject constructor(
         }
     }
 
-    fun subscribe(activity: Activity, productDetails: com.android.billingclient.api.ProductDetails) {
+    fun subscribe(
+        activity: Activity,
+        productDetails: com.android.billingclient.api.ProductDetails,
+        basePlanId: String
+    ) {
         _uiState.value = PremiumUiState.Loading
-        billingManager.launchBillingFlow(activity, productDetails)
+        billingManager.launchBillingFlow(activity, productDetails, basePlanId)
     }
 
     fun restorePurchases() {

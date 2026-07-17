@@ -76,7 +76,7 @@ object AppModule {
         )
 
         if (com.dasariravi145.agrolynch.BuildConfig.DEBUG) {
-            builder.fallbackToDestructiveMigration(true)
+            builder.fallbackToDestructiveMigration()
             android.util.Log.d("ROOM_DB", "Database initializing with fallbackToDestructiveMigration in DEBUG mode")
         }
 

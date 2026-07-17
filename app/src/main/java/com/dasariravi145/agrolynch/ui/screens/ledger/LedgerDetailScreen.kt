@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +35,8 @@ import com.dasariravi145.agrolynch.ui.screens.premium.PremiumFeatureLockedDialog
 import java.io.File
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +60,10 @@ fun LedgerDetailScreen(
     
     var showPremiumDialog by remember { mutableStateOf(false) }
     var pendingFileForAction by remember { mutableStateOf<File?>(null) }
+    
+    var showShareSheet by remember { mutableStateOf(false) }
+    var showWhatsAppDialog by remember { mutableStateOf(false) }
+    var selectedEntryForShare by remember { mutableStateOf<LedgerEntry?>(null) }
     
     LaunchedEffect(exportStatus) {
         if (exportStatus == "PREMIUM_REQUIRED") {
@@ -123,8 +130,8 @@ fun LedgerDetailScreen(
                                     viewModel.printLedgerEntry(context, entry, partyType)
                                 },
                                 onShare = {
-                                    android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
-                                    viewModel.shareLedgerEntry(context, entry, partyType)
+                                    selectedEntryForShare = entry
+                                    showShareSheet = true
                                 }
                             )
                         }
@@ -146,6 +153,150 @@ fun LedgerDetailScreen(
             }
         )
     }
+
+    if (showShareSheet && selectedEntryForShare != null) {
+        ShareOptionsBottomSheet(
+            onShareWhatsApp = {
+                showShareSheet = false
+                scope.launch {
+                    val mobile = viewModel.getPartyMobileNumber(partyId, partyType)
+                    if (mobile.isNullOrBlank()) {
+                        showWhatsAppDialog = true
+                    } else {
+                        android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                        viewModel.shareLedgerEntry(context, selectedEntryForShare!!, partyType, ShareType.WHATSAPP, mobile)
+                    }
+                }
+            },
+            onSharePdf = {
+                showShareSheet = false
+                android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                viewModel.shareLedgerEntry(context, selectedEntryForShare!!, partyType, ShareType.PDF)
+            },
+            onShareOther = {
+                showShareSheet = false
+                android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                viewModel.shareLedgerEntry(context, selectedEntryForShare!!, partyType, ShareType.OTHER)
+            },
+            onDismiss = {
+                showShareSheet = false
+                selectedEntryForShare = null
+            }
+        )
+    }
+
+    if (showWhatsAppDialog && selectedEntryForShare != null) {
+        WhatsAppNumberDialog(
+            onConfirm = { number ->
+                showWhatsAppDialog = false
+                android.widget.Toast.makeText(context, "Preparing bill...", android.widget.Toast.LENGTH_SHORT).show()
+                viewModel.shareLedgerEntry(context, selectedEntryForShare!!, partyType, ShareType.WHATSAPP, number)
+                selectedEntryForShare = null
+            },
+            onDismiss = {
+                showWhatsAppDialog = false
+                selectedEntryForShare = null
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ShareOptionsBottomSheet(
+    onShareWhatsApp: () -> Unit,
+    onSharePdf: () -> Unit,
+    onShareOther: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(),
+        containerColor = Color.White
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp, start = 16.dp, end = 16.dp)
+        ) {
+            Text(
+                text = "Share Invoice",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
+            
+            ListItem(
+                headlineContent = { Text("Share to WhatsApp") },
+                leadingContent = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null, tint = Color(0xFF25D366)) },
+                modifier = Modifier.clickable { onShareWhatsApp() }
+            )
+            ListItem(
+                headlineContent = { Text("Share PDF") },
+                leadingContent = { Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color.Red) },
+                modifier = Modifier.clickable { onSharePdf() }
+            )
+            ListItem(
+                headlineContent = { Text("Share using Other Apps") },
+                leadingContent = { Icon(Icons.Default.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.clickable { onShareOther() }
+            )
+        }
+    }
+}
+
+@Composable
+fun WhatsAppNumberDialog(
+    initialNumber: String = "",
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var number by remember { mutableStateOf(initialNumber) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Enter WhatsApp Number") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = number,
+                    onValueChange = {
+                        if (it.length <= 10 && it.all { char -> char.isDigit() }) {
+                            number = it
+                            error = null
+                        }
+                    },
+                    label = { Text("Mobile Number") },
+                    placeholder = { Text("10 digit number") },
+                    prefix = { Text("+91 ") },
+                    isError = error != null,
+                    supportingText = { error?.let { Text(it) } },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (number.length == 10) {
+                        onConfirm(number)
+                    } else {
+                        error = "Enter exactly 10 digits"
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+            ) {
+                Text("Share")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable

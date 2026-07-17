@@ -1,15 +1,105 @@
+###############################
+# Android Studio
+###############################
+
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.idea/
+.gradle/
+.kotlin/
+
+###############################
+# Local Configuration
+###############################
+
 local.properties
+
+###############################
+# Build Outputs
+###############################
+
+build/
+*/build/
+app/build/
+
+###############################
+# Release Files
+###############################
+
+app/release/
+*.apk
+*.aab
+*.apks
+*.aar
+*.dm
+
+###############################
+# Native Build
+###############################
+
+.externalNativeBuild/
+.cxx/
+
+###############################
+# Captures
+###############################
+
+captures/
+
+###############################
+# macOS
+###############################
+
+.DS_Store
+
+###############################
+# Logs
+###############################
+
+*.log
+
+###############################
+# Temporary Files
+###############################
+
+*.tmp
+*.temp
+*.bak
+*.orig
+
+###############################
+# Keystore Files (Never Commit)
+###############################
+
+*.jks
+*.keystore
+
+###############################
+# Firebase (Optional)
+###############################
+# Uncomment only if you DO NOT want to upload it.
+# google-services.json
+
+###############################
+# IntelliJ
+###############################
+
+out/
+
+###############################
+# VS Code (Optional)
+###############################
+
+.vscode/
+
+###############################
+# Generated Files
+###############################
+
+bin/
+obj/
+
+###############################
+# Kotlin
+###############################
+
+.kotlin_metadata
