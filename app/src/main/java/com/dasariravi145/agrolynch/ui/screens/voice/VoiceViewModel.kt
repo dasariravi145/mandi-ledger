@@ -47,7 +47,7 @@ class VoiceViewModel @Inject constructor(
         
         // Boxes specific
         VoiceStep.BOX_COUNT to mapOf("en" to "Say number of boxes", "te" to "బాక్సుల సంఖ్య చెప్పండి", "hi" to "बॉक्स की संख्या बोलें", "ta" to "பெட்டிகளின் எண்ணிக்கையைச் சொல்லுங்கள்", "kn" to "ಪೆಟ್ಟಿಗೆಗಳ ಸಂಖ್ಯೆಯನ್ನು ಹೇಳಿ"),
-        VoiceStep.TOTAL_WEIGHT_TON to mapOf("en" to "Say total weight in Tons", "te" to "మొత్తం బరువు టన్నులలో చెప్పండి", "hi" to "टन में कुल वजन बोलें", "ta" to "டன் கணக்கில் மொத்த எடையைச் சொல்லுங்கள்", "kn" to "ಟನ್‌ಗಳಲ್ಲಿ ಒಟ್ಟು ತೂಕವನ್ನು ಹೇಳಿ"),
+        VoiceStep.TOTAL_WEIGHT_KG to mapOf("en" to "Say total weight in KG", "te" to "మొత్తం బరువు కేజీలలో చెప్పండి", "hi" to "कुल वजन किलो में बोलें", "ta" to "மொத்த எடையை கிலோவில் சொல்லுங்கள்", "kn" to "ಒಟ್ಟು ತೂಕವನ್ನು ಕೆಜಿಗಳಲ್ಲಿ ಹೇಳಿ"),
         VoiceStep.EMPTY_BOX_WEIGHT to mapOf("en" to "Say empty weight per box in KG", "te" to "ఖాళీ బాక్స్ బరువు కేజీలలో చెప్పండి", "hi" to "प्रति बॉक्स खाली वजन बोलें", "ta" to "ஒரு பெட்டியின் காலி எடையைச் சொல்லுங்கள்", "kn" to "ಪ್ರತಿ ಪೆಟ್ಟಿಗೆಯ ಖಾಲಿ ತೂಕವನ್ನು ಹೇಳಿ"),
         VoiceStep.SPOILAGE_PERCENT to mapOf("en" to "Say spoilage percentage", "te" to "వేస్ట్ శాతం చెప్పండి", "hi" to "वेस्ट प्रतिशत बोलें", "ta" to "கழிவு சதவீதத்தைச் சொல்லுங்கள்", "kn" to "ತ್ಯಾಜ್ಯ ಶೇಕಡಾವಾರು ಹೇಳಿ"),
         
@@ -95,7 +95,7 @@ class VoiceViewModel @Inject constructor(
             
             // Boxes mapping
             VoiceStep.BOX_COUNT -> state.draft.copy(numBoxes = value.toDoubleOrNull()?.toInt() ?: 0)
-            VoiceStep.TOTAL_WEIGHT_TON -> state.draft.copy(totalWeightTon = value.toDoubleOrNull() ?: 0.0)
+            VoiceStep.TOTAL_WEIGHT_KG -> state.draft.copy(totalWeightTon = (value.toDoubleOrNull() ?: 0.0) / 1000.0)
             VoiceStep.EMPTY_BOX_WEIGHT -> state.draft.copy(emptyWeightPerBox = value.toDoubleOrNull() ?: 0.0)
             VoiceStep.SPOILAGE_PERCENT -> state.draft.copy(spoilagePercent = value.toDoubleOrNull() ?: 0.0)
             
@@ -134,8 +134,8 @@ class VoiceViewModel @Inject constructor(
             VoiceStep.WASTE -> VoiceStep.RATE
             
             // Boxes Flow
-            VoiceStep.BOX_COUNT -> VoiceStep.TOTAL_WEIGHT_TON
-            VoiceStep.TOTAL_WEIGHT_TON -> VoiceStep.EMPTY_BOX_WEIGHT
+            VoiceStep.BOX_COUNT -> VoiceStep.TOTAL_WEIGHT_KG
+            VoiceStep.TOTAL_WEIGHT_KG -> VoiceStep.EMPTY_BOX_WEIGHT
             VoiceStep.EMPTY_BOX_WEIGHT -> VoiceStep.SPOILAGE_PERCENT
             VoiceStep.SPOILAGE_PERCENT -> VoiceStep.RATE
             

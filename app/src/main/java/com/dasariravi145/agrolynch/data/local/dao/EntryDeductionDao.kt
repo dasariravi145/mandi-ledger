@@ -12,6 +12,9 @@ interface EntryDeductionDao {
     @Query("SELECT * FROM entry_deductions WHERE entryId = :entryId")
     suspend fun getDeductionsByEntryIdSync(entryId: String): List<EntryDeductionEntity>
 
+    @Query("SELECT * FROM entry_deductions WHERE entryId IN (:entryIds)")
+    suspend fun getDeductionsByEntryIds(entryIds: List<String>): List<EntryDeductionEntity>
+
     @Query("SELECT * FROM entry_deductions")
     suspend fun getAllDeductionsList(): List<EntryDeductionEntity>
 
@@ -23,6 +26,9 @@ interface EntryDeductionDao {
 
     @Query("DELETE FROM entry_deductions WHERE entryId = :entryId")
     suspend fun deleteByEntryId(entryId: String)
+
+    @Query("DELETE FROM entry_deductions WHERE entryId IN (:entryIds)")
+    suspend fun deleteByEntryIds(entryIds: List<String>)
 
     @Query("SELECT * FROM entry_deductions WHERE entryType = :type")
     fun getDeductionsByType(type: String): Flow<List<EntryDeductionEntity>>

@@ -58,6 +58,9 @@ class BillNumberRepositoryImpl @Inject constructor(
     override suspend fun getDeductionsByEntryIdSync(entryId: String): List<EntryDeductionEntity> =
         deductionDao.getDeductionsByEntryIdSync(entryId)
 
+    override suspend fun getDeductionsByEntryIds(entryIds: List<String>): List<EntryDeductionEntity> =
+        deductionDao.getDeductionsByEntryIds(entryIds)
+
     override suspend fun saveDeductions(deductions: List<EntryDeductionEntity>) = 
         deductionDao.insertAll(deductions)
 

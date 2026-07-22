@@ -33,7 +33,6 @@ class DeveloperViewModel @Inject constructor(
                         premiumPlan = "LIFETIME",
                         premiumExpiryDate = 0L,
                         premiumExpiry = 0L,
-                        cloudBackupEnabled = true,
                         multiDeviceSyncEnabled = true,
                         voiceEntryEnabled = true,
                         ocrEnabled = true,

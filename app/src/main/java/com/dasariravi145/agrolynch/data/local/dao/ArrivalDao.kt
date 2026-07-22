@@ -2,6 +2,7 @@ package com.dasariravi145.agrolynch.data.local.dao
 
 import androidx.room.*
 import com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity
+import com.dasariravi145.agrolynch.data.local.entity.EntryDeductionEntity
 import kotlinx.coroutines.flow.Flow
 
 data class FarmerStockInfo(
@@ -19,20 +20,29 @@ interface ArrivalDao {
     @Query("SELECT * FROM arrivals WHERE isDeleted = 0 ORDER BY date DESC")
     fun getAllArrivals(): Flow<List<ArrivalEntity>>
 
-    @Query("SELECT * FROM arrivals WHERE productId = :productId AND remainingQuantity > 0 AND isDeleted = 0 ORDER BY date ASC")
+    @Query("SELECT * FROM arrivals WHERE productId = :productId AND remainingQuantity > 0.001 AND isDeleted = 0 ORDER BY date ASC")
     fun getAvailableStockByProduct(productId: String): Flow<List<ArrivalEntity>>
 
-    @Query("SELECT * FROM arrivals WHERE productId = :productId AND grade = :grade AND remainingQuantity > 0 AND isDeleted = 0 ORDER BY date ASC")
+    @Query("SELECT * FROM arrivals WHERE productId = :productId AND grade = :grade AND remainingQuantity > 0.001 AND isDeleted = 0 ORDER BY date ASC")
     fun getAvailableStockByProductAndGrade(productId: String, grade: String): Flow<List<ArrivalEntity>>
 
-    @Query("SELECT DISTINCT farmerId, farmerName FROM arrivals WHERE remainingQuantity > 0 AND isDeleted = 0")
+    @Query("SELECT DISTINCT farmerId, farmerName FROM arrivals WHERE remainingQuantity > 0.001 AND isDeleted = 0")
     fun getFarmersWithStock(): Flow<List<FarmerStockInfo>>
 
-    @Query("SELECT * FROM arrivals WHERE farmerId = :farmerId AND remainingQuantity > 0 AND isDeleted = 0 ORDER BY date ASC")
+    @Query("SELECT * FROM arrivals WHERE farmerId = :farmerId AND remainingQuantity > 0.001 AND isDeleted = 0 ORDER BY date ASC")
     fun getAvailableStockByFarmer(farmerId: String): Flow<List<ArrivalEntity>>
+
+    @Query("SELECT * FROM arrivals WHERE farmerId = :farmerId AND isDeleted = 0")
+    suspend fun getArrivalsByFarmer(farmerId: String): List<ArrivalEntity>
+
+    @Query("SELECT * FROM arrivals WHERE farmerId = :farmerId AND isDeleted = 0")
+    fun getArrivalsByFarmerFlow(farmerId: String): Flow<List<ArrivalEntity>>
 
     @Query("SELECT * FROM arrivals WHERE id = :id")
     suspend fun getArrivalById(id: String): ArrivalEntity?
+
+    @Query("SELECT * FROM arrivals WHERE id IN (:ids)")
+    suspend fun getArrivalsByIds(ids: List<String>): List<ArrivalEntity>
 
     @Query("SELECT * FROM arrivals")
     suspend fun getAllArrivalsList(): List<ArrivalEntity>
@@ -49,9 +59,27 @@ interface ArrivalDao {
     @Query("UPDATE arrivals SET isDeleted = 1, isSynced = 0 WHERE id = :id")
     suspend fun softDeleteArrival(id: String)
 
+    @Query("UPDATE arrivals SET isDeleted = 1, isSynced = 0 WHERE id IN (:ids)")
+    suspend fun softDeleteArrivals(ids: List<String>)
+
     @Query("SELECT * FROM arrivals WHERE isSynced = 0")
     suspend fun getUnsyncedArrivals(): List<ArrivalEntity>
 
     @Query("UPDATE arrivals SET isSynced = 1 WHERE id = :id")
     suspend fun markAsSynced(id: String)
+
+    @Query("UPDATE arrivals SET farmerId = :newId WHERE farmerId = :oldId")
+    suspend fun updateFarmerId(oldId: String, newId: String)
+
+    @Query("SELECT SUM(netAmount) FROM arrivals WHERE farmerId = :farmerId AND isDeleted = 0")
+    suspend fun getSumNetAmountForFarmer(farmerId: String): Double?
+
+    @Query("SELECT SUM(grossAmount) FROM arrivals WHERE farmerId = :farmerId AND isDeleted = 0")
+    suspend fun getSumGrossAmountForFarmer(farmerId: String): Double?
+
+    @Query("""
+        SELECT * FROM entry_deductions 
+        WHERE entryId IN (SELECT id FROM arrivals WHERE farmerId = :farmerId AND isDeleted = 0)
+    """)
+    suspend fun getDeductionsForFarmerArrivals(farmerId: String): List<com.dasariravi145.agrolynch.data.local.entity.EntryDeductionEntity>
 }

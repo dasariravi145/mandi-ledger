@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import androidx.room.withTransaction
 import com.dasariravi145.agrolynch.data.local.AgroLynchDatabase
+import com.dasariravi145.agrolynch.util.PhoneNumberUtils
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,7 +37,9 @@ class SyncRepositoryImpl @Inject constructor(
     private val paymentDao: PaymentDao,
     private val expenseDao: ExpenseDao,
     private val billNumberDao: BillNumberSeriesDao,
-    private val profileDao: CompanyProfileDao
+    private val profileDao: CompanyProfileDao,
+    private val productTypeDao: ProductTypeDao,
+    private val deduplicationManager: com.dasariravi145.agrolynch.util.DeduplicationManager
 ) : SyncRepository {
 
     private val userId: String?
@@ -69,8 +72,10 @@ class SyncRepositoryImpl @Inject constructor(
             syncSection("products", productDao.getAllProducts().first(), backupRef)
             syncSection("arrivals", arrivalDao.getAllArrivals().first(), backupRef)
             syncSection("sales", saleDao.getAllSales().first(), backupRef)
+            syncSection("sale_items", saleDao.getAllSaleItems().first(), backupRef)
             syncSection("payments", paymentDao.getAllPayments().first(), backupRef)
             syncSection("expenses", expenseDao.getAllExpenses().first(), backupRef)
+            syncSection("product_types", productTypeDao.getAllProductTypesList(), backupRef)
             
             // Settings
             billNumberDao.getAllSeries().first().forEach { series ->
@@ -115,9 +120,28 @@ class SyncRepositoryImpl @Inject constructor(
                     is com.dasariravi145.agrolynch.data.local.entity.SaleEntity -> item.id
                     is com.dasariravi145.agrolynch.data.local.entity.PaymentEntity -> item.id
                     is com.dasariravi145.agrolynch.data.local.entity.ExpenseEntity -> item.id
+                    is com.dasariravi145.agrolynch.data.local.entity.ProductTypeEntity -> item.id
                     else -> java.util.UUID.randomUUID().toString()
                 }
-                batch.set(backupRef.document("${sectionName}_$id"), item)
+                
+                // Ensure the entity is converted to a map that Firestore can handle correctly
+                // or just pass it as is if it uses stable field names.
+                // Given the user's issue, we explicitly convert to map and ensure 'id' field is present.
+                val map = when(item) {
+                    is com.dasariravi145.agrolynch.data.local.entity.FarmerEntity -> mapOf(
+                        "id" to item.id, "name" to item.name, "mobileNumber" to item.mobileNumber, "village" to item.village,
+                        "notes" to item.notes, "totalArrivals" to item.totalArrivals, "totalPayments" to item.totalPayments,
+                        "pendingAmount" to item.pendingAmount, "advanceAmount" to item.advanceAmount, "lastUpdated" to item.lastUpdated,
+                        "isSynced" to true, "isDeleted" to item.isDeleted
+                    )
+                    is com.dasariravi145.agrolynch.data.local.entity.BuyerEntity -> mapOf(
+                        "id" to item.id, "name" to item.name, "mobileNumber" to item.mobileNumber, "address" to item.address,
+                        "gstNumber" to item.gstNumber, "totalPurchase" to item.totalPurchase, "totalPaid" to item.totalPaid,
+                        "pendingAmount" to item.pendingAmount, "lastUpdated" to item.lastUpdated, "isSynced" to true, "isDeleted" to item.isDeleted
+                    )
+                    else -> item
+                }
+                batch.set(backupRef.document("${sectionName}_$id"), map)
             }
             batch.commit().await()
         }
@@ -141,22 +165,133 @@ class SyncRepositoryImpl @Inject constructor(
                 return@withContext Resource.Error("No cloud backup was found.")
             }
 
+            // 1. Prepare Canonical ID Mappings
+            val localFarmers = farmerDao.getFarmersList()
+            val localBuyers = buyerDao.getBuyersList()
+            val localProducts = productDao.getProductsList()
+            val localArrivals = arrivalDao.getAllArrivalsList()
+
+            val farmerPhoneMap = localFarmers.filter { it.mobileNumber.isNotBlank() }
+                .associateBy({ PhoneNumberUtils.normalize(it.mobileNumber) }, { it.id })
+            
+            val farmerNameVillageMap = localFarmers.associateBy({ "${it.name.lowercase()}_${it.village.lowercase()}" }, { it.id })
+            
+            val buyerPhoneMap = localBuyers.filter { it.mobileNumber.isNotBlank() }
+                .associateBy({ PhoneNumberUtils.normalize(it.mobileNumber) }, { it.id })
+
+            val buyerNameAddressMap = localBuyers.associateBy({ "${it.name.lowercase()}_${it.address.lowercase()}" }, { it.id })
+
+            val productNameMap = localProducts.associateBy({ it.name.lowercase() }, { it.id })
+            
+            val arrivalNaturalKeyMap = localArrivals.associateBy({ "${it.farmerId}_${it.productId}_${it.date}_${it.netQuantity}" }, { it.id })
+
+            val farmerIdMap = mutableMapOf<String, String>()
+            val buyerIdMap = mutableMapOf<String, String>()
+            val productIdMap = mutableMapOf<String, String>()
+            val arrivalIdMap = mutableMapOf<String, String>()
+
             database.withTransaction {
-                for (doc in allDocs.documents) {
-                    val id = doc.id
-                    when {
-                        id.startsWith("farmers_") -> doc.toObject(com.dasariravi145.agrolynch.data.local.entity.FarmerEntity::class.java)?.let { farmerDao.insertFarmer(it) }
-                        id.startsWith("buyers_") -> doc.toObject(com.dasariravi145.agrolynch.data.local.entity.BuyerEntity::class.java)?.let { buyerDao.insertBuyer(it) }
-                        id.startsWith("products_") -> doc.toObject(com.dasariravi145.agrolynch.data.local.entity.ProductEntity::class.java)?.let { productDao.insertProduct(it) }
-                        id.startsWith("arrivals_") -> doc.toObject(com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity::class.java)?.let { arrivalDao.insertArrival(it) }
-                        id.startsWith("sales_") -> doc.toObject(com.dasariravi145.agrolynch.data.local.entity.SaleEntity::class.java)?.let { saleDao.insertSale(it) }
-                        id.startsWith("payments_") -> doc.toObject(com.dasariravi145.agrolynch.data.local.entity.PaymentEntity::class.java)?.let { paymentDao.insertPayment(it) }
-                        id.startsWith("expenses_") -> doc.toObject(com.dasariravi145.agrolynch.data.local.entity.ExpenseEntity::class.java)?.let { expenseDao.insertExpense(it) }
-                        id.startsWith("settings_") -> doc.toObject(com.dasariravi145.agrolynch.data.local.entity.BillNumberSeriesEntity::class.java)?.let { billNumberDao.insertSeries(it) }
-                        id == "profile_current" -> doc.toObject(com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity::class.java)?.let { profileDao.updateProfile(it) }
+                // 1. Restore products and build mapping
+                allDocs.documents.filter { it.id.startsWith("products_") }.forEach { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.ProductEntity::class.java)?.let { product ->
+                        val canonicalId = productNameMap[product.name.lowercase()] ?: product.id
+                        productIdMap[product.id] = canonicalId
+                        productDao.insertProduct(product.copy(id = canonicalId))
+                    }
+                }
+
+                // 2. Farmers and Buyers
+                allDocs.documents.filter { it.id.startsWith("farmers_") }.forEach { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.FarmerEntity::class.java)?.let { farmer ->
+                        val normalizedPhone = PhoneNumberUtils.normalize(farmer.mobileNumber)
+                        val canonicalId = if (normalizedPhone.isNotBlank()) {
+                            farmerPhoneMap[normalizedPhone] ?: farmer.id
+                        } else {
+                            farmerNameVillageMap["${farmer.name.lowercase()}_${farmer.village.lowercase()}"] ?: farmer.id
+                        }
+                        farmerIdMap[farmer.id] = canonicalId
+                        farmerDao.insertFarmer(farmer.copy(id = canonicalId))
+                    }
+                }
+                allDocs.documents.filter { it.id.startsWith("buyers_") }.forEach { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.BuyerEntity::class.java)?.let { buyer ->
+                        val normalizedPhone = PhoneNumberUtils.normalize(buyer.mobileNumber)
+                        val canonicalId = if (normalizedPhone.isNotBlank()) {
+                            buyerPhoneMap[normalizedPhone] ?: buyer.id
+                        } else {
+                            buyerNameAddressMap["${buyer.name.lowercase()}_${buyer.address.lowercase()}"] ?: buyer.id
+                        }
+                        buyerIdMap[buyer.id] = canonicalId
+                        buyerDao.insertBuyer(buyer.copy(id = canonicalId))
+                    }
+                }
+
+                // 3. Arrivals
+                allDocs.documents.filter { it.id.startsWith("arrivals_") }.forEach { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity::class.java)?.let { arrival ->
+                        val pid = productIdMap[arrival.productId] ?: arrival.productId
+                        val fid = farmerIdMap[arrival.farmerId] ?: arrival.farmerId
+                        
+                        val existingIdById = localArrivals.find { it.id == arrival.id }?.id
+                        val existingIdByNaturalKey = arrivalNaturalKeyMap["${fid}_${pid}_${arrival.date}_${arrival.netQuantity}"]
+                        
+                        val canonicalId = existingIdById ?: existingIdByNaturalKey ?: arrival.id
+                        arrivalIdMap[arrival.id] = canonicalId
+                        
+                        arrivalDao.insertArrival(arrival.copy(id = canonicalId, productId = pid, farmerId = fid))
+                    }
+                }
+                allDocs.documents.filter { it.id.startsWith("sales_") }.forEach { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.SaleEntity::class.java)?.let { sale ->
+                        val bid = buyerIdMap[sale.buyerId] ?: sale.buyerId
+                        val pid = productIdMap[sale.productId] ?: sale.productId
+                        saleDao.insertSale(sale.copy(buyerId = bid, productId = pid))
+                    }
+                }
+                allDocs.documents.filter { it.id.startsWith("payments_") }.forEach { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.PaymentEntity::class.java)?.let { payment ->
+                        val pid = if (payment.partyType == "FARMER") {
+                            farmerIdMap[payment.partyId] ?: payment.partyId
+                        } else {
+                            buyerIdMap[payment.partyId] ?: payment.partyId
+                        }
+                        paymentDao.insertPayment(payment.copy(partyId = pid))
+                    }
+                }
+                allDocs.documents.filter { it.id.startsWith("expenses_") }.forEach { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.ExpenseEntity::class.java)?.let { expenseDao.insertExpense(it) }
+                }
+
+                // Restore sale items with remapped IDs
+                allDocs.documents.filter { it.id.startsWith("sale_items_") }.forEach { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.SaleItemEntity::class.java)?.let { item ->
+                        val fid = farmerIdMap[item.farmerId] ?: item.farmerId
+                        val pid = productIdMap[item.productId] ?: item.productId
+                        val aid = arrivalIdMap[item.arrivalId] ?: item.arrivalId
+                        saleDao.insertSaleItem(item.copy(farmerId = fid, productId = pid, arrivalId = aid))
+                    }
+                }
+
+                // 4. Settings
+                allDocs.documents.filter { it.id.startsWith("product_types_") }.forEach { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.ProductTypeEntity::class.java)?.let { type ->
+                        val pid = productIdMap[type.productId] ?: type.productId
+                        productTypeDao.insertProductType(type.copy(productId = pid))
+                    }
+                }
+
+                allDocs.documents.filter { it.id.startsWith("settings_") }.forEach { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.BillNumberSeriesEntity::class.java)?.let { billNumberDao.insertSeries(it) }
+                }
+                allDocs.documents.find { it.id == "profile_current" }?.let { doc ->
+                    doc.toObject(com.dasariravi145.agrolynch.data.local.entity.CompanyProfileEntity::class.java)?.let { profile ->
+                        profileDao.updateProfile(profile)
                     }
                 }
             }
+
+            // 5. Final step: Recalculate all affected master records
+            deduplicationManager.recalculateAllAffected(farmerIdMap.values.toSet(), buyerIdMap.values.toSet())
 
             Timber.d("CLOUD_ACCOUNT_RESTORE_SUCCESS")
             Resource.Success(Unit)

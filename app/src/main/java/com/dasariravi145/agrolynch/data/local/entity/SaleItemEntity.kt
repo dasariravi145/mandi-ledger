@@ -21,6 +21,7 @@ data class SaleItemEntity(
     val farmerName: String = "",
     val productId: String = "",
     val productName: String = "",
+    val productType: String = "",
     val productCategory: String = "",
     val grade: String = "",
     val quantitySold: Double = 0.0, // Always stores Net KG

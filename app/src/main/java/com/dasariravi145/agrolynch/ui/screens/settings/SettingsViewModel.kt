@@ -6,17 +6,20 @@ import com.dasariravi145.agrolynch.domain.repository.AuthRepository
 import com.dasariravi145.agrolynch.domain.repository.SettingsRepository
 import com.dasariravi145.agrolynch.domain.repository.SyncRepository
 import com.dasariravi145.agrolynch.domain.repository.UserRepository
+import com.dasariravi145.agrolynch.domain.repository.BackupRepository
 import com.dasariravi145.agrolynch.util.PremiumStateManager
+import com.dasariravi145.agrolynch.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
-    private val syncRepository: SyncRepository,
+    private val backupRepository: BackupRepository,
     private val premiumStateManager: PremiumStateManager,
     private val userRepository: UserRepository
 ) : ViewModel() {
@@ -53,9 +56,18 @@ class SettingsViewModel @Inject constructor(
     fun syncNow() {
         viewModelScope.launch {
             _isSyncing.value = true
-            when (val result = syncRepository.syncAllData()) {
-                is com.dasariravi145.agrolynch.util.Resource.Success -> _syncMessage.emit("Cloud backup successful")
-                is com.dasariravi145.agrolynch.util.Resource.Error -> _syncMessage.emit(result.message ?: "Sync failed")
+            when (val localResult = backupRepository.createLocalBackup("MANUAL")) {
+                is Resource.Success -> {
+                    val file = localResult.data
+                    if (file != null && file.exists()) {
+                        when (val cloudResult = backupRepository.uploadBackupToCloud(file, "MANUAL")) {
+                            is Resource.Success -> _syncMessage.emit("Cloud backup successful")
+                            is Resource.Error -> _syncMessage.emit(cloudResult.message ?: "Cloud upload failed")
+                            else -> {}
+                        }
+                    }
+                }
+                is Resource.Error -> _syncMessage.emit(localResult.message ?: "Local backup failed")
                 else -> {}
             }
             _isSyncing.value = false
@@ -65,9 +77,9 @@ class SettingsViewModel @Inject constructor(
     fun restoreNow() {
         viewModelScope.launch {
             _isSyncing.value = true
-            when (val result = syncRepository.restoreAllData()) {
-                is com.dasariravi145.agrolynch.util.Resource.Success -> _syncMessage.emit("Restore successful")
-                is com.dasariravi145.agrolynch.util.Resource.Error -> _syncMessage.emit(result.message ?: "Restore failed")
+            when (val result = backupRepository.restoreLatestCloudBackup()) {
+                is Resource.Success -> _syncMessage.emit("Restore successful! Please restart app.")
+                is Resource.Error -> _syncMessage.emit(result.message ?: "Restore failed")
                 else -> {}
             }
             _isSyncing.value = false
@@ -123,8 +135,7 @@ class SettingsViewModel @Inject constructor(
             profile?.let {
                 userRepository.saveProfile(it.copy(
                     isPremium = newState,
-                    premiumPlan = if (newState) "LIFETIME" else "",
-                    cloudBackupEnabled = newState
+                    premiumPlan = if (newState) "LIFETIME" else ""
                 ))
             }
         }

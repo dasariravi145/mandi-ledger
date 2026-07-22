@@ -23,7 +23,7 @@ object VoiceTextNormalizer {
             VoiceStep.PRODUCT_NAME -> normalizeProductName(lowerText)
             VoiceStep.UNIT -> normalizeUnit(lowerText)
             VoiceStep.QUANTITY, VoiceStep.WASTE, VoiceStep.RATE, 
-            VoiceStep.BOX_COUNT, VoiceStep.TOTAL_WEIGHT_TON, 
+            VoiceStep.BOX_COUNT, VoiceStep.TOTAL_WEIGHT_KG,
             VoiceStep.EMPTY_BOX_WEIGHT, VoiceStep.SPOILAGE_PERCENT -> {
                 parseNumberFromText(lowerText)
             }

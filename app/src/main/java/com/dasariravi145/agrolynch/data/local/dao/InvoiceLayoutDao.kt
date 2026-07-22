@@ -12,6 +12,9 @@ interface InvoiceLayoutDao {
     @Query("SELECT * FROM invoice_layouts WHERE templateId = :templateId")
     suspend fun getLayoutSync(templateId: String): InvoiceLayoutEntity?
 
+    @Query("SELECT * FROM invoice_layouts")
+    suspend fun getAllLayoutsList(): List<InvoiceLayoutEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveLayout(layout: InvoiceLayoutEntity)
 

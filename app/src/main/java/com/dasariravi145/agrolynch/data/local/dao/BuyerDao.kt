@@ -12,6 +12,9 @@ interface BuyerDao {
     @Query("SELECT * FROM buyers WHERE id = :id")
     suspend fun getBuyerById(id: String): BuyerEntity?
 
+    @Query("SELECT * FROM buyers WHERE id = :id AND isDeleted = 0")
+    fun getBuyerByIdFlow(id: String): Flow<BuyerEntity?>
+
     @Query("SELECT * FROM buyers")
     suspend fun getBuyersList(): List<BuyerEntity>
 
@@ -29,4 +32,7 @@ interface BuyerDao {
 
     @Query("UPDATE buyers SET isSynced = 1 WHERE id = :id")
     suspend fun markAsSynced(id: String)
+
+    @Query("DELETE FROM buyers WHERE id = :id")
+    suspend fun deleteBuyerById(id: String)
 }

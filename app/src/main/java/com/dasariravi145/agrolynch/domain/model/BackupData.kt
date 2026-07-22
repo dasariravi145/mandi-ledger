@@ -7,6 +7,7 @@ data class BackupData(
     val farmers: List<FarmerEntity> = emptyList(),
     val buyers: List<BuyerEntity> = emptyList(),
     val products: List<ProductEntity> = emptyList(),
+    val productTypes: List<ProductTypeEntity> = emptyList(),
     val arrivals: List<ArrivalEntity> = emptyList(),
     val sales: List<SaleEntity> = emptyList(),
     val saleItems: List<SaleItemEntity> = emptyList(),
@@ -18,5 +19,8 @@ data class BackupData(
     val boxWeightItems: List<BoxWeightItemEntity> = emptyList(),
     val billSeries: List<BillNumberSeriesEntity> = emptyList(),
     val deductions: List<EntryDeductionEntity> = emptyList(),
-    val templatePositions: List<InvoiceTemplatePositionEntity> = emptyList()
+    val templatePositions: List<InvoiceTemplatePositionEntity> = emptyList(),
+    val invoiceLayouts: List<InvoiceLayoutEntity> = emptyList(),
+    val invoiceWizardConfigs: List<InvoiceWizardConfigEntity> = emptyList(),
+    val accountBookArchives: List<AccountBookArchiveEntity> = emptyList()
 )

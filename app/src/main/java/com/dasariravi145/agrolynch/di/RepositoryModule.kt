@@ -143,4 +143,10 @@ abstract class RepositoryModule {
     abstract fun bindTemplatePositionRepository(
         templatePositionRepositoryImpl: com.dasariravi145.agrolynch.data.repository.TemplatePositionRepositoryImpl
     ): com.dasariravi145.agrolynch.domain.repository.TemplatePositionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindArchiveRepository(
+        archiveRepositoryImpl: com.dasariravi145.agrolynch.data.repository.ArchiveRepositoryImpl
+    ): com.dasariravi145.agrolynch.domain.repository.ArchiveRepository
 }

@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import timber.log.Timber
+import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
 
@@ -64,12 +65,14 @@ class PaymentViewModel @Inject constructor(
     }
 
     val buyers = buyerRepository.getBuyers()
+        .map { list -> list.distinctBy { it.id } } // Ensure ID uniqueness
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val farmers = farmerRepository.getFarmers()
         .map { list ->
             Timber.tag("PAY_FARMER").d("PAY_FARMER_LIST_LOADED: ${list.size} total farmers")
-            val filtered = list.filter { it.pendingAmount > 0 && !it.isDeleted }
+            val filtered = list.distinctBy { it.id } // Ensure ID uniqueness
+                .filter { it.pendingAmount > 0 && !it.isDeleted }
                 .sortedByDescending { it.pendingAmount }
             
             if (filtered.isEmpty()) {
@@ -88,9 +91,43 @@ class PaymentViewModel @Inject constructor(
     private val _selectedTab = MutableStateFlow(0) // 0 for Buyer, 1 for Farmer
     val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
 
-    val payments = combine(paymentRepository.getPayments(), _selectedTab) { list, tab ->
+    private val _buyerSearchQuery = MutableStateFlow("")
+    val buyerSearchQuery: StateFlow<String> = _buyerSearchQuery.asStateFlow()
+
+    private val _farmerSearchQuery = MutableStateFlow("")
+    val farmerSearchQuery: StateFlow<String> = _farmerSearchQuery.asStateFlow()
+
+    val payments = combine(
+        paymentRepository.getPayments(), 
+        _selectedTab,
+        _buyerSearchQuery,
+        _farmerSearchQuery
+    ) { list, tab, bQuery, fQuery ->
         val type = if (tab == 0) "BUYER" else "FARMER"
-        list.filter { it.partyType == type && !it.isDeleted }
+        val query = if (tab == 0) bQuery else fQuery
+        
+        val filteredByType = list.filter { it.partyType == type && !it.isDeleted }
+        
+        if (query.isBlank()) {
+            filteredByType
+        } else {
+            val q = query.trim().lowercase().replace("₹", "")
+            val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+            
+            filteredByType.filter { payment ->
+                val nameMatch = payment.partyName.lowercase().contains(q)
+                val modeMatch = payment.paymentMode.lowercase().contains(q)
+                val dateMatch = sdf.format(Date(payment.date)).lowercase().contains(q)
+                
+                val amountStr = payment.amount.toString()
+                val formattedAmount = com.dasariravi145.agrolynch.util.Formatter.formatCurrency(payment.amount).lowercase()
+                val amountMatch = amountStr.contains(q) || 
+                                 formattedAmount.contains(q) || 
+                                 formattedAmount.replace(",", "").contains(q.replace(",", ""))
+                
+                nameMatch || modeMatch || dateMatch || amountMatch
+            }
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _selectedPartyId = MutableStateFlow<String?>(null)
@@ -115,6 +152,14 @@ class PaymentViewModel @Inject constructor(
         _selectedPartyId.value = null
     }
 
+    fun onSearchQueryChange(query: String) {
+        if (_selectedTab.value == 0) {
+            _buyerSearchQuery.value = query
+        } else {
+            _farmerSearchQuery.value = query
+        }
+    }
+
     fun onPartySelected(id: String) {
         Timber.tag("PAY_FARMER").d("onPartySelected: selectedPartyId=$id, type=${if(selectedTab.value == 0) "BUYER" else "FARMER"}")
         _selectedPartyId.value = id
@@ -132,6 +177,8 @@ class PaymentViewModel @Inject constructor(
         reference: String,
         notes: String
     ) {
+        if (_isLoading.value) return // Single-submission protection
+
         viewModelScope.launch {
             _isLoading.value = true
             try {

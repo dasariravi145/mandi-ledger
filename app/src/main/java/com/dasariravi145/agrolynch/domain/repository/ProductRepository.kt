@@ -2,6 +2,7 @@ package com.dasariravi145.agrolynch.domain.repository
 
 import android.net.Uri
 import com.dasariravi145.agrolynch.data.local.entity.ProductEntity
+import com.dasariravi145.agrolynch.data.local.entity.ProductTypeEntity
 import com.dasariravi145.agrolynch.util.Resource
 import kotlinx.coroutines.flow.Flow
 
@@ -13,4 +14,10 @@ interface ProductRepository {
     suspend fun updateProduct(product: ProductEntity, imageUri: Uri?): Resource<Unit>
     suspend fun deleteProduct(id: String): Resource<Unit>
     suspend fun syncProducts(): Resource<Unit>
+
+    // Product Type (Variety) Methods
+    fun getProductTypes(productId: String): Flow<List<ProductTypeEntity>>
+    suspend fun getProductTypesList(productId: String): List<ProductTypeEntity>
+    suspend fun addProductType(productType: ProductTypeEntity): Resource<Unit>
+    suspend fun getProductTypeByName(productId: String, name: String): ProductTypeEntity?
 }

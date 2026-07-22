@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.data.local.entity.*
 import com.dasariravi145.agrolynch.domain.repository.*
 import com.dasariravi145.agrolynch.util.*
+import com.dasariravi145.agrolynch.util.PhoneNumberUtils
 import com.dasariravi145.agrolynch.util.pdf.TemplateInvoicePdfService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -48,13 +49,26 @@ class ArrivalViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     val farmers = farmerRepository.getFarmers()
+        .map { list -> list.distinctBy { it.id } } // Ensure ID uniqueness in dropdown
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _productSearchQuery = MutableStateFlow("")
     val productSearchQuery = _productSearchQuery.asStateFlow()
 
+    private val _productTypeSearchQuery = MutableStateFlow("")
+    val productTypeSearchQuery = _productTypeSearchQuery.asStateFlow()
+
     private val _matchedProduct = MutableStateFlow<ProductEntity?>(null)
     val matchedProduct = _matchedProduct.asStateFlow()
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val productTypes = _matchedProduct.flatMapLatest { product ->
+        if (product != null) {
+            productRepository.getProductTypes(product.id)
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isNewProduct = MutableStateFlow(false)
     val isNewProduct = _isNewProduct.asStateFlow()
@@ -132,6 +146,11 @@ class ArrivalViewModel @Inject constructor(
 
     fun onProductQueryChange(query: String) {
         _productSearchQuery.value = query
+        _productTypeSearchQuery.value = "" // Clear variety when product changes
+    }
+
+    fun onProductTypeQueryChange(query: String) {
+        _productTypeSearchQuery.value = query
     }
 
     fun saveArrivalBatch(
@@ -140,6 +159,7 @@ class ArrivalViewModel @Inject constructor(
         farmerPhone: String,
         farmerVillage: String,
         productName: String,
+        productType: String,
         productCategory: String,
         commissionPercent: Double,
         laborCharges: Double,
@@ -149,11 +169,14 @@ class ArrivalViewModel @Inject constructor(
         billNumberUnused: String = "", // Kept for compatibility
         gradeEntries: List<GradeEntry>
     ) {
+        if (_isLoading.value) return // Single-submission protection
+
         val currentDeductionsTotal = totalDeductions.value
         val currentBillNumber = _billNumber.value
 
         if (gradeEntries.any { it.quantity <= 0 }) {
-            viewModelScope.launch { _error.emit("Total Weight (Ton) must be greater than 0") }
+            val errorLabel = if (gradeEntries.any { it.unit == "Boxes" }) "Total Weight (KG)" else "Total Weight (Ton)"
+            viewModelScope.launch { _error.emit("$errorLabel must be greater than 0") }
             return
         }
         if (gradeEntries.any { it.rate <= 0 }) {
@@ -189,9 +212,10 @@ class ArrivalViewModel @Inject constructor(
             return
         }
 
+        val normalizedPhoneInput = if (farmerPhone.isNotBlank()) PhoneNumberUtils.normalize(farmerPhone) else ""
         val existingFarmer = farmers.value.find { 
             it.name.equals(farmerName, ignoreCase = true) && 
-            (farmerPhone.isEmpty() || it.mobileNumber == farmerPhone)
+            (normalizedPhoneInput.isEmpty() || PhoneNumberUtils.normalize(it.mobileNumber) == normalizedPhoneInput)
         }
         if (existingFarmer == null && farmerPhone.isNotBlank() && farmerPhone.length != 10) {
             viewModelScope.launch { _error.emit("Please enter a valid 10-digit mobile number") }
@@ -224,6 +248,21 @@ class ArrivalViewModel @Inject constructor(
                     selectedProduct.id
                 }
 
+                // Save product type if new
+                if (productType.isNotBlank()) {
+                    val existingType = productRepository.getProductTypeByName(productId, productType)
+                    if (existingType == null) {
+                        productRepository.addProductType(
+                            ProductTypeEntity(
+                                id = UUID.randomUUID().toString(),
+                                productId = productId,
+                                productName = productName,
+                                productTypeName = productType
+                            )
+                        )
+                    }
+                }
+
             if (currentBillNumber.isBlank() || currentBillNumber == "N/A") {
                 throw IllegalStateException("billNumber must be generated before ledger insert")
             }
@@ -249,6 +288,7 @@ class ArrivalViewModel @Inject constructor(
                     farmerName = farmerName,
                     productId = productId,
                     productName = productName,
+                    productType = productType,
                     productCategory = productCategory,
                     grade = entry.grade,
                     quantity = entry.quantity, // Still store Ton value in quantity
@@ -324,7 +364,7 @@ class ArrivalViewModel @Inject constructor(
 
     data class GradeEntry(
         val grade: String,
-        val quantity: Double = 0.0, // Total Weight (Ton) for Boxes/Ton mode
+        val quantity: Double = 0.0, // Total Weight (Ton) for internal storage
         val boxCount: Int = 0, // Number of Boxes
         val avgGrossWeight: Double = 0.0, // Empty Box Weight Per Box (KG)
         val rate: Double = 0.0, // Rate per KG

@@ -14,7 +14,7 @@ enum class VoiceStep(val label: String) {
     
     // Boxes-specific fields
     BOX_COUNT("Number of Boxes"),
-    TOTAL_WEIGHT_TON("Total Weight (Ton)"),
+    TOTAL_WEIGHT_KG("Total Weight (KG)"),
     EMPTY_BOX_WEIGHT("Empty Weight per Box"),
     SPOILAGE_PERCENT("Spoilage %"),
     

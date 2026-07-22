@@ -18,11 +18,13 @@ data class SaleEntity(
     val farmerName: String = "", // Added for ledger visibility
     val productId: String = "", // Summary or first item ID
     val productName: String = "", // Summary or first item Name
+    val productType: String = "", // Summary or first item Type/Variety
     val grade: String = "", // Summary or first item Grade
     val totalQuantity: Double = 0.0,
     val totalPurchaseAmount: Double = 0.0,
     val totalAmount: Double = 0.0, // Sub-total (Used for backward compatibility)
     val totalCommission: Double = 0.0,
+    val laborPercentage: Double = 0.0, // Added for transaction-level charges
     val laborCharges: Double = 0.0,
     val transportCharges: Double = 0.0,
     val packingCharges: Double = 0.0, // Aggregate or first item

@@ -24,10 +24,12 @@ class SettingsRepositoryImpl @Inject constructor(
     private val languageKey = stringPreferencesKey("language_code")
     private val themeKey = booleanPreferencesKey("is_dark_mode")
     private val autoBackupKey = booleanPreferencesKey("auto_backup")
+    private val lastRestoreInfoKey = stringPreferencesKey("last_restore_info")
 
     override val languageCode: Flow<String> = context.settingsDataStore.data.map { it[languageKey] ?: "en" }
     override val isDarkMode: Flow<Boolean> = context.settingsDataStore.data.map { it[themeKey] ?: false }
     override val isAutoBackupEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[autoBackupKey] ?: true }
+    override val lastRestoreInfo: Flow<String?> = context.settingsDataStore.data.map { it[lastRestoreInfoKey] }
 
     override suspend fun updateLanguage(code: String) {
         context.settingsDataStore.edit { it[languageKey] = code }
@@ -39,5 +41,12 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun updateAutoBackup(isEnabled: Boolean) {
         context.settingsDataStore.edit { it[autoBackupKey] = isEnabled }
+    }
+
+    override suspend fun updateLastRestoreInfo(info: String?) {
+        context.settingsDataStore.edit { 
+            if (info == null) it.remove(lastRestoreInfoKey)
+            else it[lastRestoreInfoKey] = info
+        }
     }
 }

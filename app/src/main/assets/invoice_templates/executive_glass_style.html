@@ -55,7 +55,9 @@
             box-shadow: 0 8px 15px rgba(0,0,0,0.1);
             background: #fff;
         }
-        .god-image { width: 100%; height: 100%; object-fit: cover; }
+        .god-image { width: 100%; height: 100%; object-fit: contain; display: block; }
+        .qr-image { width: 100%; height: 100%; object-fit: contain; display: block; image-rendering: pixelated; }
+        .signature-image { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
 
         .header { margin-bottom: 25px; }
         .company-name {
@@ -69,33 +71,33 @@
         .tagline { font-size: 14px; color: #009688; font-weight: 500; letter-spacing: 5px; text-transform: uppercase; margin-top: 5px; }
         .biz-details { margin-top: 15px; font-size: 13px; color: #546e7a; }
 
-        .info-row { display: flex; justify-content: space-between; margin-bottom: 20px; }
-        .info-panel {
-            background: rgba(255, 255, 255, 0.5);
-            padding: 12px 25px;
-            border-radius: 16px;
-            width: 100%;
-            border: 1px solid rgba(255,255,255,0.3);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            white-space: nowrap;
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
         }
-        .info-item { font-size: 14px; color: #00796b; font-weight: 600; }
-        .info-item b { color: #2c3e50; margin-left: 4px; }
+
+        .metadata-panel {
+            background: rgba(255, 255, 255, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 16px;
+            padding: 8px 10px;
+            overflow: hidden;
+            color: #00796b;
+        }
+
+        .meta-row { display: grid; grid-template-columns: 38% 62%; align-items: start; gap: 6px; min-width: 0; margin-bottom: 4px; text-align: left; }
+        .meta-row:last-child { margin-bottom: 0; }
+        .meta-label { font-weight: 700; white-space: nowrap; font-size: 12px; text-transform: uppercase; }
+        .meta-value { font-weight: 600; min-width: 0; overflow-wrap: anywhere; font-size: 12px; color: #2c3e50; }
 
         .table-area { flex-grow: 1; margin-top: 5px; min-height: 350px; }
-        table { width: 100%; border-collapse: collapse; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 
-        thead tr, tbody tr {
-            display: grid;
-            grid-template-columns: 45px 1fr 85px 140px 95px 125px;
-            align-items: center;
-            width: 100%;
-            margin-bottom: 5px;
-        }
+        tr { display: table-row; }
 
-        th, td { grid-row: 1; }
+        th, td { display: table-cell; vertical-align: middle; padding: 10px; }
 
         th {
             background: linear-gradient(to right, #00796b, #009688);
@@ -109,7 +111,7 @@
         th:first-child { border-radius: 12px 0 0 12px; }
         th:last-child { border-radius: 0 12px 12px 0; }
 
-        td { background: rgba(255, 255, 255, 0.4); padding: 10px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.5); height: 100%; display: flex; align-items: center; justify-content: center; }
+        td { background: rgba(255, 255, 255, 0.4); font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.5); }
         td:nth-child(2) { justify-content: flex-start; }
 
         /* Quantity + Unit Column */
@@ -179,7 +181,7 @@
             <div class="watermark">{{companyName}}</div>
 
             <div class="god-frame {{godImageHidden}}">
-                <img src="{{godImageBase64}}" class="god-image">
+                <img src="{{godImageBase64}}" class="god-image" alt="" onerror="this.style.display='none'; this.parentElement.style.display='none';">
             </div>
 
             <div class="header">
@@ -187,32 +189,55 @@
                 <div class="tagline {{taglineHidden}}">{{tagline}}</div>
                 <div class="biz-details">
                     <span>📍 {{address}}</span><br>
-                    <span class="{{mobileHidden}}">📞 {{mobile}}</span> | <span class="{{gstHidden}}">🆔 GST: {{gstNumber}}</span>
+                    <span>📞 {{mobile}}</span> | <span>🆔 GST: {{gstNumber}}</span>
                 </div>
             </div>
 
-            <div class="info-row">
-                <div class="info-panel">
-                    <div class="info-item">Customer Name: <b>{{customerName}}</b></div>
-                    <div class="info-item">Bill No: <b>{{billNumber}}</b></div>
-                    <div class="info-item">Date: <b>{{date}}</b></div>
+            <div class="info-grid">
+                <div class="metadata-panel metadata-left">
+                    <div class="meta-row">
+                        <span class="meta-label">CUSTOMER NAME</span>
+                        <span class="meta-value">{{customerName}}</span>
+                    </div>
+                    <div class="meta-row {{customerMobileHidden}}">
+                        <span class="meta-label">MOBILE</span>
+                        <span class="meta-value">{{customerMobile}}</span>
+                    </div>
                 </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin: 0 20px 15px; font-size: 12px; color: #546e7a;">
-                <div class="{{customerMobileHidden}}">📞 {{customerMobile}}</div>
-                <div class="{{vehicleHidden}}">🚚 {{vehicleNumber}}</div>
+                <div class="metadata-panel metadata-right">
+                    <div class="meta-row">
+                        <span class="meta-label">BILL NO.</span>
+                        <span class="meta-value">{{billNumber}}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">DATE</span>
+                        <span class="meta-value">{{date}}</span>
+                    </div>
+                    <div class="meta-row {{vehicleHidden}}">
+                        <span class="meta-label">VEHICLE</span>
+                        <span class="meta-value">{{vehicleNumber}}</span>
+                    </div>
+                </div>
             </div>
 
             <div class="table-area">
                 <table>
+                    <colgroup>
+                        <col style="width:8%">
+                        <col style="width:36%">
+                        <col style="width:14%">
+                        <col style="width:16%">
+                        <col style="width:12%">
+                        <col style="width:14%">
+                    </colgroup>
                     <thead>
                         <tr>
-                            <th width="40">#</th>
-                            <th class="text-left">Product / Description</th>
-                            <th width="80">Grade</th>
-                            <th width="120">Qty</th>
-                            <th width="90">Rate</th>
-                            <th width="125" class="text-right">Amount</th>
+                            <th style="border-radius: 12px 0 0 12px;">SR</th>
+                            <th class="text-left">DESCRIPTION</th>
+                            <th>GRADE</th>
+                            <th>QTY</th>
+                            <th>RATE</th>
+                            <th class="text-right" style="border-radius: 0 12px 12px 0;">AMOUNT</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -223,8 +248,8 @@
 
             <div class="footer-section">
                 <div class="qr-panel">
-                    <div class="{{qrHidden}}" style="background: white; padding: 8px; border-radius: 12px; width: 100px; height: 100px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 5px;">
-                        <img src="{{qrBase64}}" style="width: 100%; height: 100%;">
+                    <div class="{{qrHidden}}" style="background: white; padding: 8px; border-radius: 12px; width: 100px; height: 100px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 5px; display: flex; align-items: center; justify-content: center;">
+                        <img src="{{qrBase64}}" class="qr-image" alt="" onerror="this.style.display='none'; this.parentElement.style.display='none';">
                     </div>
                 </div>
 
@@ -239,7 +264,7 @@
                         <div class="grand-total"><span>TOTAL</span> <span>₹{{grandTotal}}</span></div>
                     </div>
                     <div class="signature-panel {{signatureHidden}}">
-                        <img src="{{signatureBase64}}" class="sig-img">
+                        <img src="{{signatureBase64}}" class="signature-image" alt="" onerror="this.style.display='none';">
                         <div class="auth-label">AUTHORIZED SIGNATORY</div>
                     </div>
                 </div>

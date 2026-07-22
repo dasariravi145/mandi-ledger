@@ -54,17 +54,32 @@ class SaleRepositoryImpl @Inject constructor(
                     val profile = profileDao.getProfile().first() ?: CompanyProfileEntity()
 
                     saleDao.insertSale(sale)
-                    saleDao.insertSaleItems(items)
+                    
+                    val allArrivalIds = items.map { it.arrivalId }
+                    val arrivalMap = arrivalDao.getArrivalsByIds(allArrivalIds).associateBy { it.id }
 
-                    for (item in items) {
-                        val arrival = arrivalDao.getArrivalById(item.arrivalId) ?: throw Exception("Stock item not found")
-                        val reductionAmount = if (arrival.unit == "Ton" || arrival.unit == "Boxes") {
-                            item.quantitySold / 1000.0 // Convert KG sold to Tons for database reduction
+                    val updatedItems = items.map { item ->
+                        val arrival = arrivalMap[item.arrivalId] ?: throw Exception("Stock item ${item.productName} not found")
+                        var reductionAmount = if (arrival.unit == "Ton" || arrival.unit == "Boxes") {
+                            item.quantitySold / 1000.0
                         } else {
                             item.quantitySold
                         }
+                        
+                        var finalQuantitySold = item.quantitySold
+                        if (Math.abs(arrival.remainingQuantity - reductionAmount) < 0.001) {
+                            reductionAmount = arrival.remainingQuantity
+                            finalQuantitySold = if (arrival.unit == "Ton" || arrival.unit == "Boxes") {
+                                arrival.remainingQuantity * 1000.0
+                            } else {
+                                arrival.remainingQuantity
+                            }
+                        }
+
                         arrivalDao.reduceStock(item.arrivalId, reductionAmount)
+                        item.copy(quantitySold = finalQuantitySold)
                     }
+                    saleDao.insertSaleItems(updatedItems)
 
                     val totalNetReceivable = sale.totalNetAmount
                     val updatedBuyer = buyer.copy(
@@ -179,11 +194,46 @@ class SaleRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteSale(id: String): Resource<Unit> {
-        return try {
-            saleDao.softDeleteSale(id)
-            Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error("Delete failed")
+        return withContext(Dispatchers.IO) {
+            try {
+                database.withTransaction {
+                    val sale = saleDao.getSaleById(id) ?: throw Exception("Sale not found")
+                    val items = saleDao.getItemsBySaleId(id)
+
+                    // Restore stock for each item
+                    for (item in items) {
+                        val arrival = arrivalDao.getArrivalById(item.arrivalId)
+                        if (arrival != null) {
+                            val restoreAmount = if (arrival.unit == "Ton" || arrival.unit == "Boxes") {
+                                item.quantitySold / 1000.0
+                            } else {
+                                item.quantitySold
+                            }
+                            arrivalDao.updateArrival(arrival.copy(
+                                remainingQuantity = arrival.remainingQuantity + restoreAmount
+                            ))
+                        }
+                    }
+
+                    // Adjust Buyer pending amount
+                    val buyer = buyerDao.getBuyerById(sale.buyerId)
+                    if (buyer != null) {
+                        val amountToDeduct = sale.totalNetAmount
+                        buyerDao.updateBuyer(buyer.copy(
+                            totalPurchase = buyer.totalPurchase - amountToDeduct,
+                            pendingAmount = buyer.pendingAmount - (sale.totalNetAmount - sale.paidAmount),
+                            lastUpdated = System.currentTimeMillis(),
+                            isSynced = false
+                        ))
+                    }
+
+                    saleDao.softDeleteSale(id)
+                }
+                Resource.Success(Unit)
+            } catch (e: Exception) {
+                timber.log.Timber.e(e, "Delete Sale Failed")
+                Resource.Error(e.message ?: "Delete failed")
+            }
         }
     }
 

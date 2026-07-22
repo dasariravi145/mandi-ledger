@@ -179,7 +179,7 @@ fun SetupNavGraph(
                 onViewSecurity = { navController.navigate(Screen.Security.route) },
                 onViewBackup = { navController.navigate(Screen.Backup.route) },
                 onViewSettings = { navController.navigate(Screen.Settings.route) },
-                onViewCompanyProfile = { navController.navigate(Screen.CompanyProfile.route) },
+                onViewCompanyProfile = { navController.navigate(Screen.InvoiceProfileSetup.route) },
                 onLogout = {
                     dashboardViewModel.onLogout() 
                     navController.navigate(Screen.Login.route) {
@@ -550,13 +550,37 @@ fun SetupNavGraph(
                 viewModel = backupViewModel,
                 isPremium = isPremium,
                 onUpgradeClick = { navController.navigate(Screen.Premium.route) },
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onOpenArchive = { navController.navigate(Screen.AccountBookArchive.route) }
             )
         }
         composable(route = Screen.Premium.route) {
             val premiumViewModel: PremiumViewModel = hiltViewModel()
             PremiumScreen(
                 viewModel = premiumViewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(route = Screen.AccountBookArchive.route) {
+            val archiveViewModel: ArchiveListViewModel = hiltViewModel()
+            ArchiveListScreen(
+                viewModel = archiveViewModel,
+                onArchiveClick = { id -> navController.navigate(Screen.ArchiveDetail.passId(id)) },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Screen.ArchiveDetail.route,
+            arguments = listOf(navArgument("archiveId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val archiveViewModel: ArchiveListViewModel = hiltViewModel()
+            val archiveId = backStackEntry.arguments?.getString("archiveId") ?: ""
+            val context = LocalContext.current
+            val gson = (context.applicationContext as com.dasariravi145.agrolynch.AgroLynchApp).gson
+            ArchiveDetailScreen(
+                archiveId = archiveId,
+                viewModel = archiveViewModel,
+                gson = gson,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -567,7 +591,7 @@ fun SetupNavGraph(
                 viewModel = settingsViewModel,
                 onBackClick = { navController.popBackStack() },
                 onViewProfile = { navController.navigate(Screen.Profile.route) },
-                onViewCompanyProfile = { navController.navigate(Screen.CompanyProfile.route) },
+                onViewCompanyProfile = { navController.navigate(Screen.InvoiceProfileSetup.route) },
                 onViewBillSettings = { navController.navigate(Screen.BillSettings.route) },
                 onViewBackup = { navController.navigate(Screen.Backup.route) },
                 onViewSubscription = { navController.navigate(Screen.Premium.route) },
@@ -594,14 +618,11 @@ fun SetupNavGraph(
             ProfileScreen(viewModel = profileViewModel, onBackClick = { navController.popBackStack() })
         }
         composable(route = Screen.CompanyProfile.route) {
-            val companyViewModel: com.dasariravi145.agrolynch.ui.screens.settings.CompanyViewModel = hiltViewModel()
-            CompanyProfileScreen(
-                viewModel = companyViewModel,
-                onBack = { navController.popBackStack() },
-                onEditTemplate = { navController.navigate(Screen.TemplateEditor.route) },
-                onDesignTemplate = { _ ->
-                    navController.navigate(Screen.InvoiceProfileSetup.route)
-                }
+            // Redirect to canonical Professional Invoice Setup
+            val viewModel: com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileViewModel = hiltViewModel()
+            com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
             )
         }
         composable(route = Screen.TemplateEditor.route) {

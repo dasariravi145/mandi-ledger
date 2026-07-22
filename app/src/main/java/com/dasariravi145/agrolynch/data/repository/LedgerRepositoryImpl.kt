@@ -5,6 +5,7 @@ import com.dasariravi145.agrolynch.data.local.entity.*
 import com.dasariravi145.agrolynch.domain.model.*
 import com.dasariravi145.agrolynch.domain.repository.LedgerRepository
 import com.dasariravi145.agrolynch.domain.repository.BillNumberRepository
+import com.dasariravi145.agrolynch.util.Formatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -21,21 +22,30 @@ class LedgerRepositoryImpl @Inject constructor(
     private val billNumberRepository: BillNumberRepository
 ) : LedgerRepository {
 
+    private data class BuyerLedgerDataSnapshot(
+        val sales: List<SaleEntity>,
+        val allSaleItems: List<SaleItemEntity>,
+        val payments: List<PaymentEntity>,
+        val buyers: List<BuyerEntity>,
+        val arrivals: List<ArrivalEntity>
+    )
+
     override fun getFarmerLedger(farmerId: String): Flow<LedgerSummary> {
         return combine(
-            arrivalDao.getAllArrivals().distinctUntilChanged(),
-            paymentDao.getAllPayments().distinctUntilChanged(),
-            farmerDao.getAllFarmers().distinctUntilChanged()
-        ) { arrivals, payments, farmers ->
-            val farmer = farmers.find { it.id == farmerId } ?: return@combine null
-            farmer to (arrivals.filter { it.farmerId == farmerId && !it.isDeleted } to 
-                      payments.filter { it.partyId == farmerId && it.partyType == "FARMER" && !it.isDeleted })
+            arrivalDao.getArrivalsByFarmerFlow(farmerId).distinctUntilChanged(),
+            paymentDao.getPaymentsByPartyFlow(farmerId, "FARMER").distinctUntilChanged(),
+            farmerDao.getFarmerByIdFlow(farmerId).distinctUntilChanged()
+        ) { arrivals, payments, farmer ->
+            if (farmer == null) return@combine null
+            farmer to (arrivals to payments)
         }.map { data ->
             if (data == null) return@map LedgerSummary("", "Unknown", 0.0, 0.0, 0.0)
             val (farmer, pair) = data
             val (arrivals, payments) = pair
             
             val arrivalsByBill = arrivals.groupBy { it.billNumber }
+            val allArrivalIds = arrivals.map { it.id }
+            val allDeductionsMap = billNumberRepository.getDeductionsByEntryIds(allArrivalIds).groupBy { it.entryId }
             
             val entries = (arrivalsByBill.map { (billNo, billArrivals) ->
                 val firstArrival = billArrivals.first()
@@ -47,11 +57,12 @@ class LedgerRepositoryImpl @Inject constructor(
                 val totalPacking = billArrivals.sumOf { it.packingCharges }
                 val totalOtherDeductions = billArrivals.sumOf { it.otherDeductions }
                 
-                val allDeductions = billArrivals.flatMap { billNumberRepository.getDeductionsByEntryIdSync(it.id) }.distinctBy { it.id }
+                val billDeductions = billArrivals.flatMap { allDeductionsMap[it.id] ?: emptyList() }.distinctBy { it.id }
 
                 val details = LedgerEntryDetails(
                     billNumber = if (billNo.isBlank() || billNo == "N/A") "Legacy-${firstArrival.id.take(8).uppercase()}" else billNo,
                     productName = firstArrival.productName,
+                    productType = firstArrival.productType,
                     category = firstArrival.productCategory,
                     grade = if (billArrivals.size > 1) "Multiple" else firstArrival.grade,
                     quantity = billArrivals.sumOf { it.quantity },
@@ -66,6 +77,7 @@ class LedgerRepositoryImpl @Inject constructor(
                     commissionAmount = totalCommission,
                     netAmount = totalNetPayable,
                     totalNetWeightKg = billArrivals.sumOf { it.finalNetWeightKg },
+                    numberOfBoxes = billArrivals.sumOf { it.numberOfBoxes }.toDouble(),
                     totalWeightTon = billArrivals.sumOf { it.totalWeightTon },
                     emptyBoxWeightPerBox = firstArrival.emptyBoxWeightPerBox,
                     totalGrossKg = billArrivals.sumOf { it.grossWeightKg },
@@ -76,7 +88,7 @@ class LedgerRepositoryImpl @Inject constructor(
                     transportCharges = totalTransport,
                     packingCharges = totalPacking,
                     otherDeductions = totalOtherDeductions,
-                    deductions = allDeductions,
+                    deductions = billDeductions,
                     arrivalItems = billArrivals
                 )
                 LedgerEntry(
@@ -86,7 +98,7 @@ class LedgerRepositoryImpl @Inject constructor(
                     type = LedgerType.DEBIT,
                     transactionType = TransactionType.ARRIVAL,
                     date = firstArrival.date,
-                    status = if (totalNetPayable == 0.0) LedgerStatus.PAID else LedgerStatus.PENDING,
+                    status = if (Formatter.normalizeMoney(totalNetPayable) == 0.0) LedgerStatus.PAID else LedgerStatus.PENDING,
                     details = details
                 )
             } + payments.map { payment ->
@@ -112,13 +124,19 @@ class LedgerRepositoryImpl @Inject constructor(
                 it.copy(balance = currentBalance)
             }
 
+            val totalDebit = arrivals.sumOf { it.netAmount }
+            val totalCredit = payments.sumOf { it.amount }
+            val diff = totalDebit - totalCredit
+            val balance = Formatter.normalizeMoney(diff).coerceAtLeast(0.0)
+            val advance = Formatter.normalizeMoney(-diff).coerceAtLeast(0.0)
+
             LedgerSummary(
                 partyId = farmer.id,
                 partyName = farmer.name,
-                totalDebit = arrivals.sumOf { it.netAmount },
-                totalCredit = payments.sumOf { it.amount },
-                balance = farmer.pendingAmount,
-                advanceAmount = farmer.advanceAmount,
+                totalDebit = totalDebit,
+                totalCredit = totalCredit,
+                balance = balance,
+                advanceAmount = advance,
                 totalTransactions = entries.size,
                 lastTransactionDate = entries.lastOrNull()?.date ?: 0L,
                 entries = entriesWithBalance.reversed()
@@ -128,45 +146,82 @@ class LedgerRepositoryImpl @Inject constructor(
 
     override fun getBuyerLedger(buyerId: String): Flow<LedgerSummary> {
         return combine(
-            saleDao.getAllSales().distinctUntilChanged(),
-            saleDao.getAllSaleItems().distinctUntilChanged(),
-            paymentDao.getAllPayments().distinctUntilChanged(),
-            buyerDao.getAllBuyers().distinctUntilChanged()
-        ) { sales, items, payments, buyers ->
-            val buyer = buyers.find { it.id == buyerId } ?: return@combine null
-            buyer to (Triple(sales.filter { it.buyerId == buyerId && !it.isDeleted }, items, payments.filter { it.partyId == buyerId && it.partyType == "BUYER" && !it.isDeleted }))
-        }.map { data ->
-            if (data == null) return@map LedgerSummary("", "Unknown", 0.0, 0.0, 0.0)
-            val (buyer, triple) = data
-            val (sales, allItems, payments) = triple
+            saleDao.getSalesByBuyerFlow(buyerId).distinctUntilChanged(),
+            saleDao.getSaleItemsByBuyerFlow(buyerId).distinctUntilChanged(),
+            paymentDao.getPaymentsByPartyFlow(buyerId, "BUYER").distinctUntilChanged(),
+            buyerDao.getBuyerByIdFlow(buyerId).distinctUntilChanged(),
+            arrivalDao.getAllArrivals().distinctUntilChanged()
+        ) { sales, items, payments, buyer, arrivals ->
+            if (buyer == null) return@combine null
+            BuyerLedgerDataSnapshot(sales, items, payments, listOf(buyer), arrivals)
+        }.map { snapshot ->
+            if (snapshot == null) return@map LedgerSummary("", "Unknown", 0.0, 0.0, 0.0)
+            val buyer = snapshot.buyers.first()
             
+            val sales = snapshot.sales.filter { it.buyerId == buyerId && !it.isDeleted }
+            val payments = snapshot.payments.filter { it.partyId == buyerId && it.partyType == "BUYER" && !it.isDeleted }
+            val arrivalMap = snapshot.arrivals.associateBy { it.id }
+            
+            val allSaleIds = sales.map { it.id }
+            val allDeductionsMap = billNumberRepository.getDeductionsByEntryIds(allSaleIds).groupBy { it.entryId }
+
             val entries = (sales.map { sale ->
-                val saleItems = allItems.filter { it.saleId == sale.id }
-                val deductions = billNumberRepository.getDeductionsByEntryIdSync(sale.id)
-                val originalQty = if (saleItems.isNotEmpty()) saleItems.sumOf { it.inputQuantity } else sale.totalQuantity
+                val saleItemsOfSale = snapshot.allSaleItems.filter { it.saleId == sale.id }
+                val deductions = allDeductionsMap[sale.id] ?: emptyList()
+                
+                var totalGross = 0.0
+                var totalLess = 0.0
+                var totalSpoilage = 0.0
+                val saleArrivals = mutableListOf<ArrivalEntity>()
+                
+                saleItemsOfSale.forEach { item ->
+                    val arrival = arrivalMap[item.arrivalId]
+                    if (arrival != null) {
+                        saleArrivals.add(arrival)
+                        if (arrival.finalNetWeightKg > 0) {
+                            val ratio = item.quantitySold / arrival.finalNetWeightKg
+                            totalGross += ratio * arrival.grossWeightKg
+                            totalLess += ratio * arrival.totalEmptyBoxWeightKg
+                            totalSpoilage += ratio * arrival.spoilageKg
+                        }
+                    }
+                }
+
+                val originalQty = if (saleItemsOfSale.isNotEmpty()) saleItemsOfSale.sumOf { it.inputQuantity } else sale.totalQuantity
+                val firstSaleArrival = saleArrivals.firstOrNull()
+
                 val details = LedgerEntryDetails(
                     billNumber = if (sale.billNumber.isBlank() || sale.billNumber == "N/A") "Legacy-${sale.id.take(8).uppercase()}" else sale.billNumber,
                     farmerName = sale.farmerName,
                     productName = sale.productName,
+                    productType = sale.productType,
                     category = "General",
                     grade = sale.grade,
                     quantity = originalQty,
-                    unit = if (saleItems.isNotEmpty()) saleItems.first().unit else "KG",
+                    unit = if (saleItemsOfSale.isNotEmpty()) saleItemsOfSale.first().unit else "KG",
                     rate = if (originalQty > 0) sale.totalAmount / originalQty else 0.0,
                     purchaseRate = if (originalQty > 0) sale.totalPurchaseAmount / originalQty else 0.0,
-                    ratePerKg = if (saleItems.isNotEmpty()) saleItems.first().saleRate else 0.0,
+                    ratePerKg = if (saleItemsOfSale.isNotEmpty()) saleItemsOfSale.first().saleRate else 0.0,
                     grossAmount = sale.totalAmount,
+                    laborPercentage = sale.laborPercentage,
                     commissionAmount = sale.totalCommission, 
                     transportCharges = sale.transportCharges,
                     laborCharges = sale.laborCharges,
                     packingCharges = sale.packingCharges,
                     otherDeductions = sale.otherCharges,
                     netAmount = sale.totalNetAmount,
-                    totalNetWeightKg = saleItems.sumOf { it.quantitySold },
+                    totalNetWeightKg = saleItemsOfSale.sumOf { it.quantitySold },
+                    numberOfBoxes = if (saleItemsOfSale.any { it.unit == "Boxes" }) originalQty else 0.0,
+                    totalGrossKg = totalGross,
+                    lessWeightKg = totalLess,
+                    spoilageKg = totalSpoilage,
+                    emptyBoxWeightPerBox = firstSaleArrival?.emptyBoxWeightPerBox ?: 0.0,
+                    spoilagePercentage = firstSaleArrival?.spoilagePercentage ?: 0.0,
                     paymentMade = sale.paidAmount,
                     pendingAmount = sale.pendingAmount,
                     deductions = deductions,
-                    saleItems = saleItems
+                    saleItems = saleItemsOfSale,
+                    arrivalItems = saleArrivals
                 )
                 LedgerEntry(
                     id = sale.id,
@@ -175,7 +230,7 @@ class LedgerRepositoryImpl @Inject constructor(
                     type = LedgerType.DEBIT,
                     transactionType = TransactionType.SALE,
                     date = sale.date,
-                    status = if (sale.pendingAmount == 0.0) LedgerStatus.PAID else if (sale.paidAmount > 0) LedgerStatus.PARTIAL else LedgerStatus.PENDING,
+                    status = if (Formatter.isAccountSettled(sale.totalNetAmount, sale.paidAmount)) LedgerStatus.PAID else if (sale.paidAmount > 0) LedgerStatus.PARTIAL else LedgerStatus.PENDING,
                     details = details
                 )
             } + payments.map { payment ->
@@ -201,13 +256,19 @@ class LedgerRepositoryImpl @Inject constructor(
                 it.copy(balance = currentBalance)
             }
 
+            val totalDebit = sales.sumOf { it.totalNetAmount }
+            val totalCredit = payments.sumOf { it.amount }
+            val diff = totalDebit - totalCredit
+            val balance = Formatter.normalizeMoney(diff).coerceAtLeast(0.0)
+            val advance = Formatter.normalizeMoney(-diff).coerceAtLeast(0.0)
+
             LedgerSummary(
                 partyId = buyer.id,
                 partyName = buyer.name,
-                totalDebit = sales.sumOf { it.totalNetAmount },
-                totalCredit = payments.sumOf { it.amount },
-                balance = buyer.pendingAmount,
-                advanceAmount = 0.0,
+                totalDebit = totalDebit,
+                totalCredit = totalCredit,
+                balance = balance,
+                advanceAmount = advance,
                 totalTransactions = entries.size,
                 lastTransactionDate = entries.lastOrNull()?.date ?: 0L,
                 entries = entriesWithBalance.reversed()
@@ -221,30 +282,35 @@ class LedgerRepositoryImpl @Inject constructor(
             paymentDao.getAllPayments().distinctUntilChanged(),
             farmerDao.getAllFarmers().distinctUntilChanged()
         ) { arrivals, payments, farmers ->
+            val distinctFarmers = farmers.distinctBy { it.id }
             val arrivalMap = arrivals.filter { !it.isDeleted }.groupBy { it.farmerId }
             val paymentMap = payments.filter { it.partyType == "FARMER" && !it.isDeleted }.groupBy { it.partyId }
             
-            farmers.filter { !it.isDeleted }.map { farmer ->
+            distinctFarmers.filter { !it.isDeleted }.mapNotNull { farmer ->
                 val farmerArrivals = arrivalMap[farmer.id] ?: emptyList()
                 val farmerPayments = paymentMap[farmer.id] ?: emptyList()
                 
-                // Use dynamic calculation for balance to ensure consistency (Fixes M2)
+                if (farmerArrivals.isEmpty() && farmerPayments.isEmpty()) return@mapNotNull null
+
                 val totalDebit = farmerArrivals.sumOf { it.netAmount }
                 val totalCredit = farmerPayments.sumOf { it.amount }
+                val diff = totalDebit - totalCredit
+                val balance = Formatter.normalizeMoney(diff).coerceAtLeast(0.0)
+                val advance = Formatter.normalizeMoney(-diff).coerceAtLeast(0.0)
 
                 LedgerSummary(
                     partyId = farmer.id,
                     partyName = farmer.name,
                     totalDebit = totalDebit,
                     totalCredit = totalCredit,
-                    balance = totalDebit - totalCredit,
-                    advanceAmount = farmer.advanceAmount,
+                    balance = balance,
+                    advanceAmount = advance,
                     totalTransactions = farmerArrivals.size + farmerPayments.size,
                     lastTransactionDate = maxOf(
                         farmerArrivals.maxOfOrNull { it.date } ?: 0L,
                         farmerPayments.maxOfOrNull { it.date } ?: 0L
                     ),
-                    entries = emptyList() // Summaries usually don't need the full entry list
+                    entries = emptyList()
                 )
             }.sortedByDescending { it.balance }
         }.flowOn(Dispatchers.IO)
@@ -256,23 +322,29 @@ class LedgerRepositoryImpl @Inject constructor(
             paymentDao.getAllPayments().distinctUntilChanged(),
             buyerDao.getAllBuyers().distinctUntilChanged()
         ) { sales, payments, buyers ->
+            val distinctBuyers = buyers.distinctBy { it.id }
             val saleMap = sales.filter { !it.isDeleted }.groupBy { it.buyerId }
             val paymentMap = payments.filter { it.partyType == "BUYER" && !it.isDeleted }.groupBy { it.partyId }
 
-            buyers.filter { !it.isDeleted }.map { buyer ->
+            distinctBuyers.filter { !it.isDeleted }.mapNotNull { buyer ->
                 val buyerSales = saleMap[buyer.id] ?: emptyList()
                 val buyerPayments = paymentMap[buyer.id] ?: emptyList()
                 
+                if (buyerSales.isEmpty() && buyerPayments.isEmpty()) return@mapNotNull null
+
                 val totalDebit = buyerSales.sumOf { it.totalNetAmount }
                 val totalCredit = buyerPayments.sumOf { it.amount }
+                val diff = totalDebit - totalCredit
+                val balance = Formatter.normalizeMoney(diff).coerceAtLeast(0.0)
+                val advance = Formatter.normalizeMoney(-diff).coerceAtLeast(0.0)
 
                 LedgerSummary(
                     partyId = buyer.id,
                     partyName = buyer.name,
                     totalDebit = totalDebit,
                     totalCredit = totalCredit,
-                    balance = totalDebit - totalCredit,
-                    advanceAmount = 0.0,
+                    balance = balance,
+                    advanceAmount = advance,
                     totalTransactions = buyerSales.size + buyerPayments.size,
                     lastTransactionDate = maxOf(
                         buyerSales.maxOfOrNull { it.date } ?: 0L,

@@ -15,6 +15,9 @@ interface FarmerDao {
     @Query("SELECT * FROM farmers WHERE id = :id")
     suspend fun getFarmerById(id: String): FarmerEntity?
 
+    @Query("SELECT * FROM farmers WHERE id = :id AND isDeleted = 0")
+    fun getFarmerByIdFlow(id: String): Flow<FarmerEntity?>
+
     @Query("SELECT * FROM farmers")
     suspend fun getFarmersList(): List<FarmerEntity>
 
@@ -32,4 +35,7 @@ interface FarmerDao {
 
     @Query("UPDATE farmers SET isSynced = 1 WHERE id = :id")
     suspend fun markAsSynced(id: String)
+
+    @Query("DELETE FROM farmers WHERE id = :id")
+    suspend fun deleteFarmerById(id: String)
 }

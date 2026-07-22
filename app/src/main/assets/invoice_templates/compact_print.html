@@ -53,41 +53,18 @@
         /* Hide separate unit column if it exists in data but not in header */
         /* Since compact_print in Kotlin doesn't generate Unit column, we just style what's there */
 
-        .qty-cell{
-            white-space: nowrap !important;
-            text-align:center;
-            vertical-align:middle;
-        }
+        .qty-cell, .rate-cell { text-align: center; }
+        .description-cell { text-align: left; white-space: normal; overflow-wrap: anywhere; }
+        .amount-cell { text-align: right; white-space: nowrap; }
 
-        .qty-cell *{
-            display:inline !important;
-            white-space:nowrap !important;
-        }
+        .metadata-panel { border: 1px solid #0B6B35; padding: 8px 10px; overflow: hidden; margin-bottom: 15px; }
+        .meta-row { display: grid; grid-template-columns: 38% 62%; align-items: start; gap: 6px; min-width: 0; margin-bottom: 4px; }
+        .meta-row:last-child { margin-bottom: 0; }
+        .meta-label { font-weight: 700; white-space: nowrap; font-size: 12px; }
+        .meta-value { font-weight: 600; min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
 
-        .text-left { text-align: left; }
-        .text-center { text-align: center; }
-        .text-right { text-align: right; }
-
-        .totals-section { margin-top: 15px; font-size: 14px; }
-        .total-row { display: flex; justify-content: space-between; padding: 4px 0; }
-        .grand-total {
-            background: #0B6B35;
-            color: white;
-            padding: 12px;
-            margin-top: 10px;
-            font-weight: bold;
-            font-size: 20px;
-            border-radius: 4px;
-        }
-
-        .qr-section { margin-top: 25px; text-align: center; }
-        .qr-img { width: 130px; height: 130px; border: 1px solid #0B6B35; padding: 8px; background: #fff; }
-
-        .signature-area { margin-top: 35px; text-align: center; font-size: 12px; }
-        .sig-img { max-height: 65px; max-width: 180px; object-fit: contain; }
-        .sig-line { margin: 5px auto; border-top: 1px solid #0B6B35; width: 200px; }
-
-        .footer-msg { text-align: center; margin-top: 25px; font-size: 11px; font-weight: bold; color: #0B6B35; }
+        .qr-image { width: 100%; height: 100%; object-fit: contain; display: block; image-rendering: pixelated; }
+        .signature-image { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
 
         .hidden { display: none !important; }
     </style>
@@ -104,19 +81,34 @@
                 </div>
             </div>
 
-            <div class="bill-info">
-                <b>BILL TO:</b> {{customerName}}<br>
-                <b>BILL NO:</b> {{billNumber}}<br>
-                <b>DATE:</b> {{date}}
+            <div class="metadata-panel">
+                <div class="meta-row">
+                    <span class="meta-label">BILL TO</span>
+                    <span class="meta-value">{{customerName}}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">BILL NO.</span>
+                    <span class="meta-value">{{billNumber}}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">DATE</span>
+                    <span class="meta-value">{{date}}</span>
+                </div>
             </div>
 
-            <table>
+            <table style="table-layout: fixed;">
+                <colgroup>
+                    <col style="width:45%">
+                    <col style="width:20%">
+                    <col style="width:15%">
+                    <col style="width:20%">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th width="45%">ITEM</th>
-                        <th class="text-center" width="20%">QTY</th>
-                        <th class="text-right" width="15%">RATE</th>
-                        <th class="text-right" width="20%">AMT</th>
+                        <th class="text-left">ITEM</th>
+                        <th class="text-center">QTY</th>
+                        <th class="text-right">RATE</th>
+                        <th class="text-right">AMT</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -136,12 +128,14 @@
             </div>
 
             <div class="qr-section {{qrHidden}}">
-                <img src="{{qrBase64}}" class="qr-img">
+                <div style="width: 130px; height: 130px; border: 1px solid #0B6B35; padding: 8px; background: #fff; margin: 0 auto;">
+                    <img src="{{qrBase64}}" class="qr-image" alt="" onerror="this.style.display='none'; this.parentElement.style.display='none';">
+                </div>
                 <div style="font-size: 11px; margin-top: 8px; font-weight: bold; color: #0B6B35; letter-spacing: 1px;">SCAN & PAY</div>
             </div>
 
             <div class="signature-area {{signatureHidden}}">
-                <img src="{{signatureBase64}}" class="sig-img">
+                <img src="{{signatureBase64}}" class="signature-image" alt="" onerror="this.style.display='none';">
                 <div class="sig-line"></div>
                 <div style="font-weight: bold; color: #0B6B35; text-transform: uppercase;">AUTHORIZED SIGNATORY</div>
             </div>

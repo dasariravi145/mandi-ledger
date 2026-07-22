@@ -57,6 +57,9 @@ fun SaleScreen(
     val autoBillNumber by viewModel.billNumber.collectAsStateWithLifecycle()
     val deductions by viewModel.deductions.collectAsStateWithLifecycle()
     val totalOtherDeductions by viewModel.totalDeductions.collectAsStateWithLifecycle()
+    
+    val overallLaborPercent by viewModel.overallLaborPercent.collectAsStateWithLifecycle()
+    val overallTransport by viewModel.overallTransport.collectAsStateWithLifecycle()
 
     var selectedBuyer by remember { 
         mutableStateOf(buyers.find { it.name.equals(ocrBuyer, ignoreCase = true) }) 
@@ -298,6 +301,34 @@ fun SaleScreen(
                     )
                 }
                 
+                // STEP 3: OVERALL CHARGES SECTION
+                HorizontalDivider(Modifier.padding(vertical = 16.dp))
+                Text("Overall Charges", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = overallLaborPercent,
+                                onValueChange = { viewModel.onOverallLaborPercentChange(it) },
+                                label = { Text("Labour (%)") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                            OutlinedTextField(
+                                value = overallTransport,
+                                onValueChange = { viewModel.onOverallTransportChange(it) },
+                                label = { Text("Transport ₹") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                        }
+                    }
+                }
+                
             // Detailed Confirmation Summary
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
@@ -499,7 +530,8 @@ fun SaleItemRowCard(
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Farmer: ${item.arrival.farmerName}", fontSize = 12.sp, color = Color.Gray)
-                    Text("${item.arrival.productName} (${item.arrival.grade})", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    val displayProductName = if (item.arrival.productType.isNotBlank()) "${item.arrival.productName} (${item.arrival.productType})" else item.arrival.productName
+                    Text("$displayProductName - ${item.arrival.grade}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Text("Category: ${item.arrival.productCategory}", fontSize = 12.sp, color = Color.Gray)
                 }
                 IconButton(onClick = onRemove) { Icon(Icons.Default.Delete, null, tint = Color.Red) }
@@ -512,12 +544,11 @@ fun SaleItemRowCard(
             val kgPerBox = if (item.arrival.numberOfBoxes > 0) item.arrival.finalNetWeightKg / item.arrival.numberOfBoxes else 0.0
             
             val availableInUnit = if (unit == "Boxes") {
-                if (item.arrival.quantity > 0) (item.arrival.remainingQuantity / item.arrival.quantity) * item.arrival.numberOfBoxes else 0.0
+                if (item.arrival.netQuantity > 0) (item.arrival.remainingQuantity / item.arrival.netQuantity) * item.arrival.numberOfBoxes else 0.0
             } else item.arrival.remainingQuantity
             
             val availableKg = item.arrival.remainingQuantity * (when(unit) {
-                "Ton" -> 1000.0
-                "Boxes" -> kgPerBox
+                "Ton", "Boxes" -> 1000.0
                 else -> 1.0
             })
             
@@ -552,7 +583,9 @@ fun SaleItemRowCard(
                             val sanitizedInput = if (input.startsWith(".")) "0$input" else input
                             
                             val v = sanitizedInput.toDoubleOrNull() ?: 0.0
-                            onUpdate(item.copy(inputQuantity = v, rawInputQuantity = sanitizedInput))
+                            
+                            val isNowFullStock = Math.abs(v - availableInUnit) < 0.001
+                            onUpdate(item.copy(inputQuantity = v, rawInputQuantity = sanitizedInput, isFullStock = isNowFullStock))
                         },
                         label = { Text("Sale Qty ($unit)") },
                         placeholder = { if (isTon || isBoxes) Text("0.00") }, // Requirement 3: Show "0.00" only as placeholder
@@ -560,16 +593,23 @@ fun SaleItemRowCard(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         isError = item.inputQuantity > (availableInUnit + 0.0001)
                     )
-                    if ((isTon || isBoxes) && item.inputQuantity > 0) {
-                        val factor = if(isTon) 1000.0 else kgPerBox
+                    if (isBoxes && item.quantity > 0) {
                         Text(
-                            "Equivalent: ${Formatter.formatNetWeight(item.inputQuantity * factor)}",
+                            "Equivalent: ${Formatter.formatNetWeight(item.quantity)}",
+                            fontSize = 11.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                        )
+                    } else if (isTon && item.inputQuantity > 0) {
+                        Text(
+                            "Equivalent: ${Formatter.formatNetWeight(item.quantity)}",
                             fontSize = 11.sp,
                             color = Color.Gray,
                             modifier = Modifier.padding(start = 4.dp, top = 2.dp)
                         )
                     }
-                    if (item.inputQuantity > (availableInUnit + 0.0001)) {
+                    val isExceeded = item.inputQuantity > (availableInUnit + 0.0001)
+                    if (isExceeded) {
                         Text(
                             "Sale quantity exceeds available stock",
                             fontSize = 10.sp,
@@ -590,51 +630,18 @@ fun SaleItemRowCard(
                 )
             }
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = if(item.laborCharges == 0.0) "" else Formatter.formatWeight(item.laborCharges),
-                    onValueChange = { 
-                        val v = it.toDoubleOrNull() ?: 0.0
-                        onUpdate(item.copy(laborCharges = v))
-                    },
-                    label = { Text("Labor ₹") },
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                OutlinedTextField(
-                    value = if(item.transportCharges == 0.0) "" else Formatter.formatWeight(item.transportCharges),
-                    onValueChange = { 
-                        val v = it.toDoubleOrNull() ?: 0.0
-                        onUpdate(item.copy(transportCharges = v))
-                    },
-                    label = { Text("Trans ₹") },
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-            }
-            
-            OutlinedTextField(
-                value = if(item.otherCharges == 0.0) "" else Formatter.formatWeight(item.otherCharges),
-                onValueChange = { 
-                    val v = it.toDoubleOrNull() ?: 0.0
-                    onUpdate(item.copy(otherCharges = v))
-                },
-                label = { Text("Other Charges ₹") },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-            )
-
             HorizontalDivider(thickness = 0.5.dp)
             
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 Column {
-                    Text("Qty: ${Formatter.formatQuantityDisplay(item.inputQuantity, item.arrival.unit)}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    if (item.arrival.unit != "KG") {
-                        Text("Net: ${Formatter.formatNetWeight(item.quantity)}", fontSize = 11.sp, color = Color.Gray)
-                    }
+                    val displayQty = item.inputQuantity
+                    val displayUnit = item.arrival.unit
+                    Text("Qty: ${Formatter.formatQuantityDisplay(displayQty, displayUnit)}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    // Requirement: The displayed Net KG and Equivalent KG must not contradict each other.
+                    Text("Equivalent: ${Formatter.formatNetWeight(item.quantity)}", fontSize = 11.sp, color = Color.Gray)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(stringResource(R.string.total_collection), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Item Amount", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text(
                         Formatter.formatAmount(item.netAmount),
                         fontWeight = FontWeight.Black,
@@ -688,11 +695,15 @@ fun SaleConfirmationSummary(
             
             Text(stringResource(R.string.amount), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                SummaryRow(stringResource(R.string.total_items), Formatter.formatWeight(totals.totalQuantity))
+                SummaryRow("Total Net KG", "${Formatter.formatNetWeight(totals.totalQuantity)}")
                 SummaryRow(stringResource(R.string.gross_amount), "₹${Formatter.formatCurrency(totals.totalSaleAmount)}")
-                SummaryRow(stringResource(R.string.labor_rs), "₹${Formatter.formatCurrency(totals.totalLabor)}", color = Color.Red)
+                if (totals.laborPercentage > 0) {
+                    SummaryRow("Labour (${Formatter.formatWeight(totals.laborPercentage)}%)", "₹${Formatter.formatCurrency(totals.totalLabor)}", color = Color.Red)
+                } else {
+                    SummaryRow(stringResource(R.string.labor_rs), "₹${Formatter.formatCurrency(totals.totalLabor)}", color = Color.Red)
+                }
                 SummaryRow(stringResource(R.string.transport_rs), "₹${Formatter.formatCurrency(totals.totalTransport)}", color = Color.Red)
-                SummaryRow(stringResource(R.string.other_rs), "₹${Formatter.formatCurrency(totals.totalOther + otherDeductionsTotal)}", color = Color.Red)
+                SummaryRow(stringResource(R.string.other_rs), "₹${Formatter.formatCurrency(otherDeductionsTotal)}", color = Color.Red)
                 
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 
@@ -736,13 +747,17 @@ fun AddItemModalSheet(
 
             // Step 1: Select Farmer
             Text(stringResource(R.string.select_farmer), style = MaterialTheme.typography.labelMedium)
-            SelectionDropdown(
-                items = farmersWithStock.map { it.farmerName },
-                selectedIndex = farmersWithStock.indexOfFirst { it.farmerId == selectedFarmerId },
-                onSelect = { index ->
-                    selectedFarmerId = farmersWithStock[index].farmerId
-                }
-            )
+            if (farmersWithStock.isEmpty()) {
+                Text("No additional farmer stock available.", modifier = Modifier.padding(8.dp), color = Color.Gray)
+            } else {
+                SelectionDropdown(
+                    items = farmersWithStock.map { it.farmerName },
+                    selectedIndex = farmersWithStock.indexOfFirst { it.farmerId == selectedFarmerId },
+                    onSelect = { index ->
+                        selectedFarmerId = farmersWithStock[index].farmerId
+                    }
+                )
+            }
 
             // Step 2: Load Stock Entries
             if (selectedFarmerId != null) {
@@ -762,13 +777,16 @@ fun AddItemModalSheet(
                             onClick = { 
                                 val defaultSaleRate = if (arrival.ratePerKg > 0) arrival.ratePerKg else (arrival.purchaseRate / (if(arrival.unit == "Ton") 1000.0 else 1.0))
                                 
+                                val availableInUnit = if (arrival.unit == "Boxes") {
+                                    if (arrival.netQuantity > 0) (arrival.remainingQuantity / arrival.netQuantity) * arrival.numberOfBoxes else 0.0
+                                } else arrival.remainingQuantity
+
                                 onItemAdded(com.dasariravi145.agrolynch.ui.screens.sale.SaleItemDraft(
                                     arrival = arrival,
-                                    inputQuantity = 0.0,
+                                    inputQuantity = availableInUnit,
+                                    rawInputQuantity = Formatter.formatWeight(availableInUnit),
                                     saleRate = defaultSaleRate,
-                                    laborCharges = 0.0,
-                                    transportCharges = 0.0,
-                                    otherCharges = 0.0
+                                    isFullStock = true
                                 ))
                                 android.widget.Toast.makeText(context, "Added ${arrival.productName} ${arrival.grade}", android.widget.Toast.LENGTH_SHORT).show()
                             }
@@ -791,23 +809,25 @@ fun FarmerStockSelectionCard(arrival: ArrivalEntity, isSelected: Boolean, onClic
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                Text("${arrival.productName} (${arrival.grade})", fontWeight = FontWeight.Bold)
+                val displayProductName = if (arrival.productType.isNotBlank()) "${arrival.productName} (${arrival.productType})" else arrival.productName
+                Text("$displayProductName - ${arrival.grade}", fontWeight = FontWeight.Bold)
                 Text(dateStr, fontSize = 11.sp, color = Color.Gray)
             }
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                 val kgPerBox = if (arrival.numberOfBoxes > 0) arrival.finalNetWeightKg / arrival.numberOfBoxes else 0.0
                 val availableInUnit = if (arrival.unit == "Boxes") {
-                    if (arrival.quantity > 0) (arrival.remainingQuantity / arrival.quantity) * arrival.numberOfBoxes else 0.0
+                    if (arrival.netQuantity > 0) (arrival.remainingQuantity / arrival.netQuantity) * arrival.numberOfBoxes else 0.0
                 } else arrival.remainingQuantity
                 
                 val availableKg = arrival.remainingQuantity * (when(arrival.unit) {
-                    "Ton" -> 1000.0
-                    "Boxes" -> kgPerBox
+                    "Ton", "Boxes" -> 1000.0
                     else -> 1.0
                 })
                 
                 Column {
-                    Text("${stringResource(R.string.stock_label)}: ${Formatter.formatWeight(availableInUnit)} ${arrival.unit}", fontSize = 13.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Medium)
+                    val displayStockQty = availableInUnit
+                    val displayStockUnit = arrival.unit
+                    Text("${stringResource(R.string.stock_label)}: ${Formatter.formatWeight(displayStockQty)} $displayStockUnit", fontSize = 13.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Medium)
                     if (arrival.unit != "KG") {
                         Text("(${Formatter.formatWeight(availableKg)} KG)", fontSize = 11.sp, color = Color.Gray)
                     }
@@ -873,7 +893,7 @@ fun SaleTransactionSummaryCard(
                 Column {
                     Text(stringResource(R.string.total_items), color = Color.Gray, fontSize = 12.sp)
                     // We don't have a single unit for multiple items, but we can show total weight or something descriptive
-                    Text("Total Net: ${Formatter.formatNetWeight(total.totalQuantity)}", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Total Net KG: ${Formatter.formatNetWeight(total.totalQuantity)}", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(stringResource(R.string.total_collection), color = Color.Gray, fontSize = 12.sp)

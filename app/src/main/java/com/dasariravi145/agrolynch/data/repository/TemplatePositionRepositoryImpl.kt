@@ -54,6 +54,23 @@ class TemplatePositionRepositoryImpl @Inject constructor(
     override suspend fun getWizardConfig(templateId: String): InvoiceWizardConfig? {
         return wizardDao.getConfig(templateId)?.let {
             gson.fromJson(it.configJson, InvoiceWizardConfig::class.java)
+        } ?: getDefaultWizardConfig(templateId)
+    }
+
+    private fun getDefaultWizardConfig(templateId: String): InvoiceWizardConfig {
+        return when (templateId) {
+            "GK_FRUITS_CLASSIC" -> InvoiceWizardConfig(
+                template = templateId,
+                shopNameFontSize = 46f,
+                shopNameAlignment = "CENTER",
+                logoPosition = "CENTER"
+            )
+            "ROYAL_HERITAGE_MANDI" -> InvoiceWizardConfig(
+                template = templateId,
+                shopNameFontSize = 42f,
+                shopNameAlignment = "CENTER"
+            )
+            else -> InvoiceWizardConfig(template = templateId)
         }
     }
 

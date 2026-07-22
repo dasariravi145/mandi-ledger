@@ -62,6 +62,10 @@ sealed class Screen(val route: String) {
     object VoiceEntry : Screen("voice_entry")
     object Security : Screen("security")
     object Backup : Screen("backup")
+    object AccountBookArchive : Screen("account_book_archive")
+    object ArchiveDetail : Screen("archive_detail/{archiveId}") {
+        fun passId(id: String) = "archive_detail/$id"
+    }
     object Premium : Screen("premium")
     object Settings : Screen("settings")
     object BillSettings : Screen("bill_settings")

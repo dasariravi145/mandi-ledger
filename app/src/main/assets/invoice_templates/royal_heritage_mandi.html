@@ -123,7 +123,9 @@
             background: white;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
-        .god-image { width: 100%; height: 100%; object-fit: cover; }
+        .god-image { width: 100%; height: 100%; object-fit: contain; display: block; }
+        .qr-image { width: 100%; height: 100%; object-fit: contain; display: block; image-rendering: pixelated; }
+        .signature-image { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
 
         .company-name {
             font-size: 44px;
@@ -140,16 +142,19 @@
         .biz-item { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 2px; }
         .icon { color: #C9A227; font-size: 16px; margin-top: 2px; }
 
-        .info-panel {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 5px;
-            padding: 12px 20px;
-            background: rgba(201, 162, 39, 0.1);
-            border: 1px solid #C9A227;
-            border-radius: 8px;
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+            z-index: 2;
         }
-        .info-panel b { color: #064E3B; }
+
+        .metadata-panel { border: 1px solid #C9A227; padding: 8px 10px; overflow: hidden; color: #064E3B; background: rgba(201, 162, 39, 0.1); border-radius: 8px; }
+        .meta-row { display: grid; grid-template-columns: 38% 62%; align-items: start; gap: 6px; min-width: 0; margin-bottom: 4px; text-align: left; }
+        .meta-row:last-child { margin-bottom: 0; }
+        .meta-label { font-weight: 700; white-space: nowrap; font-size: 12px; text-transform: uppercase; color: #C9A227; }
+        .meta-value { font-weight: 600; min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
 
         /* Table Section */
         .table-wrap {
@@ -157,7 +162,7 @@
             margin-top: 15px;
             min-height: 350px;
         }
-        table { width: 100%; border-collapse: collapse; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         th {
             background: #064E3B;
             color: #FFFDF3;
@@ -312,7 +317,7 @@
 
                 <div class="header-center">
                     <div class="god-frame {{godImageHidden}}">
-                        <img src="{{godImageBase64}}" class="god-image" alt="God Image">
+                        <img src="{{godImageBase64}}" class="god-image" alt="" onerror="this.style.display='none'; this.parentElement.style.display='none';">
                     </div>
                 </div>
 
@@ -327,25 +332,51 @@
 
             <h1 class="company-name">{{companyName}}</h1>
 
-            <div class="info-panel">
-                <div class="info-left">
-                    Customer: <b>{{customerName}}</b>
+            <div class="info-grid">
+                <div class="metadata-panel metadata-left">
+                    <div class="meta-row">
+                        <span class="meta-label">CUSTOMER NAME</span>
+                        <span class="meta-value">{{customerName}}</span>
+                    </div>
+                    <div class="meta-row {{customerMobileHidden}}">
+                        <span class="meta-label">MOBILE</span>
+                        <span class="meta-value">{{customerMobile}}</span>
+                    </div>
                 </div>
-                <div class="info-right" style="text-align: right;">
-                    Bill No: <b>{{billNumber}}</b> | Date: <b>{{date}}</b>
-                    <div class="{{vehicleHidden}}">Vehicle: <b>{{vehicleNumber}}</b></div>
+                <div class="metadata-panel metadata-right">
+                    <div class="meta-row">
+                        <span class="meta-label">BILL NO.</span>
+                        <span class="meta-value">{{billNumber}}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">DATE</span>
+                        <span class="meta-value">{{date}}</span>
+                    </div>
+                    <div class="meta-row {{vehicleHidden}}">
+                        <span class="meta-label">VEHICLE</span>
+                        <span class="meta-value">{{vehicleNumber}}</span>
+                    </div>
                 </div>
             </div>
 
             <div class="table-wrap">
                 <table>
+                    <colgroup>
+                        <col style="width:8%">
+                        <col style="width:36%">
+                        <col style="width:14%">
+                        <col style="width:16%">
+                        <col style="width:12%">
+                        <col style="width:14%">
+                    </colgroup>
                     <thead>
                         <tr>
-                            <th width="8%">SR.</th>
-                            <th width="45%" class="text-left">DESCRIPTION</th>
-                            <th width="15%">GRADE</th>
-                            <th width="15%">QTY</th>
-                            <th width="17%" class="text-right">AMOUNT</th>
+                            <th>SR.</th>
+                            <th class="text-left">DESCRIPTION</th>
+                            <th>GRADE</th>
+                            <th>QTY</th>
+                            <th>RATE</th>
+                            <th class="text-right">AMOUNT</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -357,7 +388,7 @@
             <div class="footer-area">
                 <div class="qr-section {{qrHidden}}">
                     <div class="qr-container">
-                        <img src="{{qrBase64}}" style="width: 100%; display: block;" alt="QR">
+                        <img src="{{qrBase64}}" class="qr-image" alt="" onerror="this.style.display='none'; this.parentElement.style.display='none';">
                     </div>
                     <div class="qr-label">SCAN TO PAY</div>
                 </div>
@@ -377,7 +408,7 @@
                     </div>
 
                     <div class="signature-section {{signatureHidden}}">
-                        <img src="{{signatureBase64}}" class="sig-img" alt="Signature">
+                        <img src="{{signatureBase64}}" class="signature-image" alt="" onerror="this.style.display='none';">
                         <div class="sig-label">Authorized Signature</div>
                     </div>
                 </div>

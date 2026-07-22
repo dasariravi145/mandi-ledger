@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -86,10 +87,10 @@ fun SettingsScreen(
             // Business Section
             SettingsSectionTitle(stringResource(R.string.business))
             SettingsItem(
-                title = stringResource(R.string.company_profile_branding),
-                subtitle = stringResource(R.string.company_profile_branding_sub),
-                icon = Icons.Default.Business,
-                onClick = onViewCompanyProfile
+                title = "Professional Invoice Setup",
+                subtitle = "Manage shop name, address, logo and design",
+                icon = Icons.Default.AutoFixHigh,
+                onClick = { onViewCompanyProfile() }
             )
             SettingsItem(
                 title = stringResource(R.string.bill_settings),
@@ -99,51 +100,71 @@ fun SettingsScreen(
             )
 
             // Account Section
-            SettingsSectionTitle(stringResource(R.string.account))
+            SettingsSectionTitle("Cloud Backup — Premium")
             
-            // TASK Implement Cloud Account info
             val userPhone = viewModel.userPhone.collectAsState().value
             val lastBackup = viewModel.lastBackupDate.collectAsState().value
             
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Cloud, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(12.dp))
-                        Text("Cloud Account", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Column {
+                            Text("Cloud Account", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(userPhone, fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Surface(
+                            color = if (isPremium) Color(0xFFE8F5E9) else Color(0xFFF5F5F5),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = if (isPremium) "PREMIUM" else "FREE",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isPremium) Color(0xFF2E7D32) else Color.Gray
+                            )
+                        }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Text("Mobile: $userPhone", fontSize = 14.sp)
-                    Text("Status: ${if(isPremium) "Premium" else "Free"}", fontSize = 14.sp)
-                    Text("Last Backup: ${lastBackup ?: "Never"}", fontSize = 14.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Last Cloud Backup: $lastBackup", fontSize = 13.sp)
                     
                     if (isPremium) {
-                        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 onClick = { viewModel.syncNow() },
                                 shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8))
                             ) {
-                                Text("Backup Now", fontSize = 12.sp)
+                                Icon(Icons.Default.CloudUpload, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Backup to Cloud", fontSize = 12.sp)
                             }
                             OutlinedButton(
-                                onClick = { viewModel.restoreNow() },
+                                onClick = { onViewBackup() }, // Open Backup screen for selection
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Restore", fontSize = 12.sp)
+                                Icon(Icons.Default.SettingsBackupRestore, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Restore from Cloud", fontSize = 12.sp)
                             }
                         }
                     } else {
-                        Text(
-                            "Cloud backup is a premium feature.", 
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
+                        Button(
+                            onClick = onViewSubscription,
+                            modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Upgrade to Premium for Cloud Backup")
+                        }
                     }
                 }
             }
@@ -226,7 +247,7 @@ fun SettingsScreen(
             SettingsItem(
                 title = stringResource(R.string.logout),
                 subtitle = stringResource(R.string.sign_out_sub),
-                icon = Icons.Default.Logout,
+                icon = Icons.AutoMirrored.Filled.Logout,
                 iconColor = MaterialTheme.colorScheme.error,
                 onClick = {
                     viewModel.logout()

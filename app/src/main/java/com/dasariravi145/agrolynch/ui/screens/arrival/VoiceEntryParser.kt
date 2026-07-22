@@ -32,6 +32,7 @@ object VoiceEntryParser {
     private val mangoKeywords = listOf("mango", "mamidi", "మామిడి", "aam", "आम", "maanga", "மாம்பழம்", "mavina hannu", "ಮಾವಿನ ಹಣ್ಣು")
     private val tonKeywords = listOf("ton", "tonne", "tons", "టన్ను", "టన్నులు", "टन", "டன்", "ಟನ್")
     private val kgKeywords = listOf("kg", "kilo", "kilos", "కిలో", "किलो", "கிலோ", "ಕೆಜಿ")
+    private val boxKeywords = listOf("box", "boxes", "petti", "పెట్టె", "బాక్సులు", "dabba", "डब्बा", "பெட்டி", "ಪೆಟ್ಟಿಗೆ")
     private val rateKeywords = listOf("rate", "price", "రేట్", "ధర", "रेट", "భావం", "விலை", "ದರ")
     private val gradeKeywords = listOf("grade", "గ్రేడ్", "ग्रेड", "தரம்", "ಗ್ರೇಡ್")
     private val commissionKeywords = listOf("commission", "కమిషన్", "కమిషన్", "கமிஷன்", "ಕಮಿಷನ್")
@@ -78,6 +79,15 @@ object VoiceEntryParser {
                 if (match != null) {
                     quantity = match.groupValues[1].toDoubleOrNull()
                     unit = "KG"
+                }
+            }
+        }
+        if (unit == null) {
+            boxKeywords.forEach { k ->
+                val match = Regex("(\\d+\\.?\\d*)\\s*$k").find(lower)
+                if (match != null) {
+                    quantity = match.groupValues[1].toDoubleOrNull()
+                    unit = "Boxes"
                 }
             }
         }

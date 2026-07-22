@@ -12,5 +12,10 @@ data class BusinessProfile(
     val qrPath: String?,
     val signaturePath: String?,
     val godImagePath: String?,
-    val stampPath: String?
+    val stampPath: String?,
+    val watermarkImagePath: String? = null,
+    val marketName: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val pincode: String? = null
 )

@@ -15,6 +15,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getTransactionById(id: String): TransactionEntity?
 
+    @Query("SELECT * FROM transactions WHERE farmerId = :farmerId AND isDeleted = 0")
+    suspend fun getTransactionsByFarmer(farmerId: String): List<TransactionEntity>
+
     @Query("SELECT * FROM transactions")
     suspend fun getAllTransactionsList(): List<TransactionEntity>
 
@@ -27,9 +30,18 @@ interface TransactionDao {
     @Query("UPDATE transactions SET isDeleted = 1, isSynced = 0 WHERE id = :id")
     suspend fun softDeleteTransaction(id: String)
 
+    @Query("UPDATE transactions SET isDeleted = 1, isSynced = 0 WHERE id IN (:ids)")
+    suspend fun softDeleteTransactions(ids: List<String>)
+
     @Query("SELECT * FROM transactions WHERE isSynced = 0")
     suspend fun getUnsyncedTransactions(): List<TransactionEntity>
 
     @Query("UPDATE transactions SET isSynced = 1 WHERE id = :id")
     suspend fun markAsSynced(id: String)
+
+    @Query("UPDATE transactions SET farmerId = :newId WHERE farmerId = :oldId")
+    suspend fun updateFarmerId(oldId: String, newId: String)
+
+    @Query("SELECT SUM(totalAmount) FROM transactions WHERE farmerId = :farmerId AND isDeleted = 0")
+    suspend fun getSumTotalAmountForFarmer(farmerId: String): Double?
 }

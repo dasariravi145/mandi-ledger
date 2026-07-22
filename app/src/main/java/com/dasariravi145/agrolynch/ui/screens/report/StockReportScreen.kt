@@ -63,7 +63,7 @@ fun StockReportScreen(
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 val displayQty = if (item.unit == "Ton") "${Formatter.formatWeight(item.totalQuantity)} Ton" 
-                                                 else if (item.unit == "Boxes") "${item.numberOfBoxes} Boxes"
+                                                 else if (item.unit == "Boxes") Formatter.formatNetWeight(item.totalNetWeightKg)
                                                  else "${Formatter.formatWeight(item.totalQuantity)} KG"
                                 
                                 Text(

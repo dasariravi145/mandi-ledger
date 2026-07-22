@@ -20,6 +20,7 @@ data class DetailedSaleReportModel(
     val date: Long,
     val billNumber: String = "",
     val productName: String,
+    val productType: String = "",
     val grade: String,
     val quantity: Double, // Always Net KG
     val inputQuantity: Double = 0.0, // Original Unit Quantity
@@ -40,6 +41,7 @@ data class DetailedArrivalReportModel(
     val date: Long,
     val billNumber: String = "",
     val productName: String,
+    val productType: String = "",
     val grade: String,
     val quantity: Double,
     val unit: String,
@@ -104,6 +106,7 @@ data class CommissionReportModel(
     val id: String,
     val farmerName: String,
     val productName: String,
+    val productType: String = "",
     val category: String,
     val grade: String,
     val quantity: Double,
@@ -127,7 +130,7 @@ interface ReportDao {
     fun getStockReport(): Flow<List<StockReportModel>>
 
     @Query("""
-        SELECT si.id, si.saleId, s.buyerName, s.date, s.billNumber, si.productName, si.grade, si.quantitySold as quantity,
+        SELECT si.id, si.saleId, s.buyerName, s.date, s.billNumber, si.productName, si.productType, si.grade, si.quantitySold as quantity,
                si.inputQuantity, si.unit, si.saleRate as rate, si.saleAmount,
                si.transportCharges, si.laborCharges, si.otherCharges,
                si.netAmount as totalAmount,
@@ -140,7 +143,7 @@ interface ReportDao {
     fun getBuyerDetailedReport(startDate: Long, endDate: Long): Flow<List<DetailedSaleReportModel>>
 
     @Query("""
-        SELECT id, farmerName, date, billNumber, productName, grade, quantity, unit,
+        SELECT id, farmerName, date, billNumber, productName, productType, grade, quantity, unit,
                purchaseRate as rate, grossAmount, commissionPercent, commissionAmount,
                laborCharges, transportCharges, packingCharges, otherDeductions,
                (SELECT COALESCE(SUM(amount), 0.0) FROM entry_deductions WHERE entryId = id AND deductionType = 'Advance') as advanceAmount,
@@ -198,6 +201,7 @@ interface ReportDao {
             id, 
             farmerName, 
             productName, 
+            productType,
             productCategory as category,
             grade,
             quantity, 

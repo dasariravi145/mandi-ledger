@@ -84,6 +84,20 @@ object Formatter {
         return if (formatted == "-0.00") formatted.removePrefix("-") else formatted
     }
 
+    /**
+     * Normalizes money values to resolve tiny floating-point residuals.
+     */
+    fun normalizeMoney(value: Double): Double {
+        return if (kotlin.math.abs(value) < 0.005) 0.0 else value
+    }
+
+    /**
+     * Canonical settlement rule using normalized money difference.
+     */
+    fun isAccountSettled(total: Double, paid: Double): Boolean {
+        return normalizeMoney(total - paid) == 0.0
+    }
+
     fun formatDate(timestamp: Long): String {
         val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
         return sdf.format(Date(timestamp))
@@ -112,5 +126,13 @@ object Formatter {
         val units = arrayOf("B", "KB", "MB", "GB", "TB")
         val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
         return "%.1f %s".format(bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+    }
+
+    fun formatBusinessPhones(mobile1: String, mobile2: String): String {
+        return if (mobile2.isNotBlank()) {
+            "$mobile1, $mobile2"
+        } else {
+            mobile1
+        }
     }
 }

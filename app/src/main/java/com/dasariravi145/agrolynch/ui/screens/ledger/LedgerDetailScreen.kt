@@ -65,6 +65,9 @@ fun LedgerDetailScreen(
     var showWhatsAppDialog by remember { mutableStateOf(false) }
     var selectedEntryForShare by remember { mutableStateOf<LedgerEntry?>(null) }
     
+    var showDeleteConfirmDialog by remember { mutableStateOf<String?>(null) }
+    var showFilterDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(exportStatus) {
         if (exportStatus == "PREMIUM_REQUIRED") {
             showPremiumDialog = true
@@ -89,8 +92,11 @@ fun LedgerDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.clearFilters() }) {
-                        Icon(Icons.Default.FilterList, contentDescription = "Clear Filters")
+                    IconButton(onClick = { showFilterDialog = true }) {
+                        Icon(
+                            imageVector = if (filter.transactionType != null || filter.startDate != null) Icons.Default.FilterListOff else Icons.Default.FilterList,
+                            contentDescription = "Filter Transactions"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -108,9 +114,20 @@ fun LedgerDetailScreen(
                     onQueryChange = { viewModel.updateSearchQuery(it) }
                 )
 
+                if (filter.transactionType != null || filter.startDate != null) {
+                    FilterIndicatorRow(
+                        filter = filter,
+                        onClear = { viewModel.clearFilters() }
+                    )
+                }
+
                 if (s.entries.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(stringResource(R.string.no_transactions_found), color = Color.Gray)
+                        val hasFilter = filter.query.isNotEmpty() || filter.transactionType != null || filter.startDate != null
+                        Text(
+                            text = if (hasFilter) "No matching transactions found." else stringResource(R.string.no_transactions_found),
+                            color = Color.Gray
+                        )
                     }
                 } else {
                     LazyColumn(
@@ -132,7 +149,8 @@ fun LedgerDetailScreen(
                                 onShare = {
                                     selectedEntryForShare = entry
                                     showShareSheet = true
-                                }
+                                },
+                                onDeleteSale = { id -> showDeleteConfirmDialog = id }
                             )
                         }
                         item { Spacer(modifier = Modifier.height(80.dp)) }
@@ -142,6 +160,42 @@ fun LedgerDetailScreen(
         } ?: Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Color(0xFF16A34A))
         }
+    }
+
+    if (showFilterDialog) {
+        TransactionFilterDialog(
+            currentFilter = filter,
+            onDismiss = { showFilterDialog = false },
+            onApply = { type, start, end ->
+                viewModel.updateTypeFilter(type)
+                viewModel.updateDateRange(start, end)
+                showFilterDialog = false
+            }
+        )
+    }
+
+    if (showDeleteConfirmDialog != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = null },
+            title = { Text("Delete Sale?") },
+            text = { Text("Are you sure you want to delete this sale? The sold items will be restored to stock, and the buyer's balance will be adjusted.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteSale(showDeleteConfirmDialog!!)
+                        showDeleteConfirmDialog = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete & Restore Stock")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showPremiumDialog) {
@@ -371,7 +425,8 @@ fun EnhancedLedgerEntryItem(
     isPrinting: Boolean = false,
     isSharing: Boolean = false,
     onPrint: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onDeleteSale: (String) -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
     val dateFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
@@ -396,6 +451,16 @@ fun EnhancedLedgerEntryItem(
                 Spacer(modifier = Modifier.weight(1f))
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (entry.transactionType == TransactionType.SALE && !isSharing && !isPrinting) {
+                        IconButton(
+                            onClick = { onDeleteSale(entry.id) },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(4.dp))
+                    }
+
                     IconButton(
                         onClick = onShare, 
                         modifier = Modifier.size(28.dp),
@@ -438,11 +503,21 @@ fun EnhancedLedgerEntryItem(
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
+                    if (partyType == "BUYER" && entry.transactionType == TransactionType.SALE && entry.details?.farmerName?.isNotBlank() == true) {
+                        Text(
+                            text = "Farmer: ${entry.details.farmerName}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        )
+                    }
                     Text(text = entry.title, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     entry.details?.let { details ->
                         if (details.productName.isNotEmpty()) {
+                            val displayProductName = if (details.productType.isNotBlank()) "${details.productName} (${details.productType})" else details.productName
                             Text(
-                                text = "${details.category} | ${details.grade}",
+                                text = "$displayProductName | ${details.category} | ${details.grade}",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Medium
@@ -456,8 +531,12 @@ fun EnhancedLedgerEntryItem(
                                 val rateLabel = if (details.unit == "Ton" || details.unit == "Boxes" || details.ratePerKg > 0) "/ KG" 
                                                else "/ ${details.unit}"
                                 
-                                val qtyDisplay = Formatter.formatQuantityDisplay(details.quantity, details.unit)
-                                val netWeightDisplay = if (details.unit != "KG") " (${Formatter.formatNetWeight(details.totalNetWeightKg)})" else ""
+                                val displayUnit = if (details.unit == "Boxes") "KG" else details.unit
+                                val displayQty = if (details.unit == "Boxes") details.totalNetWeightKg else details.quantity
+                                val qtyDisplay = Formatter.formatQuantityDisplay(displayQty, displayUnit)
+                                val netWeightDisplay = if (details.unit == "Boxes") " (${Formatter.formatWeight(details.numberOfBoxes.toDouble())} Boxes)" 
+                                                      else if (details.unit != "KG") " (Equiv: ${Formatter.formatNetWeight(details.totalNetWeightKg)})"
+                                                      else ""
 
                                 Text(
                                     text = "$qtyDisplay$netWeightDisplay @ ₹${Formatter.formatWeight(rateToDisplay)} $rateLabel",
@@ -527,12 +606,17 @@ fun EnhancedLedgerEntryItem(
                                 }
                             } else {
                                 details.saleItems.forEach { item ->
-                                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                        Text(item.grade, Modifier.weight(1f), fontSize = 11.sp)
-                                        val displayQty = if (item.inputQuantity > 0) item.inputQuantity else item.quantitySold
-                                        Text("${Formatter.formatWeight(displayQty)} ${item.unit}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
-                                        Text("₹${Formatter.formatWeight(item.saleRate)}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
-                                        Text("₹${Formatter.formatCurrency(item.saleAmount)}", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                        if (details.saleItems.size > 1) {
+                                            Text("Farmer: ${item.farmerName}", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                                        }
+                                        Row(Modifier.fillMaxWidth()) {
+                                            Text(item.grade, Modifier.weight(1f), fontSize = 11.sp)
+                                            val displayQty = if (item.inputQuantity > 0) item.inputQuantity else item.quantitySold
+                                            Text("${Formatter.formatWeight(displayQty)} ${item.unit}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                                            Text("₹${Formatter.formatWeight(item.saleRate)}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
+                                            Text("₹${Formatter.formatCurrency(item.saleAmount)}", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                        }
                                     }
                                 }
                             }
@@ -555,11 +639,19 @@ fun EnhancedLedgerEntryItem(
                             }
                             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
                                 Text(stringResource(R.string.quantity_unit), fontSize = 13.sp, color = Color.Gray)
-                                Text(Formatter.formatQuantityDisplay(details.quantity, details.unit), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                val dUnit = if (details.unit == "Boxes") "KG" else details.unit
+                                val dQty = if (details.unit == "Boxes") details.totalNetWeightKg else details.quantity
+                                Text(Formatter.formatQuantityDisplay(dQty, dUnit), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                            if (details.unit == "Boxes") {
+                                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+                                    Text("Number of Boxes", fontSize = 13.sp, color = Color.Gray)
+                                    Text(Formatter.formatWeight(details.numberOfBoxes.toDouble()), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                             if (details.unit != "KG") {
                                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
-                                    Text("Net Weight", fontSize = 13.sp, color = Color.Gray)
+                                    Text("Equivalent KG", fontSize = 13.sp, color = Color.Gray)
                                     val netW = if (details.totalNetWeightKg > 0.0) details.totalNetWeightKg 
                                                else if (details.unit == "Ton") details.quantity * 1000.0 
                                                else details.quantity
@@ -620,7 +712,10 @@ fun EnhancedLedgerEntryItem(
                         } else if (entry.transactionType == TransactionType.SALE) {
                             DetailRow(stringResource(R.string.gross_amount), details.grossAmount)
                             if (details.commissionAmount > 0) DetailRow(stringResource(R.string.commission_margin), details.commissionAmount, Color(0xFF2E7D32))
-                            if (details.laborCharges > 0) DetailRow(stringResource(R.string.labor_charges), details.laborCharges)
+                            
+                            val laborLabel = if (details.laborPercentage > 0) "Labour (${Formatter.formatWeight(details.laborPercentage)}%)" else stringResource(R.string.labor_charges)
+                            if (details.laborCharges > 0) DetailRow(laborLabel, details.laborCharges)
+
                             if (details.transportCharges > 0) DetailRow(stringResource(R.string.transport), details.transportCharges)
                             
                             details.deductions.forEach { d ->
@@ -667,6 +762,127 @@ fun DetailRow(label: String, value: Double, color: Color = Color.Black, fontWeig
             color = color,
             fontWeight = fontWeight
         )
+    }
+}
+
+@Composable
+fun FilterIndicatorRow(filter: LedgerFilter, onClear: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (filter.transactionType != null) {
+            SuggestionChip(
+                onClick = {},
+                label = { Text(filter.transactionType.name) },
+                colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color.White)
+            )
+        }
+        if (filter.startDate != null) {
+            val df = SimpleDateFormat("dd/MM/yy", Locale.getDefault())
+            SuggestionChip(
+                onClick = {},
+                label = { Text("${df.format(Date(filter.startDate))} - ${if(filter.endDate != null) df.format(Date(filter.endDate)) else "..."}") },
+                colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color.White)
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = onClear, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(32.dp)) {
+            Text("Clear All", fontSize = 12.sp)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TransactionFilterDialog(
+    currentFilter: LedgerFilter,
+    onDismiss: () -> Unit,
+    onApply: (TransactionType?, Long?, Long?) -> Unit
+) {
+    var selectedType by remember { mutableStateOf(currentFilter.transactionType) }
+    var startDate by remember { mutableStateOf(currentFilter.startDate) }
+    var endDate by remember { mutableStateOf(currentFilter.endDate) }
+    
+    val datePickerState = rememberDatePickerState()
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Filter Transactions") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("Transaction Type", style = MaterialTheme.typography.labelMedium)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(null, TransactionType.ARRIVAL, TransactionType.SALE, TransactionType.PAYMENT).forEach { type ->
+                        FilterChip(
+                            selected = selectedType == type,
+                            onClick = { selectedType = type },
+                            label = { Text(type?.name ?: "All") }
+                        )
+                    }
+                }
+                
+                HorizontalDivider()
+                
+                Text("Date Range", style = MaterialTheme.typography.labelMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedCard(
+                        onClick = { showDatePicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = if (startDate != null) SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(Date(startDate!!)) else "Start Date",
+                            modifier = Modifier.padding(12.dp),
+                            fontSize = 13.sp
+                        )
+                    }
+                    Text(" to ", modifier = Modifier.padding(horizontal = 8.dp))
+                    OutlinedCard(
+                        onClick = { showDatePicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = if (endDate != null) SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(Date(endDate!!)) else "End Date",
+                            modifier = Modifier.padding(12.dp),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onApply(selectedType, startDate, endDate) }) {
+                Text("Apply")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+
+    if (showDatePicker) {
+        val dateRangePickerState = rememberDateRangePickerState()
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    startDate = dateRangePickerState.selectedStartDateMillis
+                    endDate = dateRangePickerState.selectedEndDateMillis
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DateRangePicker(state = dateRangePickerState, modifier = Modifier.weight(1f))
+        }
     }
 }
 

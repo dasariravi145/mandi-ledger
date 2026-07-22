@@ -19,6 +19,7 @@ data class ArrivalEntity(
     val farmerName: String = "",
     val productId: String = "",
     val productName: String = "",
+    val productType: String = "",
     val productCategory: String = "General",
     val grade: String = "",
     val quantity: Double = 0.0,

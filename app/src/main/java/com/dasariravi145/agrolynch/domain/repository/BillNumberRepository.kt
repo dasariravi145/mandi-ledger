@@ -13,6 +13,7 @@ interface BillNumberRepository {
     
     fun getDeductionsByEntryId(entryId: String): Flow<List<EntryDeductionEntity>>
     suspend fun getDeductionsByEntryIdSync(entryId: String): List<EntryDeductionEntity>
+    suspend fun getDeductionsByEntryIds(entryIds: List<String>): List<EntryDeductionEntity>
     suspend fun saveDeductions(deductions: List<EntryDeductionEntity>)
     suspend fun deleteDeductionsByEntryId(entryId: String)
 }

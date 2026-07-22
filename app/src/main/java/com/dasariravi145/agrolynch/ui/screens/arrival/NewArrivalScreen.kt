@@ -73,6 +73,8 @@ fun NewArrivalScreen(
     val matchedProduct by viewModel.matchedProduct.collectAsStateWithLifecycle()
     val isNewProduct by viewModel.isNewProduct.collectAsStateWithLifecycle()
     val productSearchQuery by viewModel.productSearchQuery.collectAsStateWithLifecycle()
+    val productTypeSearchQuery by viewModel.productTypeSearchQuery.collectAsStateWithLifecycle()
+    val productTypes by viewModel.productTypes.collectAsStateWithLifecycle()
     val autoBillNumber by viewModel.billNumber.collectAsStateWithLifecycle()
     val deductions by viewModel.deductions.collectAsStateWithLifecycle()
     val totalOtherDeductions by viewModel.totalDeductions.collectAsStateWithLifecycle()
@@ -198,7 +200,9 @@ fun NewArrivalScreen(
                 if (parsedItem.isNotEmpty()) viewModel.onProductQueryChange(parsedItem) else missingFields.add("Item")
                 
                 val currentGrade = parsedGrade.ifEmpty { "Grade A" }
-                val qtyValue = if (parsedEach > 0 && parsedQty > 0 && parsedUnit == "Boxes") (parsedQty * parsedEach) / 1000.0 else parsedQty
+                val qtyValue = if (parsedEach > 0 && parsedQty > 0 && parsedUnit == "Boxes") (parsedQty * parsedEach) / 1000.0 
+                               else if (parsedUnit == "Boxes" && parsedQty > 0) parsedQty / 1000.0
+                               else parsedQty
                 
                 gradeEntries = listOf(ArrivalViewModel.GradeEntry(
                     grade = currentGrade,
@@ -338,9 +342,10 @@ fun NewArrivalScreen(
                 if (!d.farmerName.isNullOrEmpty()) farmerName = d.farmerName
                 if (!d.product.isNullOrEmpty()) viewModel.onProductQueryChange(d.product)
                 if (!d.grade.isNullOrEmpty() || d.quantity != null || d.rate != null || d.waste != null) {
+                    val q = if (d.unit == "Boxes" && d.quantity != null) d.quantity / 1000.0 else (d.quantity ?: 0.0)
                     gradeEntries = listOf(ArrivalViewModel.GradeEntry(
                         grade = d.grade ?: "Grade A",
-                        quantity = d.quantity ?: 0.0,
+                        quantity = q,
                         rate = d.rate ?: 0.0,
                         unit = d.unit ?: "KG",
                         spoilage = d.waste ?: 0.0
@@ -370,6 +375,7 @@ fun NewArrivalScreen(
                 farmerPhone = farmerPhone,
                 farmerVillage = farmerVillage,
                 productName = productSearchQuery,
+                productType = productTypeSearchQuery,
                 productCategory = selectedCategory,
                 commissionPercent = commissionInput.toDoubleOrNull() ?: 0.0,
                 laborCharges = laborInput.toDoubleOrNull() ?: 0.0,
@@ -472,7 +478,48 @@ fun NewArrivalScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
-            if (isNewProduct) {
+            // Product Type (Variety) Dropdown
+            var varietyExpanded by remember { mutableStateOf(false) }
+            val filteredVarieties = productTypes.filter { it.productTypeName.contains(productTypeSearchQuery, ignoreCase = true) }
+            
+            Box {
+                OutlinedTextField(
+                    value = productTypeSearchQuery,
+                    onValueChange = { 
+                        viewModel.onProductTypeQueryChange(it)
+                        varietyExpanded = true
+                    },
+                    label = { Text("Product Type (Variety)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    trailingIcon = {
+                        if (productTypes.isNotEmpty()) {
+                            IconButton(onClick = { varietyExpanded = !varietyExpanded }) {
+                                Icon(if (varietyExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown, null)
+                            }
+                        }
+                    }
+                )
+                if (varietyExpanded && filteredVarieties.isNotEmpty()) {
+                    DropdownMenu(
+                        expanded = varietyExpanded,
+                        onDismissRequest = { varietyExpanded = false },
+                        modifier = Modifier.fillMaxWidth(0.9f)
+                    ) {
+                        filteredVarieties.forEach { variety ->
+                            DropdownMenuItem(
+                                text = { Text(variety.productTypeName) },
+                                onClick = {
+                                    viewModel.onProductTypeQueryChange(variety.productTypeName)
+                                    varietyExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isNewProduct || (matchedProduct != null)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("Fruit", "Vegetable").forEach { cat ->
                         FilterChip(
@@ -666,6 +713,7 @@ fun NewArrivalScreen(
             StockCalculationSummary(
                 farmerName = farmerName,
                 productName = productSearchQuery,
+                productType = productTypeSearchQuery,
                 category = selectedCategory,
                 grade = gradeEntries.joinToString(", ") { it.grade },
                 date = entryDate,
@@ -692,6 +740,7 @@ fun NewArrivalScreen(
                             farmerPhone = farmerPhone,
                             farmerVillage = farmerVillage,
                             productName = productSearchQuery,
+                            productType = productTypeSearchQuery,
                             productCategory = selectedCategory,
                             commissionPercent = commissionInput.toDoubleOrNull() ?: 0.0,
                             laborCharges = laborInput.toDoubleOrNull() ?: 0.0,
@@ -722,7 +771,10 @@ fun GradeEntryRow(
     onRemove: (() -> Unit)?
 ) {
     // Local text states to preserve user typing (e.g., "2.0")
-    var qtyInput by remember(entry.unit) { mutableStateOf(if (entry.quantity == 0.0) "" else Formatter.formatWeight(entry.quantity)) }
+    var qtyInput by remember(entry.unit) { 
+        val displayVal = if (entry.unit == "Boxes") entry.quantity * 1000.0 else entry.quantity
+        mutableStateOf(if (displayVal == 0.0) "" else Formatter.formatWeight(displayVal)) 
+    }
     var boxCountInput by remember(entry.unit) { mutableStateOf(if (entry.boxCount == 0) "" else entry.boxCount.toString()) }
     var emptyWtInput by remember(entry.unit) { mutableStateOf(if (entry.avgGrossWeight == 0.0) "" else Formatter.formatWeight(entry.avgGrossWeight)) }
     var spoilageInput by remember(entry.unit) { mutableStateOf(if (entry.spoilage == 0.0) "" else Formatter.formatWeight(entry.spoilage)) }
@@ -730,8 +782,9 @@ fun GradeEntryRow(
 
     // Sync from entry prop only if numeric values differ (prevents cursor jumps while allowing external resets)
     LaunchedEffect(entry) {
-        if (qtyInput.toDoubleOrNull() ?: 0.0 != entry.quantity) {
-            qtyInput = if (entry.quantity == 0.0) "" else Formatter.formatWeight(entry.quantity)
+        val currentDisplayQty = if (entry.unit == "Boxes") entry.quantity * 1000.0 else entry.quantity
+        if (qtyInput.toDoubleOrNull() ?: 0.0 != currentDisplayQty) {
+            qtyInput = if (currentDisplayQty == 0.0) "" else Formatter.formatWeight(currentDisplayQty)
         }
         if ((boxCountInput.toIntOrNull() ?: 0) != entry.boxCount) {
             boxCountInput = if (entry.boxCount == 0) "" else entry.boxCount.toString()
@@ -792,9 +845,11 @@ fun GradeEntryRow(
                         value = qtyInput,
                         onValueChange = { 
                             qtyInput = it
-                            onEntryChange(entry.copy(quantity = it.toDoubleOrNull() ?: 0.0)) 
+                            val enteredVal = it.toDoubleOrNull() ?: 0.0
+                            val internalVal = if (entry.unit == "Boxes") enteredVal / 1000.0 else enteredVal
+                            onEntryChange(entry.copy(quantity = internalVal))
                         },
-                        label = { Text("Total Weight (Ton)") },
+                        label = { Text("Total Weight (KG)") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
@@ -914,6 +969,7 @@ fun GradeEntryRow(
 fun StockCalculationSummary(
     farmerName: String,
     productName: String,
+    productType: String = "",
     category: String,
     grade: String,
     date: Long,
@@ -952,7 +1008,7 @@ fun StockCalculationSummary(
             // Details Section
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 SummaryDetailRow(stringResource(R.string.farmer_name_label), farmerName)
-                SummaryDetailRow(stringResource(R.string.product_name), productName)
+                SummaryDetailRow(stringResource(R.string.product_name), if (productType.isNotBlank()) "$productName - $productType" else productName)
                 SummaryDetailRow(stringResource(R.string.category), category)
                 if (gradeEntries.size <= 1) {
                     SummaryDetailRow(stringResource(R.string.grade_label), grade)
@@ -976,7 +1032,7 @@ fun StockCalculationSummary(
             gradeEntries.forEach { entry ->
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
                     Text(entry.grade, Modifier.weight(1f), fontSize = 11.sp)
-                    Text(entry.unit, Modifier.weight(0.7f), fontSize = 11.sp, textAlign = TextAlign.Center)
+                    Text(if (entry.unit == "Boxes") "KG" else entry.unit, Modifier.weight(0.7f), fontSize = 11.sp, textAlign = TextAlign.Center)
                     Text(Formatter.formatWeight(entry.totalNetWeightKg), Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
                     Text("₹${Formatter.formatWeight(entry.rate)}", Modifier.weight(1f), fontSize = 11.sp, textAlign = TextAlign.End)
                     Text("₹${Formatter.formatCurrency(entry.grossAmount)}", Modifier.weight(1.2f), fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)

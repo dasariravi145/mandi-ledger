@@ -2,6 +2,7 @@ package com.dasariravi145.agrolynch.util.pdf.renderer
 
 data class InvoiceProduct(
     val name: String,
+    val productType: String = "",
     val grade: String,
     val unit: String = "KG",
     val quantity: Double,
@@ -22,5 +23,10 @@ data class InvoiceData(
     val advance: Double,
     val others: Double,
     val grandTotal: Double,
-    val vehicleNumber: String = ""
+    val vehicleNumber: String = "",
+    val customerGstin: String? = null,
+    val customerState: String? = null,
+    val placeOfSupply: String? = null,
+    val reverseCharge: Boolean = false,
+    val paymentMode: String? = null
 )

@@ -7,9 +7,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.domain.repository.AuthRepository
-import com.dasariravi145.agrolynch.domain.repository.SyncRepository
 import com.dasariravi145.agrolynch.util.BiometricAuth
-import com.dasariravi145.agrolynch.util.Resource
 import com.dasariravi145.agrolynch.util.SecurityManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -20,7 +18,6 @@ import javax.inject.Inject
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val repository: AuthRepository,
-    private val syncRepository: SyncRepository,
     private val securityManager: SecurityManager,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -260,39 +257,8 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    private suspend fun handleAuthSuccess() {
-        val user = repository.getLocalUser()
-        if (user?.isPremium == true && user.cloudBackupEnabled) {
-            _state.update { it.copy(loadingMessage = "Restoring cloud data...") }
-            try {
-                when (val restore = syncRepository.restoreAllData()) {
-                    is Resource.Success -> {
-                        _state.update { it.copy(isLoading = false, isPinCorrect = true) }
-                    }
-                    is Resource.Error -> {
-                        val sanitizedMessage = if (restore.message?.contains("PERMISSION_DENIED", true) == true) {
-                            "Sync is currently restricted for your account. You can manually restore data from Settings -> Backup once logged in."
-                        } else {
-                            restore.message ?: "Unable to sync cloud data."
-                        }
-                        _state.update {
-                            it.copy(
-                                isLoading = false,
-                                isPinCorrect = true,
-                                error = sanitizedMessage
-                            )
-                        }
-                    }
-                    else -> {
-                        _state.update { it.copy(isLoading = false, isPinCorrect = true) }
-                    }
-                }
-            } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, isPinCorrect = true, error = "Backup restore failed: ${e.message}") }
-            }
-        } else {
-            _state.update { it.copy(isLoading = false, isPinCorrect = true) }
-        }
+    private fun handleAuthSuccess() {
+        _state.update { it.copy(isLoading = false, isPinCorrect = true) }
     }
 
     fun onBiometricSuccess() {

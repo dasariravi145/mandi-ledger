@@ -868,4 +868,62 @@ object DatabaseMigrations {
             db.execSQL("ALTER TABLE `backup_history` ADD COLUMN `storagePath` TEXT NOT NULL DEFAULT ''")
         }
     }
+
+    val MIGRATION_50_51 = object : Migration(50, 51) {
+        override fun migrate(db: SupportSQLiteDatabase) {}
+    }
+
+    val MIGRATION_51_52 = object : Migration(51, 52) {
+        override fun migrate(db: SupportSQLiteDatabase) {}
+    }
+
+    val MIGRATION_52_53 = object : Migration(52, 53) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `product_types` (`id` TEXT NOT NULL, `productId` TEXT NOT NULL, `productName` TEXT NOT NULL, `productTypeName` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_product_types_productId` ON `product_types` (`productId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_product_types_productName` ON `product_types` (`productName`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_product_types_productTypeName` ON `product_types` (`productTypeName`)")
+            
+            db.execSQL("ALTER TABLE `arrivals` ADD COLUMN `productType` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `sales` ADD COLUMN `productType` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `sale_items` ADD COLUMN `productType` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
+    val MIGRATION_53_54 = object : Migration(53, 54) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `account_book_archives` (
+                    `archiveId` TEXT NOT NULL, 
+                    `partyType` TEXT NOT NULL, 
+                    `originalPartyId` TEXT NOT NULL, 
+                    `partyName` TEXT NOT NULL, 
+                    `partyPhone` TEXT NOT NULL, 
+                    `totalAmount` REAL NOT NULL, 
+                    `paidAmount` REAL NOT NULL, 
+                    `pendingAmount` REAL NOT NULL, 
+                    `settlementDate` INTEGER NOT NULL, 
+                    `archivedAt` INTEGER NOT NULL, 
+                    `snapshotJson` TEXT NOT NULL, 
+                    `archiveVersion` INTEGER NOT NULL, 
+                    `backupReference` TEXT, 
+                    `status` TEXT NOT NULL, 
+                    PRIMARY KEY(`archiveId`)
+                )
+            """.trimIndent())
+        }
+    }
+
+    val MIGRATION_54_55 = object : Migration(54, 55) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `sales` ADD COLUMN `laborPercentage` REAL NOT NULL DEFAULT 0.0")
+        }
+    }
+
+    val MIGRATION_55_56 = object : Migration(55, 56) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `backup_history` ADD COLUMN `isDeleted` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `backup_history` ADD COLUMN `deletedAt` INTEGER")
+        }
+    }
 }

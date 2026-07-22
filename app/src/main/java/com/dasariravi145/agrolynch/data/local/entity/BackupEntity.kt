@@ -12,8 +12,10 @@ data class BackupEntity(
     val storagePath: String = "", // Firebase Storage path (backups/uid/filename)
     val size: Long,
     val type: String, // "LOCAL", "CLOUD"
-    val reportType: String, // "WEEKLY", "MONTHLY", "MANUAL"
-    val status: String, // "SUCCESS", "FAILED"
+    val reportType: String, // "WEEKLY", "MONTHLY", "MANUAL", "PRE_RESTORE_SAFETY"
+    val status: String, // "SUCCESS", "FAILED", "UPLOADING", "RESTORING"
     val phoneNumber: String = "",
-    val userName: String = ""
+    val userName: String = "",
+    val isDeleted: Boolean = false,
+    val deletedAt: Long? = null
 )

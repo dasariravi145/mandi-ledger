@@ -72,7 +72,13 @@ object AppModule {
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_46_47,
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_47_48,
             com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_48_49,
-            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_49_50
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_49_50,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_50_51,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_51_52,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_52_53,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_53_54,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_54_55,
+            com.dasariravi145.agrolynch.data.local.DatabaseMigrations.MIGRATION_55_56
         )
 
         if (com.dasariravi145.agrolynch.BuildConfig.DEBUG) {
@@ -207,6 +213,18 @@ object AppModule {
     @Singleton
     fun provideInvoiceWizardDao(db: AgroLynchDatabase): InvoiceWizardDao {
         return db.invoiceWizardDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideProductTypeDao(db: AgroLynchDatabase): ProductTypeDao {
+        return db.productTypeDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAccountBookArchiveDao(db: AgroLynchDatabase): AccountBookArchiveDao {
+        return db.accountBookArchiveDao()
     }
 
     @Provides

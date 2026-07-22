@@ -14,7 +14,7 @@ plugins {
 android {
 
     namespace = "com.dasariravi145.agrolynch"
-    compileSdk = 35
+    compileSdk = 36
 
     signingConfigs {
         create("release") {
@@ -46,9 +46,9 @@ android {
     defaultConfig {
         applicationId = "com.dasariravi145.agrolynch"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 18
-        versionName = "1.0.18"
+        targetSdk = 36
+        versionCode = 20
+        versionName = "1.0.20"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -62,6 +62,12 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
+        checkReleaseBuilds = true
     }
 }
 
@@ -126,7 +132,7 @@ dependencies {
     implementation(libs.timber)
 
     // Billing & Ads
-    implementation("com.android.billingclient:billing-ktx:7.0.0")
+    implementation(libs.billing.ktx)
     implementation("com.google.android.gms:play-services-ads:23.6.0")
     implementation("com.google.android.gms:play-services-base:18.5.0")
     implementation(libs.gson)

@@ -613,7 +613,8 @@ fun FarmerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                                 Column { Text(item.farmerName, fontWeight = FontWeight.Bold, fontSize = 16.sp); if (item.billNumber.isNotBlank()) Text("Bill: ${item.billNumber}", fontSize = 10.sp, color = Color.Gray) }
                                 Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray)
                             }
-                            Spacer(Modifier.height(8.dp)); Text("${item.productName} (${item.grade})", fontSize = 13.sp, color = Color.DarkGray)
+                            val displayProductName = if (item.productType.isNotBlank()) "${item.productName} (${item.productType})" else item.productName
+                            Spacer(Modifier.height(8.dp)); Text("$displayProductName (${item.grade})", fontSize = 13.sp, color = Color.DarkGray)
                             Text("${Formatter.formatWeight(item.quantity)} ${item.unit} @ ₹${Formatter.formatCurrency(item.rate)}", fontSize = 12.sp, color = Color.Gray)
                             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
                             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
@@ -684,7 +685,8 @@ fun BuyerReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
                                 Column { Text(item.buyerName, fontWeight = FontWeight.Bold, fontSize = 16.sp); if (item.billNumber.isNotBlank()) Text("Invoice: ${item.billNumber}", fontSize = 10.sp, color = Color.Gray) }
                                 Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray)
                             }
-                            Spacer(Modifier.height(8.dp)); Text("${item.productName} (${item.grade})", fontSize = 13.sp, color = Color.DarkGray)
+                            val displayProductName = if (item.productType.isNotBlank()) "${item.productName} (${item.productType})" else item.productName
+                            Spacer(Modifier.height(8.dp)); Text("$displayProductName (${item.grade})", fontSize = 13.sp, color = Color.DarkGray)
                             val displayQty = if (item.inputQuantity > 0) item.inputQuantity else item.quantity
                             Text("${Formatter.formatWeight(displayQty)} ${item.unit} @ ₹${Formatter.formatCurrency(item.rate)}", fontSize = 12.sp, color = Color.Gray)
                             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
@@ -798,7 +800,8 @@ fun CommissionReportScreen(viewModel: ReportViewModel, onBack: () -> Unit) {
             items(filtered) { item ->
                 Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                     Column(Modifier.padding(16.dp)) {
-                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Column { Text(item.farmerName, fontWeight = FontWeight.Bold, fontSize = 16.sp); Text("${item.productName} (${item.grade})", fontSize = 11.sp, color = Color.Gray) }; Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray) }
+                        val displayProductName = if (item.productType.isNotBlank()) "${item.productName} (${item.productType})" else item.productName
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Column { Text(item.farmerName, fontWeight = FontWeight.Bold, fontSize = 16.sp); Text("$displayProductName (${item.grade})", fontSize = 11.sp, color = Color.Gray) }; Text(formatDate(item.date), fontSize = 11.sp, color = Color.Gray) }
                         Spacer(Modifier.height(8.dp)); Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Column { Text("Gross: ₹${Formatter.formatCurrency(item.grossAmount)}", fontSize = 11.sp); Text("Comm %: ${Formatter.formatWeight(item.commissionPercent)}%", fontSize = 11.sp) }; Column(horizontalAlignment = Alignment.End) { Text("Comm. Amount", fontSize = 10.sp, color = Color.Gray); Text("₹${Formatter.formatCurrency(item.commissionAmount)}", fontWeight = FontWeight.ExtraBold, color = Color(0xFFD97706)) } }
                     }
                 }

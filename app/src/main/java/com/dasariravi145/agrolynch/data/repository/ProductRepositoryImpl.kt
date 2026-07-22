@@ -2,7 +2,9 @@ package com.dasariravi145.agrolynch.data.repository
 
 import android.net.Uri
 import com.dasariravi145.agrolynch.data.local.dao.ProductDao
+import com.dasariravi145.agrolynch.data.local.dao.ProductTypeDao
 import com.dasariravi145.agrolynch.data.local.entity.ProductEntity
+import com.dasariravi145.agrolynch.data.local.entity.ProductTypeEntity
 import com.dasariravi145.agrolynch.domain.repository.ProductRepository
 import com.dasariravi145.agrolynch.util.Resource
 import com.google.firebase.auth.FirebaseAuth
@@ -17,6 +19,7 @@ import javax.inject.Inject
 
 class ProductRepositoryImpl @Inject constructor(
     private val productDao: ProductDao,
+    private val productTypeDao: ProductTypeDao,
     private val firestore: FirebaseFirestore,
     private val storage: FirebaseStorage,
     private val auth: FirebaseAuth
@@ -144,4 +147,32 @@ class ProductRepositoryImpl @Inject constructor(
             Resource.Error(e.message ?: "An unknown error occurred")
         }
     }
+
+    override fun getProductTypes(productId: String): Flow<List<ProductTypeEntity>> = 
+        productTypeDao.getProductTypesByProduct(productId)
+
+    override suspend fun getProductTypesList(productId: String): List<ProductTypeEntity> = 
+        productTypeDao.getProductTypesByProductList(productId)
+
+    override suspend fun addProductType(productType: ProductTypeEntity): Resource<Unit> {
+        return try {
+            productTypeDao.insertProductType(productType)
+            
+            userId?.let { uid ->
+                repositoryScope.launch {
+                    try {
+                        firestore.collection("users").document(uid)
+                            .collection("product_types").document(productType.id)
+                            .set(productType).await()
+                    } catch (e: Exception) {}
+                }
+            }
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to add variety")
+        }
+    }
+
+    override suspend fun getProductTypeByName(productId: String, name: String): ProductTypeEntity? =
+        productTypeDao.getProductTypeByName(productId, name)
 }

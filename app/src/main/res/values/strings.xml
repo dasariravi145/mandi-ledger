@@ -323,6 +323,8 @@
     <string name="show_premium_offers">Show Premium Offers</string>
     <string name="show_premium_offers_sub">Receive popups about premium features</string>
     <string name="dont_show_again">Don\'t show this again</string>
+    <string name="search_payments_hint">Search by name, amount or payment mode...</string>
+    <string name="clear">Clear</string>
     <string name="edit_farmer">Edit Farmer</string>
     <string name="save_farmer">Save Farmer</string>
     <string name="edit_buyer">Edit Buyer</string>

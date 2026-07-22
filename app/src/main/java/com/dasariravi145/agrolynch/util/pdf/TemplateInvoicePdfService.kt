@@ -13,6 +13,7 @@ import android.print.PrintDocumentInfo
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.dasariravi145.agrolynch.data.local.entity.*
+import com.dasariravi145.agrolynch.domain.model.BackupData
 import com.dasariravi145.agrolynch.util.pdf.renderer.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -26,38 +27,57 @@ import javax.inject.Singleton
 import kotlin.coroutines.resume
 
 @Singleton
-class TemplateInvoicePdfService @Inject constructor() {
+class TemplateInvoicePdfService @Inject constructor(
+    private val templateRepository: com.dasariravi145.agrolynch.domain.repository.TemplatePositionRepository
+) {
 
     suspend fun generateFarmerArrivalPdf(context: Context, profile: CompanyProfileEntity, arrivals: List<ArrivalEntity>, deductions: List<EntryDeductionEntity>, farmerMobile: String): File? {
         val businessProfile = profile.toBusinessProfile()
         val invoiceData = arrivals.toInvoiceData(farmerMobile, deductions)
         val templateId = mapTemplateId(profile.defaultTemplate)
+        val config = templateRepository.getWizardConfig(profile.defaultTemplate)
         
-        val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData)
+        val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData, config)
         return generatePdfFromHtml(context, html, "Arrival_${arrivals[0].billNumber}")
     }
 
     suspend fun generateBuyerSalePdf(context: Context, profile: CompanyProfileEntity, sale: SaleEntity, items: List<SaleItemEntity>, deductions: List<EntryDeductionEntity>, buyerMobile: String): File? {
         val businessProfile = profile.toBusinessProfile()
-        val products = items.map { InvoiceProduct(it.productName, it.grade, it.unit, it.quantitySold, it.saleRate, it.saleAmount) }
+        val products = items.map { 
+            InvoiceProduct(
+                name = it.productName, 
+                productType = it.productType,
+                grade = it.grade, 
+                unit = if (it.unit == "Boxes") "KG" else it.unit, 
+                quantity = it.quantitySold, 
+                rate = it.saleRate, 
+                amount = it.saleAmount
+            ) 
+        }
         val invoiceData = InvoiceData(
             billNumber = sale.billNumber,
             date = sale.date,
             customerName = sale.buyerName,
             customerMobile = buyerMobile,
             products = products,
-            subtotal = sale.totalNetAmount,
-            commission = 0.0,
-            transport = 0.0,
-            labour = 0.0,
+            subtotal = sale.totalAmount,
+            commission = sale.totalCommission,
+            transport = sale.transportCharges,
+            labour = sale.laborCharges,
             advance = 0.0,
-            others = deductions.sumOf { it.amount },
+            others = sale.otherCharges,
             grandTotal = sale.totalNetAmount,
-            vehicleNumber = ""
+            vehicleNumber = "",
+            customerGstin = "", // Not available in SaleEntity
+            customerState = "", // Not available in SaleEntity
+            placeOfSupply = profile.state,
+            reverseCharge = false,
+            paymentMode = "CASH"
         )
         val templateId = mapTemplateId(profile.defaultTemplate)
+        val config = templateRepository.getWizardConfig(profile.defaultTemplate)
         
-        val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData)
+        val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData, config)
         return generatePdfFromHtml(context, html, "Sale_${sale.billNumber}")
     }
 
@@ -79,8 +99,9 @@ class TemplateInvoicePdfService @Inject constructor() {
             vehicleNumber = ""
         )
         val templateId = mapTemplateId(profile.defaultTemplate)
+        val config = templateRepository.getWizardConfig(profile.defaultTemplate)
         
-        val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData)
+        val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData, config)
         return generatePdfFromHtml(context, html, "Receipt_${payment.billNumber}")
     }
 
@@ -91,7 +112,17 @@ class TemplateInvoicePdfService @Inject constructor() {
             date = data.date,
             customerName = data.partyName,
             customerMobile = data.agentContact,
-            products = data.items.map { InvoiceProduct(it.description, "", "QTY", it.quantity.toDoubleOrNull() ?: 0.0, it.rate.toDoubleOrNull() ?: 0.0, it.amount.toDoubleOrNull() ?: 0.0) },
+            products = data.items.map { 
+                InvoiceProduct(
+                    name = it.description,
+                    productType = "",
+                    grade = "",
+                    unit = "QTY",
+                    quantity = it.quantity.toDoubleOrNull() ?: 0.0,
+                    rate = it.rate.toDoubleOrNull() ?: 0.0,
+                    amount = it.amount.toDoubleOrNull() ?: 0.0
+                ) 
+            },
             subtotal = data.totalAmount,
             commission = 0.0,
             transport = 0.0,
@@ -102,9 +133,43 @@ class TemplateInvoicePdfService @Inject constructor() {
             vehicleNumber = ""
         )
         val templateId = mapTemplateId(profile.defaultTemplate)
+        val config = templateRepository.getWizardConfig(profile.defaultTemplate)
         
-        val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData)
+        val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData, config)
         return generatePdfFromHtml(context, html, "Receipt_${data.receiptId}")
+    }
+
+    suspend fun generateArchivePdf(context: Context, profile: CompanyProfileEntity, archive: AccountBookArchiveEntity, snapshot: BackupData): File? {
+        val businessProfile = profile.toBusinessProfile()
+        
+        val products = mutableListOf<InvoiceProduct>()
+        snapshot.arrivals.forEach {
+            products.add(InvoiceProduct(it.productName, it.productType, it.grade, it.unit, it.finalNetWeightKg, it.ratePerKg, it.grossAmount))
+        }
+        snapshot.sales.forEach {
+            products.add(InvoiceProduct("Sale: ${it.productName}", it.productType, it.grade, "QTY", it.totalQuantity, 0.0, it.totalNetAmount))
+        }
+        
+        val invoiceData = InvoiceData(
+            billNumber = "ARCHIVE-${archive.archiveId.take(8).uppercase()}",
+            date = archive.archivedAt,
+            customerName = archive.partyName,
+            customerMobile = archive.partyPhone,
+            products = products,
+            subtotal = archive.totalAmount,
+            commission = snapshot.arrivals.sumOf { it.commissionAmount },
+            transport = snapshot.arrivals.sumOf { it.transportCharges } + snapshot.sales.sumOf { it.transportCharges },
+            labour = snapshot.arrivals.sumOf { it.laborCharges } + snapshot.sales.sumOf { it.laborCharges },
+            advance = archive.totalAmount - archive.paidAmount - archive.pendingAmount, // Rough estimate for display
+            others = 0.0,
+            grandTotal = archive.paidAmount,
+            vehicleNumber = ""
+        )
+        val templateId = mapTemplateId(profile.defaultTemplate)
+        val config = templateRepository.getWizardConfig(profile.defaultTemplate)
+        
+        val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData, config)
+        return generatePdfFromHtml(context, html, "Archive_${archive.partyName}_${archive.archiveId.take(8)}")
     }
 
     private fun mapTemplateId(type: String): String {
@@ -160,7 +225,7 @@ class TemplateInvoicePdfService @Inject constructor() {
                     }
                 }
             }
-            webView.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+            webView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "utf-8", null)
         }
     }
 
@@ -199,7 +264,7 @@ class TemplateInvoicePdfService @Inject constructor() {
         companyName = companyName,
         address = address,
         village = village,
-        mobile = mobile1,
+        mobile = com.dasariravi145.agrolynch.util.Formatter.formatBusinessPhones(mobile1, mobile2),
         proprietor = proprietorName,
         gstNumber = gstNumber,
         tagline = tagline,
@@ -207,12 +272,27 @@ class TemplateInvoicePdfService @Inject constructor() {
         qrPath = upiQrPath,
         signaturePath = signaturePath,
         godImagePath = godImagePath,
-        stampPath = stampPath
+        stampPath = stampPath,
+        watermarkImagePath = customTemplatePath,
+        marketName = marketName,
+        city = city,
+        state = state,
+        pincode = pincode
     )
 
     private fun List<ArrivalEntity>.toInvoiceData(mobile: String, deductions: List<EntryDeductionEntity>): InvoiceData {
         val first = this[0]
-        val prods = this.map { InvoiceProduct(it.productName, it.grade, it.unit, it.finalNetWeightKg, it.ratePerKg, it.grossAmount) }
+        val prods = this.map { 
+            InvoiceProduct(
+                name = it.productName, 
+                productType = it.productType,
+                grade = it.grade, 
+                unit = if (it.unit == "Boxes") "KG" else it.unit, 
+                quantity = it.finalNetWeightKg, 
+                rate = it.ratePerKg, 
+                amount = it.grossAmount
+            ) 
+        }
         
         val sub = sumOf { it.grossAmount }
         val comm = sumOf { it.commissionAmount }
@@ -248,7 +328,12 @@ class TemplateInvoicePdfService @Inject constructor() {
             advance = advanceAmt,
             others = othersAmt + pack,
             grandTotal = finalGrand,
-            vehicleNumber = "" // Not yet implemented in entity
+            vehicleNumber = "", // Not yet implemented in entity
+            customerGstin = "",
+            customerState = "",
+            placeOfSupply = "",
+            reverseCharge = false,
+            paymentMode = "CASH"
         )
     }
 }

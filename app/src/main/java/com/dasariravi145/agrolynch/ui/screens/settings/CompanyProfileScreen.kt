@@ -278,7 +278,13 @@ fun CompanyProfileScreen(
 }
 
 @Composable
-fun AssetPicker(label: String, path: String?, helperText: String? = null, onUriSelected: (Uri) -> Unit) {
+fun AssetPicker(
+    label: String, 
+    path: String?, 
+    helperText: String? = null, 
+    onRemove: (() -> Unit)? = null,
+    onUriSelected: (Uri) -> Unit
+) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { onUriSelected(it) }
     }
@@ -286,23 +292,44 @@ fun AssetPicker(label: String, path: String?, helperText: String? = null, onUriS
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(140.dp)) {
         Box(
             modifier = Modifier
-                .size(80.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .size(90.dp)
+                .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFFF3F4F6))
-                .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+                .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp))
                 .clickable { launcher.launch("image/*") },
             contentAlignment = Alignment.Center
         ) {
             if (path != null) {
-                Image(painter = rememberAsyncImagePainter(path), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Image(
+                    painter = rememberAsyncImagePainter(path), 
+                    contentDescription = null, 
+                    modifier = Modifier.fillMaxSize(), 
+                    contentScale = ContentScale.Crop
+                )
+                // Remove button overlay
+                if (onRemove != null) {
+                    IconButton(
+                        onClick = { onRemove() },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .size(20.dp)
+                            .background(Color.Red, RoundedCornerShape(4.dp))
+                    ) {
+                        Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    }
+                }
             } else {
-                Icon(Icons.Default.AddPhotoAlternate, null, tint = Color.Gray)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.AddPhotoAlternate, null, tint = Color.Gray, modifier = Modifier.size(24.dp))
+                    Text("Add", fontSize = 10.sp, color = Color.Gray)
+                }
             }
         }
-        Spacer(Modifier.height(4.dp))
-        Text(label, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
+        Text(label, fontSize = 11.sp, color = Color.DarkGray, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         if (helperText != null) {
-            Text(helperText, fontSize = 8.sp, color = Color.Gray.copy(alpha = 0.7f), textAlign = TextAlign.Center, lineHeight = 10.sp)
+            Text(helperText, fontSize = 9.sp, color = Color.Gray.copy(alpha = 0.7f), textAlign = TextAlign.Center, lineHeight = 11.sp)
         }
     }
 }

@@ -15,6 +15,7 @@ import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
+import com.google.gson.Gson
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -25,6 +26,9 @@ class AgroLynchApp : Application(), Configuration.Provider {
 
     @Inject
     lateinit var adMobManager: AdMobManager
+
+    @Inject
+    lateinit var gson: Gson
 
     override fun onCreate() {
         super.onCreate()

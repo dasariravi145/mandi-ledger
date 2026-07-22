@@ -7,6 +7,7 @@ import com.dasariravi145.agrolynch.data.local.dao.FarmerStockInfo
 import com.dasariravi145.agrolynch.domain.repository.*
 import com.dasariravi145.agrolynch.util.*
 import com.dasariravi145.agrolynch.util.Constants
+import com.dasariravi145.agrolynch.util.PhoneNumberUtils
 import com.dasariravi145.agrolynch.util.pdf.TemplateInvoicePdfService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -23,12 +24,13 @@ data class SaleItemDraft(
     val inputQuantity: Double, // Quantity in original unit (KG/Ton/Boxes)
     val saleRate: Double, // Rate per KG
     val commissionPercent: Double = 0.0,
-    val laborCharges: Double = 0.0,
-    val transportCharges: Double = 0.0,
-    val otherCharges: Double = 0.0,
-    val rawInputQuantity: String = "" // Added to handle decimal input precisely
+    val rawInputQuantity: String = "", // Added to handle decimal input precisely
+    val isFullStock: Boolean = false
 ) {
     val quantity: Double get() {
+        if (isFullStock) {
+            return arrival.remainingQuantity * (if (arrival.unit == "Ton" || arrival.unit == "Boxes") 1000.0 else 1.0)
+        }
         val calculated = when(arrival.unit) {
             "Ton" -> inputQuantity * 1000.0
             "Boxes" -> {
@@ -41,8 +43,7 @@ data class SaleItemDraft(
         // Log Sale Item Details
         val kgPerBox = if (arrival.numberOfBoxes > 0) arrival.finalNetWeightKg / arrival.numberOfBoxes else 0.0
         val availableKg = arrival.remainingQuantity * (when(arrival.unit) {
-            "Ton" -> 1000.0
-            "Boxes" -> kgPerBox
+            "Ton", "Boxes" -> 1000.0
             else -> 1.0
         })
         timber.log.Timber.d("SALE_QTY_RAW_INPUT: $rawInputQuantity")
@@ -76,7 +77,7 @@ data class SaleItemDraft(
         return amount
     }
     val commissionAmount: Double get() = 0.0
-    val netAmount: Double get() = saleAmount + laborCharges + transportCharges + otherCharges
+    val netAmount: Double get() = saleAmount
 }
 
 data class TransactionTotal(
@@ -84,9 +85,9 @@ data class TransactionTotal(
     val totalPurchaseAmount: Double = 0.0,
     val totalSaleAmount: Double = 0.0,
     val totalCommission: Double = 0.0,
+    val laborPercentage: Double = 0.0,
     val totalLabor: Double = 0.0,
     val totalTransport: Double = 0.0,
-    val totalOther: Double = 0.0,
     val totalNetAmount: Double = 0.0
 )
 
@@ -118,6 +119,12 @@ class SaleViewModel @Inject constructor(
     private val _billNumber = MutableStateFlow("")
     val billNumber: StateFlow<String> = _billNumber.asStateFlow()
 
+    private val _overallLaborPercent = MutableStateFlow("")
+    val overallLaborPercent = _overallLaborPercent.asStateFlow()
+
+    private val _overallTransport = MutableStateFlow("")
+    val overallTransport = _overallTransport.asStateFlow()
+
     private val _deductions = MutableStateFlow<List<EntryDeductionEntity>>(emptyList())
     val deductions: StateFlow<List<EntryDeductionEntity>> = _deductions.asStateFlow()
 
@@ -127,6 +134,18 @@ class SaleViewModel @Inject constructor(
 
     init {
         generatePreviewBillNumber()
+    }
+
+    fun onOverallLaborPercentChange(value: String) {
+        if (value.isEmpty() || value.matches(Regex("^\\d+(\\.\\d*)?$"))) {
+            _overallLaborPercent.value = value
+        }
+    }
+
+    fun onOverallTransportChange(value: String) {
+        if (value.isEmpty() || value.matches(Regex("^\\d+(\\.\\d*)?$"))) {
+            _overallTransport.value = value
+        }
     }
 
     private fun generatePreviewBillNumber() {
@@ -157,6 +176,7 @@ class SaleViewModel @Inject constructor(
 
     // --- Buyer Section ---
     val buyers = buyerRepository.getBuyers()
+        .map { list -> list.distinctBy { it.id } } // Ensure ID uniqueness in dropdown
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // --- Sale Items Section ---
@@ -167,16 +187,26 @@ class SaleViewModel @Inject constructor(
         .map { 5.0 } // Default to 5.0% if profile doesn't have a specific field
         .stateIn(viewModelScope, SharingStarted.Eagerly, 5.0)
 
-    val transactionTotal = _saleItems.map { items ->
+    val transactionTotal = combine(
+        _saleItems,
+        _overallLaborPercent,
+        _overallTransport
+    ) { items, laborPercentStr, transportStr ->
+        val totalNetKg = items.sumOf { it.quantity }
+        val subtotal = items.sumOf { it.saleAmount }
+        val laborPercent = laborPercentStr.toDoubleOrNull() ?: 0.0
+        val laborAmount = totalNetKg * laborPercent / 100.0
+        val transport = transportStr.toDoubleOrNull() ?: 0.0
+        
         TransactionTotal(
-            totalQuantity = items.sumOf { it.quantity },
+            totalQuantity = totalNetKg,
             totalPurchaseAmount = items.sumOf { it.purchaseAmount },
-            totalSaleAmount = items.sumOf { it.saleAmount },
+            totalSaleAmount = subtotal,
             totalCommission = items.sumOf { it.commissionAmount },
-            totalLabor = items.sumOf { it.laborCharges },
-            totalTransport = items.sumOf { it.transportCharges },
-            totalOther = items.sumOf { it.otherCharges },
-            totalNetAmount = items.sumOf { it.netAmount }
+            laborPercentage = laborPercent,
+            totalLabor = laborAmount,
+            totalTransport = transport,
+            totalNetAmount = subtotal + laborAmount + transport
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TransactionTotal())
 
@@ -209,21 +239,24 @@ class SaleViewModel @Inject constructor(
 
     // --- Farmer Stock Selection Logic ---
     @OptIn(ExperimentalCoroutinesApi::class)
-    val farmersWithStock = arrivalRepository.getFarmersWithStock()
-        .flatMapLatest { farmers ->
-            arrivalRepository.getArrivals().map { allArrivals ->
-                val selectedStockIds = _saleItems.value.map { it.arrival.id }.toSet()
-                farmers.filter { farmer ->
-                    allArrivals.any { it.farmerId == farmer.farmerId && it.remainingQuantity > 0 && it.id !in selectedStockIds }
-                }
-            }
+    val farmersWithStock = combine(
+        arrivalRepository.getFarmersWithStock(),
+        arrivalRepository.getArrivals(),
+        _saleItems
+    ) { farmers, allArrivals, selectedItems ->
+        val selectedStockIds = selectedItems.map { it.arrival.id }.toSet()
+        farmers.filter { farmer ->
+            allArrivals.any { it.farmerId == farmer.farmerId && it.remainingQuantity > 0.001 && it.id !in selectedStockIds }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun getAvailableStockByFarmer(farmerId: String): Flow<List<ArrivalEntity>> = 
-        arrivalRepository.getAvailableStockByFarmer(farmerId).map { arrivals ->
-            val selectedStockIds = _saleItems.value.map { it.arrival.id }.toSet()
-            arrivals.filter { it.id !in selectedStockIds }
+        combine(
+            arrivalRepository.getAvailableStockByFarmer(farmerId),
+            _saleItems
+        ) { arrivals, selectedItems ->
+            val selectedStockIds = selectedItems.map { it.arrival.id }.toSet()
+            arrivals.filter { it.id !in selectedStockIds && it.remainingQuantity > 0.001 }
         }
 
     fun createSale(
@@ -239,6 +272,14 @@ class SaleViewModel @Inject constructor(
     ) {
         val items = _saleItems.value
         if (items.isEmpty()) return
+
+        if (_isLoading.value) return // Single-submission protection
+
+        val laborPercent = _overallLaborPercent.value.toDoubleOrNull() ?: 0.0
+        if (laborPercent > 100.0) {
+            viewModelScope.launch { _error.emit("Labour percentage cannot exceed 100%") }
+            return
+        }
 
         viewModelScope.launch {
             _isLoading.value = true
@@ -263,6 +304,7 @@ class SaleViewModel @Inject constructor(
                         farmerName = draft.arrival.farmerName,
                         productId = draft.arrival.productId,
                         productName = draft.arrival.productName,
+                        productType = draft.arrival.productType,
                         productCategory = draft.arrival.productCategory,
                         grade = draft.arrival.grade,
                         quantitySold = draft.quantity,
@@ -275,9 +317,9 @@ class SaleViewModel @Inject constructor(
                         marginAmount = draft.saleAmount - draft.purchaseAmount,
                         commissionPercent = 0.0,
                         commissionAmount = 0.0,
-                        laborCharges = draft.laborCharges,
-                        transportCharges = draft.transportCharges,
-                        otherCharges = draft.otherCharges,
+                        laborCharges = 0.0, // Moved to transaction level
+                        transportCharges = 0.0, // Moved to transaction level
+                        otherCharges = 0.0, // Moved to transaction level
                         netAmount = draft.netAmount,
                         date = System.currentTimeMillis()
                     )
@@ -292,15 +334,17 @@ class SaleViewModel @Inject constructor(
                     farmerName = items.map { it.arrival.farmerName }.distinct().joinToString(", "),
                     productId = if (items.distinctBy { it.arrival.productId }.size > 1) "Multiple" else items.first().arrival.productId,
                     productName = if (items.distinctBy { it.arrival.productId }.size > 1) "Multiple Products" else items.first().arrival.productName,
+                    productType = if (items.distinctBy { it.arrival.productType }.size > 1) "Multiple" else items.first().arrival.productType,
                     grade = if (items.distinctBy { it.arrival.grade }.size > 1) "Multiple" else items.first().arrival.grade,
                     totalQuantity = totals.totalQuantity,
                     totalPurchaseAmount = totals.totalPurchaseAmount,
                     totalAmount = totals.totalSaleAmount, // Sub-total
                     totalCommission = totals.totalCommission,
+                    laborPercentage = totals.laborPercentage,
                     laborCharges = totals.totalLabor,
                     transportCharges = totals.totalTransport,
                     packingCharges = 0.0,
-                    otherCharges = totals.totalOther + currentDeductionsTotal,
+                    otherCharges = currentDeductionsTotal,
                     billNumber = currentBillNumber,
                     totalNetAmount = totals.totalNetAmount + currentDeductionsTotal, // Final Collection
                     totalMargin = totals.totalSaleAmount - totals.totalPurchaseAmount,
@@ -322,6 +366,8 @@ class SaleViewModel @Inject constructor(
 
                         _saveSuccess.emit(Unit)
                         _saleItems.value = emptyList()
+                        _overallLaborPercent.value = ""
+                        _overallTransport.value = ""
                     }
                     is Resource.Error -> _error.emit(result.message ?: "Failed to save sale")
                     else -> {}
@@ -353,8 +399,26 @@ class SaleViewModel @Inject constructor(
             }
             return
         }
+
+        if (_isLoading.value) return // Single-submission protection
+
         viewModelScope.launch {
             _isLoading.value = true
+            
+            // Check for existing buyer by name and normalized phone
+            val normalizedMobile = PhoneNumberUtils.normalize(mobile)
+            val existingBuyer = buyers.value.find { 
+                it.name.equals(name, ignoreCase = true) && 
+                PhoneNumberUtils.normalize(it.mobileNumber) == normalizedMobile
+            }
+
+            if (existingBuyer != null) {
+                Timber.d("REGISTER_BUYER: Reusing existing buyer id=${existingBuyer.id}")
+                _isLoading.value = false // Set false so createSale can proceed
+                createSale(context = context, buyer = existingBuyer)
+                return@launch
+            }
+
             val newBuyer = BuyerEntity(
                 id = UUID.randomUUID().toString(),
                 name = name,
@@ -368,6 +432,7 @@ class SaleViewModel @Inject constructor(
                 _error.emit(result.message ?: "Failed to add buyer")
                 _isLoading.value = false
             } else {
+                _isLoading.value = false // Set false so createSale can proceed
                 createSale(context = context, buyer = newBuyer)
             }
         }

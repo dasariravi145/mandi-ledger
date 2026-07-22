@@ -89,51 +89,10 @@
             display: inline-block;
             box-shadow: 0 0 0 2px #D4AF37;
         }
-        .god-image { width: 100%; height: 100%; object-fit: cover; }
+        .god-image { width: 100%; height: 100%; object-fit: contain; display: block; }
+        .qr-image { width: 100%; height: 100%; object-fit: contain; display: block; image-rendering: pixelated; }
+        .signature-image { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
 
-        .biz-item { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 4px; font-size: 13px; line-height: 1.2; font-weight: 600; }
-        .icon { color: #0F172A; font-size: 15px; min-width: 18px; }
-
-        .tagline-box {
-            font-size: 15px;
-            font-style: italic;
-            font-family: 'Brush Script MT', cursive;
-            line-height: 1.2;
-            color: #1E3A8A;
-        }
-
-        .company-name {
-            font-size: 46px;
-            color: #0F172A;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 8px;
-            line-height: 1.1;
-            font-family: 'Cinzel', 'Cormorant Garamond', serif;
-            margin-top: 5px;
-            text-shadow: 0 2px 3px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-
-        /* Meta Bar */
-        .meta-section {
-            flex: 0 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: linear-gradient(90deg, #0F172A, #1E3A8A);
-            color: #fff;
-            height: 48px;
-            padding: 0 20px;
-            border-radius: 4px;
-            margin-bottom: 15px;
-            z-index: 2;
-        }
-        .info-col { display: flex; align-items: center; gap: 8px; }
-        .info-label { font-size: 11px; text-transform: uppercase; opacity: 0.9; font-weight: bold; }
-        .info-value { font-size: 13px; font-weight: bold; }
-
-        /* Table Section */
         .table-section {
             flex: 1 1 auto;
             min-height: 430px;
@@ -278,18 +237,18 @@
         <div class="header-section">
             <div class="header-top">
                 <div class="header-left">
-                    <div class="biz-item {{proprietorHidden}}">
+                    <div class="biz-item">
                         <span>{{proprietor}}</span>
                     </div>
-                    <div class="biz-item {{addressHidden}}">
+                    <div class="biz-item">
                         <span class="icon">📍</span>
                         <span>{{address}}</span>
                     </div>
-                    <div class="biz-item {{mobileHidden}}">
+                    <div class="biz-item">
                         <span class="icon">📞</span>
                         <span>{{mobile}}</span>
                     </div>
-                    <div class="biz-item {{gstHidden}}">
+                    <div class="biz-item">
                         <span class="icon">🆔</span>
                         <span>GSTIN: {{gstNumber}}</span>
                     </div>
@@ -297,7 +256,7 @@
 
                 <div class="header-center">
                     <div class="god-frame {{godImageHidden}}">
-                        <img src="{{godImageBase64}}" class="god-image" alt="God Image">
+                        <img src="{{godImageBase64}}" class="god-image" alt="" onerror="this.style.display='none'; this.parentElement.style.display='none';">
                     </div>
                 </div>
 
@@ -313,30 +272,51 @@
             <div class="company-name" id="main-company-name">{{companyName}}</div>
         </div>
 
-        <div class="meta-section">
-            <div class="info-col">
-                <span class="info-label">BILL NO:</span>
-                <span class="info-value">{{billNumber}}</span>
+        <div class="info-grid">
+            <div class="metadata-panel metadata-left">
+                <div class="meta-row">
+                    <span class="meta-label">CUSTOMER NAME</span>
+                    <span class="meta-value">{{customerName}}</span>
+                </div>
+                <div class="meta-row {{customerMobileHidden}}">
+                    <span class="meta-label">MOBILE</span>
+                    <span class="meta-value">{{customerMobile}}</span>
+                </div>
             </div>
-            <div class="info-col">
-                <span class="info-label">CUSTOMER:</span>
-                <span class="info-value">{{customerName}}</span>
-            </div>
-            <div class="info-col">
-                <span class="info-label">DATE:</span>
-                <span class="info-value">{{date}}</span>
+            <div class="metadata-panel metadata-right">
+                <div class="meta-row">
+                    <span class="meta-label">BILL NO.</span>
+                    <span class="meta-value">{{billNumber}}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">DATE</span>
+                    <span class="meta-value">{{date}}</span>
+                </div>
+                <div class="meta-row {{vehicleHidden}}">
+                    <span class="meta-label">VEHICLE</span>
+                    <span class="meta-value">{{vehicleNumber}}</span>
+                </div>
             </div>
         </div>
 
         <div class="table-section">
             <table>
+                <colgroup>
+                    <col style="width:8%">
+                    <col style="width:36%">
+                    <col style="width:14%">
+                    <col style="width:16%">
+                    <col style="width:12%">
+                    <col style="width:14%">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th width="8%">SR</th>
-                        <th class="text-left" width="45%">PRODUCT DESCRIPTION</th>
-                        <th width="15%">GRADE</th>
-                        <th width="15%">QTY</th>
-                        <th width="17%" class="text-right">AMOUNT</th>
+                        <th>SR</th>
+                        <th class="text-left">DESCRIPTION</th>
+                        <th>GRADE</th>
+                        <th>QTY</th>
+                        <th>RATE</th>
+                        <th class="text-right">AMOUNT</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -348,7 +328,7 @@
         <div class="bottom-section">
             <div class="qr-section {{qrHidden}}">
                 <div class="qr-box">
-                    <img src="{{qrBase64}}" alt="QR">
+                    <img src="{{qrBase64}}" class="qr-image" alt="" onerror="this.style.display='none'; this.parentElement.style.display='none';">
                 </div>
             </div>
 
@@ -371,7 +351,7 @@
                 </div>
 
                 <div class="signature-section {{signatureHidden}}">
-                    <img src="{{signatureBase64}}" class="signature-image" alt="Signature">
+                    <img src="{{signatureBase64}}" class="signature-image" alt="" onerror="this.style.display='none';">
                     <div class="signature-line"></div>
                     <div class="signature-label">AUTHORIZED SIGNATURE</div>
                 </div>

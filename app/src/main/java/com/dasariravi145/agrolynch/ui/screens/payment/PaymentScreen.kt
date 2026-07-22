@@ -52,6 +52,8 @@ fun PaymentScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val pendingAmount by viewModel.pendingAmount.collectAsState()
     val selectedTab by viewModel.selectedTab.collectAsState()
+    val buyerSearchQuery by viewModel.buyerSearchQuery.collectAsState()
+    val farmerSearchQuery by viewModel.farmerSearchQuery.collectAsState()
     val isPrinting by viewModel.isPrinting.collectAsState()
     val isSharing by viewModel.isSharing.collectAsState()
     val autoBillNumber by viewModel.billNumber.collectAsState()
@@ -128,6 +130,27 @@ fun PaymentScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
+            val currentSearchQuery = if (selectedTab == 0) buyerSearchQuery else farmerSearchQuery
+
+            OutlinedTextField(
+                value = currentSearchQuery,
+                onValueChange = { viewModel.onSearchQueryChange(it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text(stringResource(R.string.search_payments_hint)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (currentSearchQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.clear))
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+
             // OCR Badge
             if (ocrAmount > 0) {
                 Surface(color = Color(0xFFE8F5E9), modifier = Modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(8.dp)) {
@@ -142,6 +165,10 @@ fun PaymentScreen(
             if (isLoading && payments.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
+                }
+            } else if (payments.isEmpty() && currentSearchQuery.isNotEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No matching payments found", color = Color.Gray)
                 }
             } else {
                 LazyColumn(
