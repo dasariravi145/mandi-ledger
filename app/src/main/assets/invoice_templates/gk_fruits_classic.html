@@ -8,10 +8,17 @@
         @page { size: A4; margin: 0; }
         * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
+        :root {
+            --classic-green: #006400;
+            --classic-gold: #D4AF37;
+            --classic-navy: #0F172A;
+            --bg-color: #FFFDF7;
+        }
+
         body {
             margin: 0;
             padding: 0;
-            background: #FFFDF7;
+            background: var(--bg-color);
             font-family: 'Helvetica', 'Arial', sans-serif;
             color: #111827;
         }
@@ -19,11 +26,11 @@
         .invoice-page {
             width: 794px;
             height: 1123px;
-            background: #FFFDF7;
-            padding: 34px;
-            border: 5px solid #D4AF37;
-            outline: 2px solid #D4AF37;
-            outline-offset: -8px;
+            background: var(--bg-color);
+            padding: 40px;
+            border: 6px solid var(--classic-gold);
+            outline: 2px solid var(--classic-gold);
+            outline-offset: -10px;
             display: flex;
             flex-direction: column;
             position: relative;
@@ -35,7 +42,7 @@
             content: '';
             position: absolute;
             top: 6px; left: 6px; right: 6px; bottom: 6px;
-            border: 1px solid #D4AF37;
+            border: 1px solid var(--classic-gold);
             pointer-events: none;
             z-index: 10;
         }
@@ -45,10 +52,10 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%) rotate(-35deg) scale(1.3);
-            opacity: 0.06;
+            opacity: 0.05;
             font-size: 86px;
             font-weight: 900;
-            color: #1E3A8A;
+            color: var(--classic-green);
             white-space: nowrap;
             pointer-events: none;
             z-index: 0;
@@ -58,66 +65,78 @@
         }
 
         /* Header Section */
-        .header-section {
+        .classic-header {
             flex: 0 0 auto;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            display: grid;
+            grid-template-columns: 32% 36% 32%;
+            align-items: start;
+            width: 100%;
             margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--classic-gold);
+            position: relative;
             z-index: 2;
         }
 
-        .header-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-            margin-bottom: 10px;
-        }
+        .classic-contact-block { text-align: left; }
+        .biz-item { display: flex; align-items: flex-start; margin-bottom: 4px; font-size: 13px; color: #333; line-height: 1.3; }
+        .biz-item .icon { color: var(--classic-green); margin-right: 8px; font-size: 14px; width: 16px; text-align: center; }
 
-        .header-left { flex: 1; text-align: left; }
-        .header-center { flex: 0 0 120px; text-align: center; }
-        .header-right { flex: 1; text-align: right; }
-
-        .god-frame {
-            width: 95px;
-            height: 95px;
-            background: #fff;
-            border: 2px solid #0F172A;
-            border-radius: 22px 22px 45px 45px;
-            overflow: hidden;
-            display: inline-block;
-            box-shadow: 0 0 0 2px #D4AF37;
-        }
+        .classic-brand-block { text-align: center; }
+        .god-image-wrapper { width: 120px; height: 120px; margin: 0 auto 8px; position: relative; }
         .god-image { width: 100%; height: 100%; object-fit: contain; display: block; }
-        .qr-image { width: 100%; height: 100%; object-fit: contain; display: block; image-rendering: pixelated; }
-        .signature-image { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
 
+        .main-logo { display: inline-block; }
+        .logo-gk { font-family: 'Cinzel', serif; font-size: 44px; font-weight: 900; color: var(--classic-green); line-height: 0.9; text-transform: uppercase; }
+        .logo-fruits { font-family: 'Helvetica', sans-serif; font-size: 14px; font-weight: bold; color: var(--classic-green); letter-spacing: 6px; margin-top: -2px; display: inline-block; position: relative; }
+        .logo-fruits::before, .logo-fruits::after { content: ''; position: absolute; top: 55%; width: 25px; height: 1.5px; background: var(--classic-gold); }
+        .logo-fruits::before { left: -35px; }
+        .logo-fruits::after { right: -35px; }
+
+        .classic-slogan-block { text-align: right; }
+        .secondary-brand { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 8px; }
+        .secondary-brand .shop-icon { font-size: 18px; margin-right: 6px; }
+        .secondary-brand-name { font-size: 18px; font-weight: bold; color: var(--classic-green); text-transform: uppercase; }
+        .brand-divider { width: 80px; height: 1px; background: var(--classic-gold); margin: 0 0 8px auto; }
+        .business-slogan { font-family: 'Cormorant Garamond', serif; font-size: 13px; font-style: italic; color: var(--classic-green); line-height: 1.4; font-weight: 700; }
+
+        /* Bill & Customer Block */
+        .info-block {
+            flex: 0 0 auto;
+            border: 2px solid var(--classic-green);
+            margin-bottom: 20px;
+            display: flex;
+            background: #fff;
+            z-index: 2;
+        }
+        .info-col { padding: 12px 15px; }
+        .info-col-left { flex: 1; border-right: 2px solid var(--classic-green); }
+        .info-col-right { flex: 1.2; }
+        .info-row { display: flex; margin-bottom: 6px; font-size: 14px; }
+        .info-row:last-child { margin-bottom: 0; }
+        .info-label { font-weight: 700; color: var(--classic-green); width: 110px; text-transform: uppercase; font-size: 12px; }
+        .info-value { font-weight: 600; color: #111827; flex: 1; }
+
+        /* Table Section */
         .table-section {
             flex: 1 1 auto;
-            min-height: 430px;
-            max-height: 520px;
+            min-height: 400px;
             overflow: hidden;
             z-index: 2;
+            margin-bottom: 20px;
         }
 
-        table { width: 100%; border-collapse: collapse; border: 1px solid #E7D7A5; background: rgba(255,255,255,0.8); }
+        table { width: 100%; border-collapse: collapse; border: 1px solid var(--classic-gold); background: rgba(255,255,255,0.9); table-layout: fixed; }
         th {
-            background: #0F172A;
+            background: var(--classic-green);
             color: #fff;
-            padding: 10px 5px;
+            padding: 12px 5px;
             text-transform: uppercase;
             font-size: 12px;
-            letter-spacing: 1px;
-            border: 1px solid #0F172A;
+            letter-spacing: 1.5px;
+            border: 1px solid var(--classic-green);
         }
-        td { padding: 8px 10px; border: 1px solid #E7D7A5; font-size: 14px; color: #111827; height: 42px; vertical-align: middle; }
-
-        .qty-cell {
-            white-space: nowrap !important;
-            text-align: center;
-            font-size: 13px;
-        }
+        td { padding: 10px; border: 1px solid var(--classic-gold); font-size: 14px; color: #111827; height: 44px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         .text-left { text-align: left; }
         .text-center { text-align: center; }
@@ -125,35 +144,52 @@
 
         /* Bottom Section */
         .bottom-section {
-            flex: 0 0 240px;
+            flex: 0 0 auto;
             display: grid;
-            grid-template-columns: 150px 1fr 350px;
+            grid-template-columns: 200px 1fr 340px;
             gap: 20px;
             align-items: end;
-            margin-top: 15px;
             z-index: 2;
         }
 
-        .qr-section {
-            grid-column: 1;
-            text-align: center;
-        }
-        .qr-box {
+        .qr-area { grid-column: 1; text-align: center; }
+        .qr-card {
             background: #fff;
-            padding: 6px;
-            border: 1px solid #D4AF37;
-            border-radius: 8px;
-            width: 110px;
-            height: 110px;
+            padding: 8px;
+            border: 1px solid var(--classic-gold);
+            border-radius: 12px;
+            width: 160px; /* Increased from 145px */
             margin: 0 auto;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            position: relative;
+            bottom: 80px;
         }
-        .qr-box img { width: 100%; height: 100%; object-fit: contain; }
+        .qr-label { font-size: 11px; font-weight: 900; color: var(--classic-green); margin-bottom: 6px; letter-spacing: 1px; }
+        .qr-box {
+            width: 144px;
+            height: 144px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #ffffff;
+            border: none;
+            overflow: hidden;
+        }
+        .qr-image {
+            width: 95%;
+            height: 95%;
+            object-fit: contain;
+            object-position: center;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+            display: block;
+            border: none;
+            outline: none;
+        }
+        .upi-labels { font-size: 9px; color: #666; margin-top: 6px; font-weight: bold; }
 
-        .thanks-section {
-            grid-column: 2;
-            padding-bottom: 20px;
-        }
-        .thanks-msg { font-size: 18px; font-weight: bold; color: #1E3A8A; font-family: 'Georgia', serif; }
+        .thanks-msg { grid-column: 2; font-size: 22px; font-weight: bold; color: var(--classic-green); font-family: 'Cormorant Garamond', serif; text-align: center; margin-bottom: 30px; }
 
         .summary-signature-col {
             grid-column: 3;
@@ -162,69 +198,100 @@
             align-items: flex-end;
         }
 
-        .totals-table {
+        .totals-box {
             width: 100%;
-            margin-bottom: 15px;
-            background: linear-gradient(135deg, #0F172A, #1E3A8A);
-            padding: 12px;
+            margin-bottom: 92px; /* 80px offset + 12px gap */
+            background: #fff;
+            padding: 15px;
             border-radius: 12px;
-            box-shadow: 0 6px 15px rgba(15, 23, 42, 0.15);
+            border: 2px solid var(--classic-green);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
         .total-row {
             display: flex;
             justify-content: space-between;
-            padding: 4px 0;
-            border-bottom: 1px dashed rgba(212, 175, 55, 0.2);
+            padding: 6px 0;
+            border-bottom: 1px dashed rgba(0, 100, 0, 0.2);
             font-size: 13px;
-            color: #ffffff;
+            color: #444;
         }
+        .total-row:last-of-type { border-bottom: none; }
         .grand-total {
-            background: #D4AF37;
-            color: #0F172A;
-            padding: 10px 15px;
-            font-size: 19px;
+            background: var(--classic-green);
+            color: #fff;
+            padding: 12px 15px;
+            font-size: 20px;
             font-weight: bold;
             display: flex;
             justify-content: space-between;
             border-radius: 8px;
-            margin-top: 8px;
+            margin-top: 10px;
+            box-shadow: 0 4px 8px rgba(0, 100, 0, 0.2);
         }
 
-        .signature-section {
-            text-align: center;
-            width: 220px;
-        }
-        .signature-image {
-            max-height: 70px;
-            width: auto;
-            object-fit: contain;
-            margin-bottom: 5px;
-        }
-        .signature-line {
-            border-top: 1.5px solid #D4AF37;
-            width: 100%;
-            margin-bottom: 3px;
-        }
-        .signature-label {
-            font-size: 11px;
-            font-weight: 700;
-            color: #1E3A8A;
-            text-transform: uppercase;
-        }
+
+
+.signature-block {
+    text-align: center;
+    width: 320px;
+    margin-top: 0;
+    margin-bottom: 5px;
+    border: 2px solid var(--classic-green);
+    border-radius: 8px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    bottom: 80px; /* Aligned with QR card */
+}
+
+.signature-image-container {
+    height: 100px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    background: #fff;
+}
+
+.signature-img {
+    width: 85%;
+    height: 85%;
+    object-fit: contain;
+    object-position: center;
+    display: block;
+}
+
+.signature-label-area {
+    border-top: 2px solid var(--classic-green);
+    background: rgba(0, 100, 0, 0.05);
+    padding: 6px 0;
+}
+
+.signature-label {
+    font-size: 12px;
+    font-weight: 900;
+    color: var(--classic-green);
+    letter-spacing: 1px;
+}
+
 
         /* Footer Bar */
         .footer-section {
-            flex: 0 0 35px;
-            background: #0F172A;
-            color: #D4AF37;
+            flex: 0 0 38px;
+            background: var(--classic-green);
+            color: var(--classic-gold);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: bold;
-            letter-spacing: 2px;
-            margin: 0 -34px -34px -34px;
+            letter-spacing: 3px;
+            margin: 15px -40px -40px -40px; /* Reduced top margin from 20px */
             z-index: 5;
+            text-transform: uppercase;
         }
 
         .hidden { display: none !important; }
@@ -234,71 +301,75 @@
     <div class="invoice-page">
         <div class="watermark">{{companyName}}</div>
 
-        <div class="header-section">
-            <div class="header-top">
-                <div class="header-left">
-                    <div class="biz-item">
-                        <span>{{proprietor}}</span>
-                    </div>
-                    <div class="biz-item">
-                        <span class="icon">📍</span>
-                        <span>{{address}}</span>
-                    </div>
-                    <div class="biz-item">
-                        <span class="icon">📞</span>
-                        <span>{{mobile}}</span>
-                    </div>
-                    <div class="biz-item">
-                        <span class="icon">🆔</span>
-                        <span>GSTIN: {{gstNumber}}</span>
-                    </div>
+        <!-- Three-Column Header -->
+        <div class="classic-header">
+            <!-- Left: Contact Block -->
+            <div class="classic-contact-block">
+                <div class="biz-item">
+                    <span class="icon">📍</span>
+                    <span>{{address}}</span>
                 </div>
-
-                <div class="header-center">
-                    <div class="god-frame {{godImageHidden}}">
-                        <img src="{{godImageBase64}}" class="god-image" alt="" onerror="this.style.display='none'; this.parentElement.style.display='none';">
-                    </div>
+                <div class="biz-item">
+                    <span class="icon">📞</span>
+                    <span>{{mobile}}</span>
                 </div>
-
-                <div class="header-right">
-                    <div class="tagline-box">
-                        Fresh from Farmers,<br>
-                        Trusted by Businesses,<br>
-                        Loved by Customers
-                    </div>
+                <div class="biz-item {{gstHidden}}">
+                    <span class="icon">🆔</span>
+                    <span>GSTIN: {{gstNumber}}</span>
                 </div>
             </div>
 
-            <div class="company-name" id="main-company-name">{{companyName}}</div>
-        </div>
-
-        <div class="info-grid">
-            <div class="metadata-panel metadata-left">
-                <div class="meta-row">
-                    <span class="meta-label">CUSTOMER NAME</span>
-                    <span class="meta-value">{{customerName}}</span>
+            <!-- Center: Brand Block (God Image + Logo) -->
+            <div class="classic-brand-block">
+                <div class="god-image-wrapper {{godImageHidden}}">
+                    <img src="{{godImageBase64}}" class="god-image" alt="Lord Ganesha" onerror="this.style.display='none'; this.parentElement.style.display='none';">
                 </div>
-                <div class="meta-row {{customerMobileHidden}}">
-                    <span class="meta-label">MOBILE</span>
-                    <span class="meta-value">{{customerMobile}}</span>
+                <div class="main-logo">
+                    <div class="logo-gk" id="logo-crest">GK</div>
+                    <div class="logo-fruits">FRUITS</div>
                 </div>
             </div>
-            <div class="metadata-panel metadata-right">
-                <div class="meta-row">
-                    <span class="meta-label">BILL NO.</span>
-                    <span class="meta-value">{{billNumber}}</span>
+
+            <!-- Right: Slogan Block (Company Name + Slogan) -->
+            <div class="classic-slogan-block">
+                <div class="secondary-brand">
+                    <span class="shop-icon">🏪</span>
+                    <span class="secondary-brand-name">{{companyName}}</span>
                 </div>
-                <div class="meta-row">
-                    <span class="meta-label">DATE</span>
-                    <span class="meta-value">{{date}}</span>
-                </div>
-                <div class="meta-row {{vehicleHidden}}">
-                    <span class="meta-label">VEHICLE</span>
-                    <span class="meta-value">{{vehicleNumber}}</span>
-                </div>
+                <div class="brand-divider"></div>
+                <div class="business-slogan {{taglineHidden}}">{{tagline}}</div>
             </div>
         </div>
 
+        <!-- Bill & Customer Information Block -->
+        <div class="info-block">
+            <div class="info-col info-col-left">
+                <div class="info-row">
+                    <span class="info-label">Bill No.</span>
+                    <span class="info-value">: {{billNumber}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Date</span>
+                    <span class="info-value">: {{date}}</span>
+                </div>
+                <div class="info-row {{vehicleHidden}}">
+                    <span class="info-label">Vehicle</span>
+                    <span class="info-value">: {{vehicleNumber}}</span>
+                </div>
+            </div>
+            <div class="info-col info-col-right">
+                <div class="info-row">
+                    <span class="info-label" style="width: 140px;">Customer Name</span>
+                    <span class="info-value">: {{customerName}}</span>
+                </div>
+                <div class="info-row {{customerMobileHidden}}">
+                    <span class="info-label" style="width: 140px;">Mobile No.</span>
+                    <span class="info-value">: {{customerMobile}}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product Table -->
         <div class="table-section">
             <table>
                 <colgroup>
@@ -325,23 +396,26 @@
             </table>
         </div>
 
+        <!-- Lower Summary & Signature Area -->
         <div class="bottom-section">
-            <div class="qr-section {{qrHidden}}">
-                <div class="qr-box">
-                    <img src="{{qrBase64}}" class="qr-image" alt="" onerror="this.style.display='none'; this.parentElement.style.display='none';">
+            <div class="qr-area {{qrHidden}}">
+                <div class="qr-card">
+                    <div class="qr-label">SCAN TO PAY</div>
+                    <div class="qr-box">
+                        <img src="{{qrBase64}}" class="qr-image" alt="Payment QR" onerror="this.style.display='none'; this.closest('.qr-card').style.display='none';">
+                    </div>
+                    <div class="upi-labels">BHIM UPI</div>
                 </div>
             </div>
 
-            <div class="thanks-section">
-                <div class="thanks-msg">Thank You! Visit Again.</div>
-            </div>
+            <div class="thanks-msg">Thank You! Visit Again.</div>
 
             <div class="summary-signature-col">
-                <div class="totals-table">
-                    <div class="total-row"><span>Total Value</span> <span>₹{{subtotal}}</span></div>
+                <div class="totals-box">
+                    <div class="total-row"><span>Gross Value</span> <span>₹{{subtotal}}</span></div>
                     <div class="total-row {{commissionHidden}}"><span>Commission</span> <span>- ₹{{commission}}</span></div>
-                    <div class="total-row {{labourHidden}}"><span>Labour/Loading</span> <span>- ₹{{labour}}</span></div>
-                    <div class="total-row {{transportHidden}}"><span>Transport Charges</span> <span>- ₹{{transport}}</span></div>
+                    <div class="total-row {{labourHidden}}"><span>Labour/Cooli</span> <span>- ₹{{labour}}</span></div>
+                    <div class="total-row {{transportHidden}}"><span>Transport</span> <span>- ₹{{transport}}</span></div>
                     <div class="total-row {{advanceHidden}}"><span>Less Advance</span> <span>- ₹{{advance}}</span></div>
                     <div class="total-row {{othersHidden}}"><span>Others</span> <span>- ₹{{others}}</span></div>
                     <div class="grand-total">
@@ -350,15 +424,54 @@
                     </div>
                 </div>
 
-                <div class="signature-section {{signatureHidden}}">
-                    <img src="{{signatureBase64}}" class="signature-image" alt="" onerror="this.style.display='none';">
-                    <div class="signature-line"></div>
-                    <div class="signature-label">AUTHORIZED SIGNATURE</div>
+                <div class="signature-block {{signatureHidden}}">
+                    <div class="signature-image-container">
+                        <img src="{{signatureBase64}}" class="signature-img" alt="Authorized Signature" onerror="this.style.display='none'; this.parentElement.style.display='none';">
+                    </div>
+                    <div class="signature-label-area">
+                        <div class="signature-label">AUTHORIZED SIGNATURE</div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="footer-section">GK FRUITS - QUALITY FRUITS & SERVICES</div>
+        <!-- Footer Bar -->
+        <div class="footer-section">
+            <span id="footer-company-name">{{companyName}}</span> - QUALITY FRUITS & SERVICES
+        </div>
     </div>
+
+    <script>
+        window.onload = function() {
+            // Generate Crest Initials from Company Name
+            const companyNameElem = document.querySelector('.secondary-brand-name');
+            const crestElem = document.getElementById('logo-crest');
+
+            if (companyNameElem && crestElem) {
+                const companyName = companyNameElem.innerText.trim();
+                if (companyName) {
+                    // Extract initials: Ignore dots, handle "Fruits" specially
+                    const words = companyName.replace(/\./g, ' ').split(/\s+/).filter(w => w.length > 0);
+                    const wordsWithoutFruits = words.filter(w => w.toLowerCase() !== 'fruits' && w.toLowerCase() !== 'fruit');
+
+                    let initials = "";
+                    if (wordsWithoutFruits.length >= 2) {
+                        // Multiple words (excluding "Fruits"): Take first letter of each
+                        initials = wordsWithoutFruits.map(w => w[0]).join('').toUpperCase().substring(0, 3);
+                    } else if (wordsWithoutFruits.length === 1) {
+                        // Single word (excluding "Fruits"): Take up to 3 letters
+                        initials = wordsWithoutFruits[0].substring(0, 3).toUpperCase();
+                    } else {
+                        // Fallback to original words if everything was "Fruits"
+                        initials = words.map(w => w[0]).join('').toUpperCase().substring(0, 3);
+                    }
+
+                    if (initials) {
+                        crestElem.innerText = initials;
+                    }
+                }
+            }
+        };
+    </script>
 </body>
 </html>

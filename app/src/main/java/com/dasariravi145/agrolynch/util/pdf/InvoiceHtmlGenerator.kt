@@ -21,9 +21,18 @@ object InvoiceHtmlGenerator {
     private val base64Cache = ConcurrentHashMap<String, String>()
 
     fun buildHtml(context: Context, templateId: String, profile: BusinessProfile, invoice: InvoiceData, config: InvoiceWizardConfig? = null): String {
-        val template = loadTemplate(context, templateId)
-        val body = TemplateDataMapper.map(template, profile, invoice, templateId, config)
-        val validBody = validateHtml(body)
+        val resolvedTemplateId = if (templateId.isEmpty()) "gk_fruits_classic" else templateId.lowercase(Locale.getDefault())
+        Timber.d("BUILD_HTML: Requested=$templateId, Resolved=$resolvedTemplateId")
+        
+        val template = loadTemplate(context, resolvedTemplateId)
+        val mapped = TemplateDataMapper.map(template, profile, invoice, resolvedTemplateId, config)
+        
+        // PERFORMANCE: If template is already a full HTML document, return mapped result directly to avoid nested <html> tags
+        if (mapped.contains("<html", ignoreCase = true) || mapped.contains("<!DOCTYPE", ignoreCase = true)) {
+            return validateHtml(mapped)
+        }
+
+        val validBody = validateHtml(mapped)
         
         return """
             <!DOCTYPE html>
@@ -415,34 +424,22 @@ object InvoiceHtmlGenerator {
 
         private fun buildProductRows(invoice: InvoiceData, templateId: String): String {
             val sb = StringBuilder()
-            val isCompact = templateId == "compact_print"
             
             invoice.products.forEachIndexed { index, product ->
                 val displayName = if (product.productType.isNotBlank()) "${product.name} - ${product.productType}" else product.name
                 
-                if (isCompact) {
-                    // Compact 4 columns: Item, Quantity, Rate, Amount
-                    val desc = if (product.grade.isNotBlank()) "$displayName (${product.grade})" else displayName
-                    sb.append("<tr>")
-                    sb.append("<td class='description-cell'>$desc</td>")
-                    sb.append("<td class='qty-cell'>${formatQtyWithUnit(product.quantity, product.unit)}</td>")
-                    sb.append("<td class='rate-cell'>${product.rate}</td>")
-                    sb.append("<td class='amount-cell'>₹${Formatter.formatCurrency(product.amount)}</td>")
-                    sb.append("</tr>")
-                } else {
-                    // Full 6 columns: Serial, Description, Grade, Quantity, Rate, Amount
-                    sb.append("<tr>")
-                    sb.append("<td class='serial-cell'>${index + 1}</td>")
-                    sb.append("<td class='description-cell'>$displayName</td>")
-                    sb.append("<td class='grade-cell'>${product.grade}</td>")
-                    sb.append("<td class='qty-cell'>${formatQtyWithUnit(product.quantity, product.unit)}</td>")
-                    sb.append("<td class='rate-cell'>${product.rate}</td>")
-                    sb.append("<td class='amount-cell'>₹${Formatter.formatCurrency(product.amount)}</td>")
-                    sb.append("</tr>")
-                }
+                // Full 6 columns: Serial, Description, Grade, Quantity, Rate, Amount
+                sb.append("<tr>")
+                sb.append("<td class='serial-cell'>${index + 1}</td>")
+                sb.append("<td class='description-cell'>$displayName</td>")
+                sb.append("<td class='grade-cell'>${product.grade}</td>")
+                sb.append("<td class='qty-cell'>${formatQtyWithUnit(product.quantity, product.unit)}</td>")
+                sb.append("<td class='rate-cell'>${product.rate}</td>")
+                sb.append("<td class='amount-cell'>₹${Formatter.formatCurrency(product.amount)}</td>")
+                sb.append("</tr>")
             }
             
-            if (invoice.products.size < 8 && !isCompact) {
+            if (invoice.products.size < 8) {
                 repeat(8 - invoice.products.size) {
                     sb.append("<tr class='empty-row'><td colspan='6'>&nbsp;</td></tr>")
                 }
@@ -458,27 +455,11 @@ object InvoiceHtmlGenerator {
             return try {
                 val file = File(path)
                 if (file.exists()) {
-                    // Optimized decoding: Keep resolution but compress efficiently.
-                    val options = BitmapFactory.Options().apply {
-                        inPreferredConfig = Bitmap.Config.RGB_565 // Reduces memory usage
-                    }
-                    val bitmap = BitmapFactory.decodeFile(path, options) ?: return ""
-                    val outputStream = ByteArrayOutputStream()
-                    
-                    // Downsample if image is too large for HTML embedding
-                    val finalBitmap = if (bitmap.width > 1200 || bitmap.height > 1200) {
-                         val scale = 1200f / maxOf(bitmap.width, bitmap.height)
-                         Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
-                    } else bitmap
-
-                    val format = if (path.lowercase().endsWith(".png")) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
-                    finalBitmap.compress(format, 80, outputStream)
-                    val byteArray = outputStream.toByteArray()
-                    if (finalBitmap != bitmap) finalBitmap.recycle()
-                    bitmap.recycle()
-
+                    // PERFORMANCE & QUALITY FIX: Avoid re-decoding/re-compressing if not necessary
+                    // This preserves original high-resolution and prevents blurry scaling
+                    val bytes = file.readBytes()
                     val mime = if (path.lowercase().endsWith(".png")) "image/png" else "image/jpeg"
-                    val base64 = "data:$mime;base64," + Base64.encodeToString(byteArray, Base64.NO_WRAP)
+                    val base64 = "data:$mime;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
                     
                     // Add to cache
                     base64Cache[path] = base64

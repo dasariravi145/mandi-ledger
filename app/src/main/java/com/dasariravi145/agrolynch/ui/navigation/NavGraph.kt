@@ -619,19 +619,17 @@ fun SetupNavGraph(
         }
         composable(route = Screen.CompanyProfile.route) {
             // Redirect to canonical Professional Invoice Setup
-            val viewModel: com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileViewModel = hiltViewModel()
-            com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileScreen(
+            val viewModel: InvoiceProfileViewModel = hiltViewModel()
+            InvoiceProfileScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
             )
         }
         composable(route = Screen.TemplateEditor.route) {
-            val editorViewModel: com.dasariravi145.agrolynch.ui.screens.settings.TemplateEditorViewModel = hiltViewModel()
-            val companyViewModel: com.dasariravi145.agrolynch.ui.screens.settings.CompanyViewModel = hiltViewModel()
-            val profile by companyViewModel.profile.collectAsState()
-            TemplateEditorScreen(
-                viewModel = editorViewModel,
-                templateImageUrl = profile?.customTemplatePath,
+            // Redirect to canonical Professional Invoice Setup
+            val viewModel: InvoiceProfileViewModel = hiltViewModel()
+            InvoiceProfileScreen(
+                viewModel = viewModel,
                 onBack = { navController.popBackStack() }
             )
         }

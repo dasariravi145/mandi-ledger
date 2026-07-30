@@ -16,6 +16,8 @@ import com.dasariravi145.agrolynch.data.local.entity.*
 import com.dasariravi145.agrolynch.domain.model.BackupData
 import com.dasariravi145.agrolynch.util.pdf.renderer.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -28,14 +30,29 @@ import kotlin.coroutines.resume
 
 @Singleton
 class TemplateInvoicePdfService @Inject constructor(
-    private val templateRepository: com.dasariravi145.agrolynch.domain.repository.TemplatePositionRepository
+    private val templateRepository: com.dasariravi145.agrolynch.domain.repository.TemplatePositionRepository,
+    private val farmerRepository: com.dasariravi145.agrolynch.domain.repository.FarmerRepository,
+    private val buyerRepository: com.dasariravi145.agrolynch.domain.repository.BuyerRepository
 ) {
+
+    private fun mapTemplateId(type: String): String {
+        return when (type) {
+            "GK_FRUITS_CLASSIC" -> "gk_fruits_classic"
+            "ROYAL_HERITAGE_MANDI" -> "royal_heritage_mandi"
+            "DIAMOND_BUSINESS_ELITE" -> "diamond_business_elite"
+            "PREMIUM_FRUIT_GALLERY" -> "premium_fruit_gallery"
+            "EXECUTIVE_GLASS_STYLE" -> "executive_glass_style"
+            else -> "gk_fruits_classic"
+        }
+    }
 
     suspend fun generateFarmerArrivalPdf(context: Context, profile: CompanyProfileEntity, arrivals: List<ArrivalEntity>, deductions: List<EntryDeductionEntity>, farmerMobile: String): File? {
         val businessProfile = profile.toBusinessProfile()
         val invoiceData = arrivals.toInvoiceData(farmerMobile, deductions)
         val templateId = mapTemplateId(profile.defaultTemplate)
         val config = templateRepository.getWizardConfig(profile.defaultTemplate)
+        
+        Timber.d("PDF_GEN: Type=FarmerArrival, SelectedID=${profile.defaultTemplate}, ResolvedTemplate=$templateId")
         
         val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData, config)
         return generatePdfFromHtml(context, html, "Arrival_${arrivals[0].billNumber}")
@@ -77,17 +94,25 @@ class TemplateInvoicePdfService @Inject constructor(
         val templateId = mapTemplateId(profile.defaultTemplate)
         val config = templateRepository.getWizardConfig(profile.defaultTemplate)
         
+        Timber.d("PDF_GEN: Type=BuyerSale, SelectedID=${profile.defaultTemplate}, ResolvedTemplate=$templateId")
+        
         val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData, config)
         return generatePdfFromHtml(context, html, "Sale_${sale.billNumber}")
     }
 
     suspend fun generatePaymentReceiptPdf(context: Context, profile: CompanyProfileEntity, payment: PaymentEntity, isFarmer: Boolean): File? {
         val businessProfile = profile.toBusinessProfile()
+        val mobile = if (isFarmer) {
+            farmerRepository.getFarmerById(payment.partyId)?.mobileNumber ?: ""
+        } else {
+            buyerRepository.getBuyerById(payment.partyId)?.mobileNumber ?: ""
+        }
+        
         val invoiceData = InvoiceData(
             billNumber = payment.billNumber,
             date = payment.date,
             customerName = payment.partyName,
-            customerMobile = "",
+            customerMobile = mobile,
             products = emptyList(),
             subtotal = payment.amount,
             commission = 0.0,
@@ -101,6 +126,8 @@ class TemplateInvoicePdfService @Inject constructor(
         val templateId = mapTemplateId(profile.defaultTemplate)
         val config = templateRepository.getWizardConfig(profile.defaultTemplate)
         
+        Timber.d("PDF_GEN: Type=PaymentReceipt, SelectedID=${profile.defaultTemplate}, ResolvedTemplate=$templateId")
+
         val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData, config)
         return generatePdfFromHtml(context, html, "Receipt_${payment.billNumber}")
     }
@@ -135,6 +162,8 @@ class TemplateInvoicePdfService @Inject constructor(
         val templateId = mapTemplateId(profile.defaultTemplate)
         val config = templateRepository.getWizardConfig(profile.defaultTemplate)
         
+        Timber.d("PDF_GEN: Type=ReceiptData, SelectedID=${profile.defaultTemplate}, ResolvedTemplate=$templateId")
+
         val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData, config)
         return generatePdfFromHtml(context, html, "Receipt_${data.receiptId}")
     }
@@ -168,64 +197,56 @@ class TemplateInvoicePdfService @Inject constructor(
         val templateId = mapTemplateId(profile.defaultTemplate)
         val config = templateRepository.getWizardConfig(profile.defaultTemplate)
         
+        Timber.d("PDF_GEN: Type=Archive, SelectedID=${profile.defaultTemplate}, ResolvedTemplate=$templateId")
+
         val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, invoiceData, config)
         return generatePdfFromHtml(context, html, "Archive_${archive.partyName}_${archive.archiveId.take(8)}")
     }
 
-    private fun mapTemplateId(type: String): String {
-        return when (type) {
-            "GK_FRUITS_CLASSIC" -> "gk_fruits_classic"
-            "ROYAL_HERITAGE_MANDI" -> "royal_heritage_mandi"
-            "DIAMOND_BUSINESS_ELITE" -> "diamond_business_elite"
-            "PREMIUM_FRUIT_GALLERY" -> "premium_fruit_gallery"
-            "EXECUTIVE_GLASS_STYLE" -> "executive_glass_style"
-            "COMPACT_THERMAL_PRINT" -> "compact_print"
-            else -> "gk_fruits_classic"
-        }
-    }
+    private val pdfMutex = Mutex()
+    private var sharedWebView: WebView? = null
 
     private suspend fun generatePdfFromHtml(context: Context, html: String, fileName: String): File? = withContext(Dispatchers.Main) {
-        suspendCancellableCoroutine { continuation ->
-            val webView = WebView(context)
-            webView.settings.javaScriptEnabled = true
-            webView.settings.loadWithOverviewMode = true
-            webView.settings.useWideViewPort = true
-            webView.settings.textZoom = 100
-            
-            // Set fixed width for A4 (794px)
-            webView.layout(0, 0, 794, 1123)
+        pdfMutex.withLock {
+            suspendCancellableCoroutine { continuation ->
+                val webView = sharedWebView ?: WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.loadWithOverviewMode = true
+                    settings.useWideViewPort = true
+                    settings.textZoom = 100
+                    // Set fixed width for A4 (794px)
+                    layout(0, 0, 794, 1123)
+                    sharedWebView = this
+                }
 
-            webView.webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    val attributes = PrintAttributes.Builder()
-                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                        .setResolution(PrintAttributes.Resolution("pdf", "pdf", 600, 600))
-                        .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
-                        .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
-                        .build()
+                webView.webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        val attributes = PrintAttributes.Builder()
+                            .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                            .setResolution(PrintAttributes.Resolution("pdf", "pdf", 600, 600))
+                            .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                            .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                            .build()
 
-                    val pdfDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "MandiLedger/Invoices")
-                    if (!pdfDir.exists()) pdfDir.mkdirs()
-                    val pdfFile = File(pdfDir, "$fileName.pdf")
+                        val pdfDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "MandiLedger/Invoices")
+                        if (!pdfDir.exists()) pdfDir.mkdirs()
+                        val pdfFile = File(pdfDir, "$fileName.pdf")
 
-                    val adapter = webView.createPrintDocumentAdapter(fileName)
-                    
-                    // Use reflection to bypass package-private constructor issue if it occurs
-                    // But actually, we can just use the adapter and let the PrintManager handle it
-                    // OR drive it manually using a helper that uses reflection.
-                    
-                    try {
-                        driveAdapterToPdf(adapter, attributes, pdfFile) { success ->
-                            if (success) continuation.resume(pdfFile)
-                            else continuation.resume(null)
+                        val adapter = webView.createPrintDocumentAdapter(fileName)
+                        
+                        try {
+                            driveAdapterToPdf(adapter, attributes, pdfFile) { success ->
+                                if (success) continuation.resume(pdfFile)
+                                else continuation.resume(null)
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "Failed to drive adapter")
+                            continuation.resume(null)
                         }
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to drive adapter")
-                        continuation.resume(null)
                     }
                 }
+                webView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "utf-8", null)
             }
-            webView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "utf-8", null)
         }
     }
 

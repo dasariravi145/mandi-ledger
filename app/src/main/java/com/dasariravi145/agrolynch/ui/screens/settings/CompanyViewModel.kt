@@ -57,7 +57,6 @@ class CompanyViewModel @Inject constructor(
                     "god" -> current.copy(godImagePath = file.absolutePath)
                     "upi_qr" -> current.copy(upiQrPath = file.absolutePath)
                     "fruit" -> current.copy(fruitImagePath = file.absolutePath)
-                    "custom_template" -> current.copy(customTemplatePath = file.absolutePath)
                     else -> current
                 }
                 repository.updateProfile(updated)

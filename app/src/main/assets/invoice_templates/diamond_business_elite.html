@@ -48,8 +48,8 @@
         }
 
         .god-image { width: 100%; height: 100%; object-fit: contain; display: block; }
-        .qr-image { width: 100%; height: 100%; object-fit: contain; display: block; image-rendering: pixelated; }
-        .signature-image { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
+        .qr-image { width: 100%; height: 100%; object-fit: contain; display: block; }
+        .signature-image { width: 100%; height: 100%; object-fit: contain; display: block; margin: 0 auto; }
 
         .header {
             text-align: center;
@@ -202,15 +202,26 @@
         }
         .qr-box {
             border: 2px solid #071f4f;
-            padding: 5px;
+            padding: 0;
             border-radius: 8px;
             width: 120px;
             height: 120px;
             background: white;
             box-shadow: 3px 3px 0px #d4af37;
             margin: 0 auto 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
         }
-        .qr-box img { width: 100%; height: 100%; object-fit: contain; }
+        .qr-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transform: scale(1.35); /* Zoom to remove white quiet zones and fill card */
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
         .qr-label { font-size: 10px; font-weight: bold; color: #071f4f; text-transform: uppercase; }
 
         .totals-and-signature {
@@ -255,13 +266,21 @@
         }
 
         .signature-section img {
-            max-width: 140px !important;
-            max-height: 90px !important;
-            width: auto !important;
-            height: auto !important;
+            width: 100% !important;
+            height: 100% !important;
             object-fit: contain !important;
+            transform: scale(1.8); /* Enlarge signature to fill available space */
             display: block;
-            margin: 0 auto 5px;
+            margin: auto;
+        }
+
+        .signature-wrapper {
+            height: 100px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 5px;
         }
 
         .signature-line {
@@ -384,7 +403,9 @@
                     </div>
 
                     <div class="signature-section {{signatureHidden}}">
-                        <img src="{{signatureBase64}}" class="signature-image" alt="" onerror="this.style.display='none';">
+                        <div class="signature-wrapper">
+                            <img src="{{signatureBase64}}" class="signature-image" alt="" onerror="this.style.display='none'; this.parentElement.style.display='none';">
+                        </div>
                         <div class="signature-line"></div>
                         <div class="signature-label">Authorized Signature</div>
                     </div>

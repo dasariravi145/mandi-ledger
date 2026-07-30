@@ -18,7 +18,6 @@ data class InvoiceTemplateDefinition(
     companion object {
         fun getDefinition(templateId: String): InvoiceTemplateDefinition {
             return when (templateId) {
-                "COMPACT_THERMAL_PRINT" -> compactDefinition
                 "DIAMOND_BUSINESS_ELITE" -> diamondDefinition
                 "EXECUTIVE_GLASS_STYLE" -> executiveDefinition
                 "GK_FRUITS_CLASSIC" -> classicDefinition
@@ -27,26 +26,6 @@ data class InvoiceTemplateDefinition(
                 else -> classicDefinition
             }
         }
-
-        private val compactDefinition = InvoiceTemplateDefinition(
-            templateId = "COMPACT_THERMAL_PRINT",
-            displayName = "Compact Thermal Print",
-            primaryColor = "#000000",
-            accentColor = "#333333",
-            backgroundColor = "#FFFFFF",
-            canvasWidth = 1000,
-            canvasHeight = 1000,
-            defaultLayouts = mapOf(
-                InvoiceWizardConfig.KEY_SHOP_NAME to ElementLayout(xPercent = 33.2f, yPercent = 14.8f, widthPercent = 33.5f, heightPercent = 3.7f, fontSize = 24f, alignment = "CENTER", fontWeight = "BOLD"),
-                InvoiceWizardConfig.KEY_ADDRESS to ElementLayout(xPercent = 27.3f, yPercent = 19.8f, widthPercent = 45.3f, heightPercent = 2.8f, fontSize = 11f, alignment = "CENTER"),
-                InvoiceWizardConfig.KEY_PHONE to ElementLayout(xPercent = 43.7f, yPercent = 22.8f, widthPercent = 12.5f, heightPercent = 2.0f, fontSize = 11f, alignment = "CENTER"),
-                InvoiceWizardConfig.KEY_BILL_INFO to ElementLayout(xPercent = 12.6f, yPercent = 27.5f, widthPercent = 74.8f, heightPercent = 11.3f, fontSize = 13f),
-                InvoiceWizardConfig.KEY_PRODUCT_TABLE to ElementLayout(xPercent = 12.6f, yPercent = 40.0f, widthPercent = 74.8f, heightPercent = 7.4f),
-                InvoiceWizardConfig.KEY_TOTALS_BOX to ElementLayout(xPercent = 12.6f, yPercent = 48.2f, widthPercent = 74.8f, heightPercent = 23.7f, borderThickness = "MEDIUM"),
-                InvoiceWizardConfig.KEY_QR_CODE to ElementLayout(xPercent = 41.5f, yPercent = 76.3f, widthPercent = 17.1f, heightPercent = 12.0f),
-                InvoiceWizardConfig.KEY_THANK_YOU to ElementLayout(xPercent = 34.7f, yPercent = 89.4f, widthPercent = 30.6f, heightPercent = 2.3f, fontSize = 12f, alignment = "CENTER")
-            )
-        )
 
         private val classicDefinition = InvoiceTemplateDefinition(
             templateId = "GK_FRUITS_CLASSIC",
@@ -71,7 +50,7 @@ data class InvoiceTemplateDefinition(
 
         private val diamondDefinition = InvoiceTemplateDefinition(
             templateId = "DIAMOND_BUSINESS_ELITE",
-            displayName = "Diamond Business Elite",
+            displayName = "Diamond Business Style",
             primaryColor = "#071f4f",
             accentColor = "#d4af37",
             backgroundColor = "#FFFFFF",

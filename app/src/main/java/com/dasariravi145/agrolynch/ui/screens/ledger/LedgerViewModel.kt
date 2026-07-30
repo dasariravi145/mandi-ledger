@@ -227,16 +227,20 @@ class LedgerViewModel @Inject constructor(
 
     private suspend fun generateEntryPdf(context: Context, profile: CompanyProfileEntity, entry: LedgerEntry, partyType: String): java.io.File? {
         val details = entry.details
+        val partyId = _currentSummary.value?.partyId ?: ""
+        val mobile = getPartyMobileNumber(partyId, partyType) ?: ""
+
         return when (entry.transactionType) {
             TransactionType.ARRIVAL -> {
                 if (details != null && details.arrivalItems.isNotEmpty()) {
-                    exportService.exportArrivalToPdf(context, profile, details.arrivalItems, details.deductions)
+                    exportService.exportArrivalToPdf(context, profile, details.arrivalItems, details.deductions, mobile)
                 } else null
             }
             TransactionType.SALE -> {
                 if (details != null) {
                     val sale = com.dasariravi145.agrolynch.data.local.entity.SaleEntity(
                         id = entry.id,
+                        buyerId = partyId,
                         buyerName = _currentSummary.value?.partyName ?: "",
                         totalAmount = details.grossAmount,
                         totalNetAmount = details.netAmount,
@@ -245,7 +249,7 @@ class LedgerViewModel @Inject constructor(
                         billNumber = details.billNumber,
                         date = entry.date
                     )
-                    exportService.exportSaleToPdf(context, profile, sale, details.saleItems, details.deductions)
+                    exportService.exportSaleToPdf(context, profile, sale, details.saleItems, details.deductions, mobile)
                 } else null
             }
             TransactionType.PAYMENT -> {

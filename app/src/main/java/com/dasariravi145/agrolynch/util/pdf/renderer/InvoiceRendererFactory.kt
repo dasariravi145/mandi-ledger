@@ -10,7 +10,6 @@ object InvoiceRendererFactory {
             "DIAMOND_BUSINESS_ELITE" -> DiamondEliteRenderer()
             "PREMIUM_FRUIT_GALLERY" -> PremiumFruitRenderer()
             "EXECUTIVE_GLASS_STYLE" -> ExecutiveGlassRenderer()
-            "COMPACT_THERMAL_PRINT" -> CompactPrintRenderer()
             else -> GkClassicRenderer()
         }
     }

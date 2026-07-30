@@ -257,9 +257,16 @@ class InvoiceProfileViewModel @Inject constructor(
     }
 
     fun onTemplateSelected(templateId: String) {
+        val previousId = _uiState.value.selectedTemplateId
+        Timber.d("TEMPLATE_SELECT: Clicked=$templateId, Previous=$previousId")
+        
         viewModelScope.launch {
-            val config = templateRepository.getWizardConfig(templateId) 
-                ?: getDefaultConfigForTemplate(templateId)
+            // Force the config to have the correct template ID even if loaded from DB
+            val config = (templateRepository.getWizardConfig(templateId) 
+                ?: getDefaultConfigForTemplate(templateId)).copy(template = templateId)
+            
+            // Clear image cache when template changes to avoid reusing old assets incorrectly
+            InvoiceHtmlGenerator.clearCache()
             
             _uiState.update { 
                 it.copy(
@@ -270,6 +277,11 @@ class InvoiceProfileViewModel @Inject constructor(
                     selectedElementKey = guidedElementOrder.first()
                 )
             }
+            
+            // Also update the profile's default template immediately in the state so generateLivePreview uses it
+            onBusinessDetailChanged { it.copy(defaultTemplate = templateId) }
+            
+            Timber.d("TEMPLATE_SELECT: New State ID=${_uiState.value.selectedTemplateId}, Profile Default=${_uiState.value.profile.defaultTemplate}")
             generateLivePreview(immediate = true)
         }
     }
@@ -424,6 +436,7 @@ class InvoiceProfileViewModel @Inject constructor(
                     paymentMode = "CASH"
                 )
                 val templateId = mapTemplateTypeToId(state.selectedTemplateId)
+                Timber.d("PREVIEW_GEN: SelectedID=${state.selectedTemplateId}, ResolvedTemplate=$templateId")
                 
                 val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, sampleInvoice, cfg)
                 _previewHtml.value = html
@@ -452,7 +465,6 @@ class InvoiceProfileViewModel @Inject constructor(
             "DIAMOND_BUSINESS_ELITE" -> "diamond_business_elite"
             "PREMIUM_FRUIT_GALLERY" -> "premium_fruit_gallery"
             "EXECUTIVE_GLASS_STYLE" -> "executive_glass_style"
-            "COMPACT_THERMAL_PRINT" -> "compact_print"
             else -> "gk_fruits_classic"
         }
     }
@@ -475,9 +487,23 @@ class InvoiceProfileViewModel @Inject constructor(
 
             _uiState.update { it.copy(isSaving = true) }
             try {
-                companyRepository.updateProfile(state.profile)
-                templateRepository.saveWizardConfig(state.selectedTemplateId, state.wizardConfig)
-                _uiState.update { it.copy(isSaving = false, isDirty = false) }
+                // CRITICAL: Force synchronization of template ID across all parts of the state
+                val templateId = state.selectedTemplateId
+                val finalProfile = state.profile.copy(defaultTemplate = templateId)
+                val finalConfig = state.wizardConfig.copy(template = templateId)
+                
+                Timber.d("SAVE_ALL: Saving TemplateID=$templateId")
+                
+                companyRepository.updateProfile(finalProfile)
+                // Clear cache on save to ensure next PDF/Print uses fresh assets with the new template
+                InvoiceHtmlGenerator.clearCache()
+                
+                _uiState.update { it.copy(
+                    profile = finalProfile,
+                    wizardConfig = finalConfig,
+                    isSaving = false, 
+                    isDirty = false
+                ) }
                 _message.emit("Template saved successfully.")
             } catch (e: Exception) {
                 Timber.e(e, "SAVE_ALL_FAILED")

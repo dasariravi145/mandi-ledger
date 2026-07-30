@@ -200,9 +200,7 @@ fun CompanyProfileScreen(
                 BillTemplateType.DIAMOND_BUSINESS_ELITE -> "Business Tagline"
                 else -> "Company Tagline"
             }
-            if (currentTemplate != BillTemplateType.COMPACT_THERMAL_PRINT) {
-                OutlinedTextField(value = tagline, onValueChange = { tagline = it }, label = { Text(taglineLabel) }, modifier = Modifier.fillMaxWidth())
-            }
+            OutlinedTextField(value = tagline, onValueChange = { tagline = it }, label = { Text(taglineLabel) }, modifier = Modifier.fillMaxWidth())
 
             OutlinedTextField(value = proprietorName, onValueChange = { proprietorName = it }, label = { Text(stringResource(R.string.proprietor_name)) }, modifier = Modifier.fillMaxWidth())
             
