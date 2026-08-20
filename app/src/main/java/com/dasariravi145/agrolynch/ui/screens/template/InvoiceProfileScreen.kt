@@ -105,15 +105,6 @@ fun InvoiceProfileScreen(
                     }
                 },
                 actions = {
-                    if (selectedTab == 1) {
-                        IconButton(onClick = { viewModel.undo() }, enabled = state.undoStack.isNotEmpty()) {
-                            Icon(Icons.Default.Undo, "Undo")
-                        }
-                        IconButton(onClick = { viewModel.redo() }, enabled = state.redoStack.isNotEmpty()) {
-                            Icon(Icons.Default.Redo, "Redo")
-                        }
-                        Spacer(Modifier.width(8.dp))
-                    }
                     Button(
                         onClick = { viewModel.saveAll() },
                         shape = RoundedCornerShape(8.dp),
@@ -136,11 +127,6 @@ fun InvoiceProfileScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Business Info") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Layout Editor") })
-            }
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -148,95 +134,28 @@ fun InvoiceProfileScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (selectedTab == 1) {
-                    // Editor Mode Selector
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        SegmentedButton(
-                            selected = state.editorMode == EditorMode.GUIDED,
-                            onClick = { viewModel.setEditorMode(EditorMode.GUIDED) },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
-                        ) { Text("Guided") }
-                        SegmentedButton(
-                            selected = state.editorMode == EditorMode.FREE_EDIT,
-                            onClick = { viewModel.setEditorMode(EditorMode.FREE_EDIT) },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
-                        ) { Text("Free Edit") }
-                        SegmentedButton(
-                            selected = state.editorMode == EditorMode.REVIEW,
-                            onClick = { viewModel.setEditorMode(EditorMode.REVIEW) },
-                            shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
-                        ) { Text("Review") }
-                    }
-
-                    if (state.editorMode == EditorMode.GUIDED) {
-                        GuidedEditorHeader(state, viewModel)
-                    }
-                }
-
-                // Live Preview & Editor
+                // Live Preview
                 Box(Modifier.fillMaxWidth()) {
                     HtmlPreviewCard(
                         html = previewHtml ?: "", 
                         templateName = state.selectedTemplateId,
-                        isEditMode = selectedTab == 1 && state.editorMode != EditorMode.REVIEW,
-                        editorMode = state.editorMode,
+                        isEditMode = false,
                         config = state.wizardConfig,
                         selectedKey = state.selectedElementKey,
-                        onElementSelect = { viewModel.selectElement(it) },
-                        onElementMove = { key, x, y -> viewModel.updateElementLayout(key) { it.copy(xPercent = x, yPercent = y) } },
-                        onDragEnd = { viewModel.recordUndo() }
+                        onElementSelect = { },
+                        onElementMove = { _, _, _ -> },
+                        onDragEnd = { }
                     )
                 }
 
-                if (selectedTab == 0) {
-                    SectionTitle("1. Select Invoice Template")
-                    TemplateSelectionSection(state.selectedTemplateId) { viewModel.onTemplateSelected(it) }
+                SectionTitle("1. Select Invoice Template")
+                TemplateSelectionSection(state.selectedTemplateId) { viewModel.onTemplateSelected(it) }
 
-                    SectionTitle("2. Business Details")
-                    BusinessDetailsSection(state.profile) { viewModel.onBusinessDetailChanged(it) }
+                SectionTitle("2. Business Details")
+                BusinessDetailsSection(state.profile) { viewModel.onBusinessDetailChanged(it) }
 
-                    SectionTitle("3. Branding Assets")
-                    BrandingAssetsSection(state.profile, viewModel)
-                } else {
-                    if (state.editorMode != EditorMode.REVIEW) {
-                        SectionTitle("Element Customization")
-                        if (state.selectedElementKey != null) {
-                            ElementEditorControls(
-                                key = state.selectedElementKey!!,
-                                config = state.wizardConfig,
-                                viewModel = viewModel
-                            )
-                        } else if (state.editorMode != EditorMode.REVIEW) {
-                            PageStyleControls(state.wizardConfig, viewModel)
-                        }
-                        
-                        Spacer(Modifier.height(12.dp))
-                        
-                        OutlinedButton(
-                            onClick = { viewModel.resetToDefault() },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Icon(Icons.Default.RestartAlt, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Reset Template Layout")
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Button(
-                            onClick = { viewModel.autoArrangeLayout() },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Icon(Icons.Default.AutoFixHigh, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Auto Arrange Layout")
-                        }
-                    } else {
-                        ReviewModeActions(viewModel)
-                    }
-                }
+                SectionTitle("3. Branding Assets")
+                BrandingAssetsSection(state.profile, viewModel)
                 
                 Spacer(modifier = Modifier.height(80.dp)) // Padding for sticky bottom bar if any
             }

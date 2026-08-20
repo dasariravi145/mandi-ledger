@@ -247,6 +247,12 @@ fun NewArrivalScreen(
 
     LaunchedEffect(exportStatus) {
         // Removed auto-showing dialog logic
+        }
+
+    LaunchedEffect(Unit) {
+        viewModel.error.collect { msg ->
+            snackbarHostState.showSnackbar(msg)
+        }
     }
 
     LaunchedEffect(Unit) {

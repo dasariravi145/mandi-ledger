@@ -47,8 +47,8 @@ android {
         applicationId = "com.dasariravi145.agrolynch"
         minSdk = 24
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.0.20"
+        versionCode = 23
+        versionName = "1.0.23"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         

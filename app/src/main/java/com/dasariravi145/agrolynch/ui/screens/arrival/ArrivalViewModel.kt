@@ -174,42 +174,53 @@ class ArrivalViewModel @Inject constructor(
         val currentDeductionsTotal = totalDeductions.value
         val currentBillNumber = _billNumber.value
 
-        if (gradeEntries.any { it.quantity <= 0 }) {
-            val errorLabel = if (gradeEntries.any { it.unit == "Boxes" }) "Total Weight (KG)" else "Total Weight (Ton)"
-            viewModelScope.launch { _error.emit("$errorLabel must be greater than 0") }
-            return
-        }
-        if (gradeEntries.any { it.rate <= 0 }) {
-            viewModelScope.launch { _error.emit("Rate must be greater than 0") }
-            return
-        }
+        Timber.d("SAVE_ARRIVAL: Starting validation for Batch. Bill=$currentBillNumber, Farmer=$farmerName, Grades=${gradeEntries.size}")
 
-        gradeEntries.forEach { entry ->
+        gradeEntries.forEachIndexed { index, entry ->
+            Timber.d("Grade[$index]: Name=${entry.grade}, Unit=${entry.unit}, Qty=${entry.quantity}, Rate=${entry.rate}, Spoilage=${entry.spoilage}")
+            
+            if (entry.quantity <= 0) {
+                val label = if (entry.unit == "Boxes") "Total Weight (KG)" else "Total Quantity (${entry.unit})"
+                viewModelScope.launch { _error.emit("$label must be greater than 0 for ${entry.grade}") }
+                Timber.w("SAVE_ARRIVAL_VALIDATION_FAILED: Quantity <= 0 for ${entry.grade}")
+                return
+            }
+            if (entry.rate <= 0) {
+                viewModelScope.launch { _error.emit("Rate must be greater than 0 for ${entry.grade}") }
+                Timber.w("SAVE_ARRIVAL_VALIDATION_FAILED: Rate <= 0 for ${entry.grade}")
+                return
+            }
+
             if (entry.unit == "Boxes") {
                 if (entry.boxCount <= 0) {
                     viewModelScope.launch { _error.emit("Number of Boxes must be greater than 0 for ${entry.grade}") }
+                    Timber.w("SAVE_ARRIVAL_VALIDATION_FAILED: Box count <= 0 for ${entry.grade}")
                     return
                 }
                 if (entry.totalTareWeightKg >= (entry.quantity * 1000)) {
                     viewModelScope.launch { _error.emit("Empty Box Weight cannot exceed Total Weight for ${entry.grade}") }
+                    Timber.w("SAVE_ARRIVAL_VALIDATION_FAILED: Tare weight exceeds gross weight for ${entry.grade}")
                     return
                 }
                 if (entry.spoilage < 0 || entry.spoilage >= 100) {
                     viewModelScope.launch { _error.emit("Spoilage percentage must be between 0 and 99 for ${entry.grade}") }
+                    Timber.w("SAVE_ARRIVAL_VALIDATION_FAILED: Invalid spoilage for ${entry.grade}")
                     return
                 }
             }
             if (entry.unit == "KG" || entry.unit == "Ton") {
                 if (entry.spoilage < 0 || entry.spoilage > 100) {
                     viewModelScope.launch { _error.emit("Waste percentage cannot be more than 100 for ${entry.grade}") }
+                    Timber.w("SAVE_ARRIVAL_VALIDATION_FAILED: Invalid waste percentage for ${entry.grade}")
                     return
                 }
             }
-        }
-
-        if (gradeEntries.any { it.totalNetWeightKg <= 0 }) {
-            viewModelScope.launch { _error.emit("Net weight must be greater than 0. Check weight and spoilage.") }
-            return
+            
+            if (entry.totalNetWeightKg <= 0) {
+                viewModelScope.launch { _error.emit("Net weight must be greater than 0 for ${entry.grade}. Check weight and spoilage.") }
+                Timber.w("SAVE_ARRIVAL_VALIDATION_FAILED: Net weight <= 0 for ${entry.grade}")
+                return
+            }
         }
 
         val normalizedPhoneInput = if (farmerPhone.isNotBlank()) PhoneNumberUtils.normalize(farmerPhone) else ""
@@ -219,16 +230,19 @@ class ArrivalViewModel @Inject constructor(
         }
         if (existingFarmer == null && farmerPhone.isNotBlank() && farmerPhone.length != 10) {
             viewModelScope.launch { _error.emit("Please enter a valid 10-digit mobile number") }
+            Timber.w("SAVE_ARRIVAL_VALIDATION_FAILED: Invalid mobile number")
             return
         }
 
         viewModelScope.launch {
             _isLoading.value = true
             try {
+                Timber.d("SAVE_ARRIVAL_EXECUTION: Starting database operations")
                 val farmerId = if (existingFarmer == null) {
                     val newId = UUID.randomUUID().toString()
                     val newFarmer = FarmerEntity(id = newId, name = farmerName, mobileNumber = farmerPhone, village = farmerVillage)
                     farmerRepository.addFarmer(newFarmer)
+                    Timber.d("SAVE_ARRIVAL_EXECUTION: Created new farmer ID=$newId")
                     newId
                 } else {
                     existingFarmer.id
@@ -239,6 +253,7 @@ class ArrivalViewModel @Inject constructor(
                     val newId = UUID.randomUUID().toString()
                     val newProduct = ProductEntity(id = newId, name = productName, category = productCategory, availableGrades = gradeEntries.map { it.grade }.distinct())
                     productRepository.addProduct(newProduct, null)
+                    Timber.d("SAVE_ARRIVAL_EXECUTION: Created new product ID=$newId")
                     newId
                 } else {
                     val existingGrades = selectedProduct.availableGrades.toMutableSet()
@@ -260,13 +275,13 @@ class ArrivalViewModel @Inject constructor(
                                 productTypeName = productType
                             )
                         )
+                        Timber.d("SAVE_ARRIVAL_EXECUTION: Added new product type $productType")
                     }
                 }
 
             if (currentBillNumber.isBlank() || currentBillNumber == "N/A") {
                 throw IllegalStateException("billNumber must be generated before ledger insert")
             }
-            Timber.tag("BillRef").d("Farmer Arrival billNumber=$currentBillNumber billId=$currentBillNumber arrivalId=BATCH")
 
             val arrivals = gradeEntries.mapIndexed { index, entry ->
                 val arrivalId = UUID.randomUUID().toString()
@@ -328,12 +343,10 @@ class ArrivalViewModel @Inject constructor(
                 )
             }
 
+                Timber.d("SAVE_ARRIVAL_EXECUTION: Attempting batch insert of ${arrivals.size} arrivals")
                 when (val result = arrivalRepository.addArrivalBatch(arrivals)) {
                     is Resource.Success -> {
-                        if (arrivals.isNotEmpty()) {
-                            val first = arrivals.first()
-                            Timber.tag("BillRef").d("Saved ledger transaction id=${first.id} billNumber=${first.billNumber} billId=${first.billNumber} referenceId=${first.id}")
-                        }
+                        Timber.d("SAVE_ARRIVAL_EXECUTION: Batch insert successful")
                         // Save deductions
                         val currentDeductions = _deductions.value
                         if (arrivals.isNotEmpty()) {
@@ -348,11 +361,14 @@ class ArrivalViewModel @Inject constructor(
                         billNumberRepository.incrementBillNumber(Constants.SeriesType.STOCK)
                         _saveSuccess.emit(Unit)
                     }
-                    is Resource.Error -> _error.emit(result.message ?: "Failed to save arrival batch")
+                    is Resource.Error -> {
+                        Timber.e("SAVE_ARRIVAL_EXECUTION: Repository error: ${result.message}")
+                        _error.emit(result.message ?: "Failed to save arrival batch")
+                    }
                     else -> {}
                 }
             } catch (e: Exception) {
-                Timber.e(e, "SAVE_ARRIVAL_FAILED")
+                Timber.e(e, "SAVE_ARRIVAL_EXECUTION_FAILED")
                 _error.emit("An error occurred while saving: ${e.message}")
             } finally {
                 _isLoading.value = false
