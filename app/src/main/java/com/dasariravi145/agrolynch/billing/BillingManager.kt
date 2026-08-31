@@ -224,7 +224,7 @@ class BillingManager @Inject constructor(
 
         billingClient.queryProductDetailsAsync(
             queryParams
-        ) { billingResult, returnedProducts ->
+        ) { billingResult, queryProductDetailsResult ->
 
             if (
                 billingResult.responseCode !=
@@ -247,6 +247,8 @@ class BillingManager @Inject constructor(
 
                 return@queryProductDetailsAsync
             }
+
+            val returnedProducts = queryProductDetailsResult.productDetailsList
 
             val premiumProduct =
                 returnedProducts.firstOrNull { productDetails ->

@@ -47,8 +47,8 @@ android {
         applicationId = "com.dasariravi145.agrolynch"
         minSdk = 24
         targetSdk = 36
-        versionCode = 23
-        versionName = "1.0.23"
+        versionCode = 27
+        versionName = "1.0.27"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -59,6 +59,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+
+    kotlinOptions {
+        jvmTarget = "21"
+        freeCompilerArgs = freeCompilerArgs + "-Xskip-metadata-version-check"
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -150,3 +156,4 @@ dependencies {
 kotlin {
     jvmToolchain(21)
 }
+
