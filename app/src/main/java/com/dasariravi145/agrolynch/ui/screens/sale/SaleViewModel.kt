@@ -1,95 +1,19 @@
 package com.dasariravi145.agrolynch.ui.screens.sale
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dasariravi145.agrolynch.data.local.entity.*
-import com.dasariravi145.agrolynch.data.local.dao.FarmerStockInfo
 import com.dasariravi145.agrolynch.domain.repository.*
-import com.dasariravi145.agrolynch.util.*
 import com.dasariravi145.agrolynch.util.Constants
 import com.dasariravi145.agrolynch.util.PhoneNumberUtils
-import com.dasariravi145.agrolynch.util.pdf.TemplateInvoicePdfService
+import com.dasariravi145.agrolynch.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.io.File
 import java.util.*
 import javax.inject.Inject
-
-data class SaleItemDraft(
-    val id: String = UUID.randomUUID().toString(),
-    val arrival: ArrivalEntity,
-    val inputQuantity: Double, // Quantity in original unit (KG/Ton/Boxes)
-    val saleRate: Double, // Rate per KG
-    val commissionPercent: Double = 0.0,
-    val rawInputQuantity: String = "", // Added to handle decimal input precisely
-    val isFullStock: Boolean = false
-) {
-    val quantity: Double get() {
-        if (isFullStock) {
-            return arrival.remainingQuantity * (if (arrival.unit == "Ton" || arrival.unit == "Boxes") 1000.0 else 1.0)
-        }
-        val calculated = when(arrival.unit) {
-            "Ton" -> inputQuantity * 1000.0
-            "Boxes" -> {
-                val kgPerBox = if (arrival.numberOfBoxes > 0) arrival.finalNetWeightKg / arrival.numberOfBoxes else 0.0
-                inputQuantity * kgPerBox
-            }
-            else -> inputQuantity
-        }
-        
-        // Log Sale Item Details
-        val kgPerBox = if (arrival.numberOfBoxes > 0) arrival.finalNetWeightKg / arrival.numberOfBoxes else 0.0
-        val availableKg = arrival.remainingQuantity * (when(arrival.unit) {
-            "Ton", "Boxes" -> 1000.0
-            else -> 1.0
-        })
-        timber.log.Timber.d("SALE_QTY_RAW_INPUT: $rawInputQuantity")
-        timber.log.Timber.d("SALE_QTY_PARSED_UNIT: ${arrival.unit}")
-        timber.log.Timber.d("SALE_ENTERED_QUANTITY: $inputQuantity")
-        timber.log.Timber.d("SALE_QTY_KG_CALCULATED: $calculated")
-        timber.log.Timber.d("SALE_AVAILABLE_KG: $availableKg")
-        timber.log.Timber.d("SALE_RATE_PER_KG: $saleRate")
-        
-        val isValid = calculated > 0 && calculated <= (availableKg + 0.001) && saleRate > 0
-        timber.log.Timber.d("SALE_VALIDATION_RESULT: $isValid")
-        
-        return calculated
-    }
-
-    val purchaseAmount: Double get() = when(arrival.unit) {
-        "Ton" -> {
-            if (arrival.ratePerKg > 0) quantity * arrival.ratePerKg
-            else (quantity / 1000.0) * arrival.purchaseRate
-        }
-        "Boxes", "KG" -> {
-            if (arrival.ratePerKg > 0) quantity * arrival.ratePerKg
-            else quantity * arrival.purchaseRate
-        }
-        else -> quantity * arrival.purchaseRate
-    }
-    
-    val saleAmount: Double get() {
-        val amount = quantity * saleRate
-        timber.log.Timber.d("SALE_AMOUNT_CALCULATED: $amount")
-        return amount
-    }
-    val commissionAmount: Double get() = 0.0
-    val netAmount: Double get() = saleAmount
-}
-
-data class TransactionTotal(
-    val totalQuantity: Double = 0.0,
-    val totalPurchaseAmount: Double = 0.0,
-    val totalSaleAmount: Double = 0.0,
-    val totalCommission: Double = 0.0,
-    val laborPercentage: Double = 0.0,
-    val totalLabor: Double = 0.0,
-    val totalTransport: Double = 0.0,
-    val totalNetAmount: Double = 0.0
-)
 
 @HiltViewModel
 class SaleViewModel @Inject constructor(
@@ -100,7 +24,6 @@ class SaleViewModel @Inject constructor(
     private val arrivalRepository: ArrivalRepository,
     private val companyRepository: CompanyRepository,
     private val billNumberRepository: BillNumberRepository,
-    private val pdfService: TemplateInvoicePdfService,
     val adMobManager: com.dasariravi145.agrolynch.ads.AdMobManager
 ) : ViewModel() {
 
@@ -108,22 +31,38 @@ class SaleViewModel @Inject constructor(
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _error = MutableSharedFlow<String>()
-    val error = _error.asSharedFlow()
+    val error: SharedFlow<String> = _error.asSharedFlow()
 
     private val _saveSuccess = MutableSharedFlow<Unit>()
-    val saveSuccess = _saveSuccess.asSharedFlow()
-    
+    val saveSuccess: SharedFlow<Unit> = _saveSuccess.asSharedFlow()
+
     private val _exportStatus = MutableSharedFlow<String>()
-    val exportStatus = _exportStatus.asSharedFlow()
+    val exportStatus: SharedFlow<String> = _exportStatus.asSharedFlow()
 
     private val _billNumber = MutableStateFlow("")
     val billNumber: StateFlow<String> = _billNumber.asStateFlow()
 
+    // Sale Quantity State
+    private val _saleQuantityInput = MutableStateFlow("")
+    val saleQuantityInput: StateFlow<String> = _saleQuantityInput.asStateFlow()
+
+    private val _saleQuantityUnit = MutableStateFlow("Quintal")
+    val saleQuantityUnit: StateFlow<String> = _saleQuantityUnit.asStateFlow()
+
+    private val _showGrossTareMode = MutableStateFlow(false)
+    val showGrossTareMode: StateFlow<Boolean> = _showGrossTareMode.asStateFlow()
+
+    private val _buyerGrossWeightInput = MutableStateFlow("")
+    val buyerGrossWeightInput: StateFlow<String> = _buyerGrossWeightInput.asStateFlow()
+
+    private val _buyerTareWeightInput = MutableStateFlow("")
+    val buyerTareWeightInput: StateFlow<String> = _buyerTareWeightInput.asStateFlow()
+
     private val _overallLaborPercent = MutableStateFlow("")
-    val overallLaborPercent = _overallLaborPercent.asStateFlow()
+    val overallLaborPercent: StateFlow<String> = _overallLaborPercent.asStateFlow()
 
     private val _overallTransport = MutableStateFlow("")
-    val overallTransport = _overallTransport.asStateFlow()
+    val overallTransport: StateFlow<String> = _overallTransport.asStateFlow()
 
     private val _deductions = MutableStateFlow<List<EntryDeductionEntity>>(emptyList())
     val deductions: StateFlow<List<EntryDeductionEntity>> = _deductions.asStateFlow()
@@ -132,8 +71,140 @@ class SaleViewModel @Inject constructor(
         list.sumOf { it.amount }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
+    // Master Data
+    val buyers = buyerRepository.getBuyers()
+        .map { list -> list.distinctBy { it.id } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val farmers = farmerRepository.getFarmers()
+        .map { list -> list.distinctBy { it.id } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allProducts = productRepository.getProducts()
+        .map { list -> list.distinctBy { it.id } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Produce Groups State
+    private val _produceGroups = MutableStateFlow<List<ProduceGroupDraft>>(emptyList())
+    val produceGroups: StateFlow<List<ProduceGroupDraft>> = _produceGroups.asStateFlow()
+
+    val buyerSaleTotal = combine(
+        _produceGroups,
+        _saleQuantityInput,
+        _saleQuantityUnit,
+        _showGrossTareMode,
+        _buyerGrossWeightInput,
+        _buyerTareWeightInput,
+        _overallLaborPercent,
+        _overallTransport,
+        totalDeductions
+    ) { flows ->
+        @Suppress("UNCHECKED_CAST")
+        val groups = flows[0] as List<ProduceGroupDraft>
+        val qtyInputStr = flows[1] as String
+        val unitStr = flows[2] as String
+        val isGrossTareMode = flows[3] as Boolean
+        val grossInputStr = flows[4] as String
+        val tareInputStr = flows[5] as String
+        val laborPercentStr = flows[6] as String
+        val transportStr = flows[7] as String
+        val otherDeductionsTotal = flows[8] as Double
+
+        val factor = getUnitConversionFactor(unitStr)
+
+        val (rawSaleQty, buyerGrossKg, buyerNetKg) = if (isGrossTareMode) {
+            val grossVal = grossInputStr.toDoubleOrNull() ?: 0.0
+            val tareVal = tareInputStr.toDoubleOrNull() ?: 0.0
+            val netVal = (grossVal - tareVal).coerceAtLeast(0.0)
+            Triple(netVal, grossVal * factor, netVal * factor)
+        } else {
+            val qtyVal = qtyInputStr.toDoubleOrNull() ?: 0.0
+            Triple(qtyVal, qtyVal * factor, qtyVal * factor)
+        }
+
+        val farmerGrossKg = groups.sumOf { it.totalGrossWeightKg }
+        val farmerNetKg = groups.sumOf { it.totalNetWeightKg }
+
+        val diff = buyerNetKg - farmerNetKg
+
+        val matchStatus = when {
+            buyerNetKg <= 0.0 -> WeightMatchStatus.NO_WEIGHT_ENTERED
+            Math.abs(diff) < 0.001 -> WeightMatchStatus.MATCHED
+            diff >= 0.001 -> WeightMatchStatus.UNDER_ALLOCATED
+            else -> WeightMatchStatus.OVER_ALLOCATED
+        }
+
+        val farmerPurchaseTotal = groups.sumOf { it.totalFarmerPurchaseAmount }
+        val buyerSubtotal = groups.sumOf { it.totalBuyerSaleAmount }
+
+        val laborPercent = laborPercentStr.toDoubleOrNull() ?: 0.0
+        val laborEquivalentKg = buyerNetKg * (laborPercent / 100.0)
+        val laborCharges = buyerSubtotal * (laborPercent / 100.0)
+
+        val transport = transportStr.toDoubleOrNull() ?: 0.0
+        val finalCollection = buyerSubtotal + laborCharges + transport + otherDeductionsTotal
+
+        val canSave = matchStatus == WeightMatchStatus.MATCHED &&
+                buyerNetKg > 0.0 &&
+                groups.isNotEmpty() &&
+                groups.any { it.farmers.isNotEmpty() } &&
+                finalCollection > 0.0
+
+        BuyerSaleTransactionTotal(
+            saleQuantityInput = rawSaleQty,
+            saleQuantityUnit = unitStr,
+            buyerGrossWeightKg = buyerGrossKg,
+            buyerNetWeightKg = buyerNetKg,
+            totalFarmerGrossWeightKg = farmerGrossKg,
+            totalFarmerNetWeightKg = farmerNetKg,
+            weightDifferenceKg = diff,
+            weightMatchStatus = matchStatus,
+            totalFarmerPurchaseAmount = farmerPurchaseTotal,
+            totalBuyerSaleSubtotal = buyerSubtotal,
+            laborPercentage = laborPercent,
+            laborEquivalentKg = laborEquivalentKg,
+            totalLaborCharges = laborCharges,
+            totalTransportCharges = transport,
+            totalOtherDeductions = otherDeductionsTotal,
+            totalFinalCollection = finalCollection,
+            isSaveEnabled = canSave
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BuyerSaleTransactionTotal())
+
     init {
         generatePreviewBillNumber()
+    }
+
+    private fun generatePreviewBillNumber() {
+        viewModelScope.launch {
+            _billNumber.value = billNumberRepository.generateNextBillNumber(Constants.SeriesType.SALE)
+        }
+    }
+
+    fun onSaleQuantityChange(value: String) {
+        if (value.isEmpty() || value.matches(Regex("^\\d+(\\.\\d*)?$"))) {
+            _saleQuantityInput.value = value
+        }
+    }
+
+    fun onSaleQuantityUnitChange(unit: String) {
+        _saleQuantityUnit.value = unit
+    }
+
+    fun toggleGrossTareMode(enabled: Boolean) {
+        _showGrossTareMode.value = enabled
+    }
+
+    fun onBuyerGrossWeightChange(value: String) {
+        if (value.isEmpty() || value.matches(Regex("^\\d+(\\.\\d*)?$"))) {
+            _buyerGrossWeightInput.value = value
+        }
+    }
+
+    fun onBuyerTareWeightChange(value: String) {
+        if (value.isEmpty() || value.matches(Regex("^\\d+(\\.\\d*)?$"))) {
+            _buyerTareWeightInput.value = value
+        }
     }
 
     fun onOverallLaborPercentChange(value: String) {
@@ -148,15 +219,9 @@ class SaleViewModel @Inject constructor(
         }
     }
 
-    private fun generatePreviewBillNumber() {
-        viewModelScope.launch {
-            _billNumber.value = billNumberRepository.generateNextBillNumber(Constants.SeriesType.SALE)
-        }
-    }
-
     fun addDeduction(type: String, amount: Double, customName: String = "") {
         val newDeduction = EntryDeductionEntity(
-            entryId = "", // Will be filled on save
+            entryId = "",
             entryType = Constants.EntryType.SALE,
             billId = _billNumber.value,
             deductionType = type,
@@ -174,206 +239,243 @@ class SaleViewModel @Inject constructor(
         }
     }
 
-    // --- Buyer Section ---
-    val buyers = buyerRepository.getBuyers()
-        .map { list -> list.distinctBy { it.id } } // Ensure ID uniqueness in dropdown
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // --- Sale Items Section ---
-    private val _saleItems = MutableStateFlow<List<SaleItemDraft>>(emptyList())
-    val saleItems = _saleItems.asStateFlow()
-
-    private val defaultCommission = companyRepository.getProfile()
-        .map { 5.0 } // Default to 5.0% if profile doesn't have a specific field
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 5.0)
-
-    val transactionTotal = combine(
-        _saleItems,
-        _overallLaborPercent,
-        _overallTransport
-    ) { items, laborPercentStr, transportStr ->
-        val totalNetKg = items.sumOf { it.quantity }
-        val subtotal = items.sumOf { it.saleAmount }
-        val laborPercent = laborPercentStr.toDoubleOrNull() ?: 0.0
-        val laborAmount = totalNetKg * laborPercent / 100.0
-        val transport = transportStr.toDoubleOrNull() ?: 0.0
-        
-        TransactionTotal(
-            totalQuantity = totalNetKg,
-            totalPurchaseAmount = items.sumOf { it.purchaseAmount },
-            totalSaleAmount = subtotal,
-            totalCommission = items.sumOf { it.commissionAmount },
-            laborPercentage = laborPercent,
-            totalLabor = laborAmount,
-            totalTransport = transport,
-            totalNetAmount = subtotal + laborAmount + transport
+    // Produce Group Management
+    fun addProduceGroup(productName: String, productType: String, category: String) {
+        if (productName.isBlank()) return
+        val newGroup = ProduceGroupDraft(
+            productName = productName.trim(),
+            productType = productType.trim(),
+            category = category.ifBlank { "Fruit" }
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TransactionTotal())
-
-    fun addSaleItem(item: SaleItemDraft) {
-        if (item.arrival.unit == "Boxes" && item.arrival.numberOfBoxes <= 0) {
-            viewModelScope.launch { _error.emit("Box weight missing. Please update stock entry.") }
-            return
-        }
-        if (_saleItems.value.any { 
-            it.arrival.id == item.arrival.id
-        }) {
-            viewModelScope.launch { _error.emit("This stock entry is already added.") }
-            return
-        }
-        _saleItems.value = _saleItems.value + item
+        _produceGroups.value = _produceGroups.value + newGroup
     }
 
-    fun updateSaleItem(updatedItem: SaleItemDraft) {
-        val currentList = _saleItems.value.toMutableList()
-        val index = currentList.indexOfFirst { it.id == updatedItem.id }
+    fun removeProduceGroup(groupId: String) {
+        _produceGroups.value = _produceGroups.value.filter { it.id != groupId }
+    }
+
+    fun addFarmerToGroup(groupId: String, farmerData: FarmerArrivalData) {
+        val currentGroups = _produceGroups.value.toMutableList()
+        val index = currentGroups.indexOfFirst { it.id == groupId }
         if (index != -1) {
-            currentList[index] = updatedItem
-            _saleItems.value = currentList
+            val group = currentGroups[index]
+            val updatedFarmers = group.farmers + farmerData
+            currentGroups[index] = group.copy(farmers = updatedFarmers)
+            _produceGroups.value = currentGroups
         }
     }
 
-    fun removeSaleItem(id: String) {
-        _saleItems.value = _saleItems.value.filter { it.id != id }
+    fun updateFarmerInGroup(groupId: String, farmerData: FarmerArrivalData) {
+        val currentGroups = _produceGroups.value.toMutableList()
+        val groupIndex = currentGroups.indexOfFirst { it.id == groupId }
+        if (groupIndex != -1) {
+            val group = currentGroups[groupIndex]
+            val farmerIndex = group.farmers.indexOfFirst { it.id == farmerData.id }
+            if (farmerIndex != -1) {
+                val updatedFarmers = group.farmers.toMutableList()
+                updatedFarmers[farmerIndex] = farmerData
+                currentGroups[groupIndex] = group.copy(farmers = updatedFarmers)
+                _produceGroups.value = currentGroups
+            }
+        }
     }
 
-    // --- Farmer Stock Selection Logic ---
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val farmersWithStock = combine(
-        arrivalRepository.getFarmersWithStock(),
-        arrivalRepository.getArrivals(),
-        _saleItems
-    ) { farmers, allArrivals, selectedItems ->
-        val selectedStockIds = selectedItems.map { it.arrival.id }.toSet()
-        farmers.filter { farmer ->
-            allArrivals.any { it.farmerId == farmer.farmerId && it.remainingQuantity > 0.001 && it.id !in selectedStockIds }
+    fun removeFarmerFromGroup(groupId: String, farmerDataId: String) {
+        val currentGroups = _produceGroups.value.toMutableList()
+        val groupIndex = currentGroups.indexOfFirst { it.id == groupId }
+        if (groupIndex != -1) {
+            val group = currentGroups[groupIndex]
+            val updatedFarmers = group.farmers.filter { it.id != farmerDataId }
+            currentGroups[groupIndex] = group.copy(farmers = updatedFarmers)
+            _produceGroups.value = currentGroups
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
 
-    fun getAvailableStockByFarmer(farmerId: String): Flow<List<ArrivalEntity>> = 
-        combine(
-            arrivalRepository.getAvailableStockByFarmer(farmerId),
-            _saleItems
-        ) { arrivals, selectedItems ->
-            val selectedStockIds = selectedItems.map { it.arrival.id }.toSet()
-            arrivals.filter { it.id !in selectedStockIds && it.remainingQuantity > 0.001 }
-        }
-
-    fun createSale(
-        context: android.content.Context,
-        buyer: BuyerEntity,
-        // The following parameters are kept for compatibility with the existing createSale call in SaleScreen, 
-        // but the actual items are now managed in _saleItems
-        unusedSaleRate: Double = 0.0,
-        unusedTransport: Double = 0.0,
-        unusedOther: Double = 0.0,
-        unusedLabor: Double = 0.0,
-        unusedPacking: Double = 0.0
+    fun createBuyerSaleWithFarmerArrivals(
+        context: Context,
+        buyer: BuyerEntity
     ) {
-        val items = _saleItems.value
-        if (items.isEmpty()) return
-
-        if (_isLoading.value) return // Single-submission protection
-
-        val laborPercent = _overallLaborPercent.value.toDoubleOrNull() ?: 0.0
-        if (laborPercent > 100.0) {
-            viewModelScope.launch { _error.emit("Labour percentage cannot exceed 100%") }
+        val groups = _produceGroups.value
+        val allFarmers = groups.flatMap { it.farmers }
+        if (groups.isEmpty() || allFarmers.isEmpty()) {
+            viewModelScope.launch {
+                _error.emit("Please add at least one Produce Group and Farmer Arrival entry.")
+            }
             return
         }
+
+        val totals = buyerSaleTotal.value
+        if (totals.weightMatchStatus != WeightMatchStatus.MATCHED) {
+            viewModelScope.launch {
+                when (totals.weightMatchStatus) {
+                    WeightMatchStatus.NO_WEIGHT_ENTERED -> _error.emit("Please enter Sale Quantity.")
+                    WeightMatchStatus.UNDER_ALLOCATED -> _error.emit("Weight not matched! ${String.format("%.2f", totals.weightDifferenceKg)} KG is still unallocated.")
+                    WeightMatchStatus.OVER_ALLOCATED -> _error.emit("Weight exceeds sale quantity! Farmer allocation exceeds net sale weight by ${String.format("%.2f", Math.abs(totals.weightDifferenceKg))} KG.")
+                    else -> _error.emit("Weight reconciliation failed.")
+                }
+            }
+            return
+        }
+
+        if (_isLoading.value) return // Single submission protection
 
         viewModelScope.launch {
             _isLoading.value = true
             try {
                 val saleId = UUID.randomUUID().toString()
-                val totals = transactionTotal.value
                 val currentBillNumber = _billNumber.value
-                val currentDeductionsTotal = totalDeductions.value
-                val currentDeductionList = _deductions.value
-                
-                if (currentBillNumber.isBlank() || currentBillNumber == "N/A") {
-                    throw IllegalStateException("billNumber must be generated before ledger insert")
-                }
-                Timber.tag("BillRef").d("Buyer Sale billNumber=$currentBillNumber billId=$currentBillNumber saleId=$saleId")
 
-                val saleItemEntities = items.map { draft ->
-                    SaleItemEntity(
-                        id = UUID.randomUUID().toString(),
-                        saleId = saleId,
-                        arrivalId = draft.arrival.id,
-                        farmerId = draft.arrival.farmerId,
-                        farmerName = draft.arrival.farmerName,
-                        productId = draft.arrival.productId,
-                        productName = draft.arrival.productName,
-                        productType = draft.arrival.productType,
-                        productCategory = draft.arrival.productCategory,
-                        grade = draft.arrival.grade,
-                        quantitySold = draft.quantity,
-                        inputQuantity = draft.inputQuantity,
-                        unit = draft.arrival.unit,
-                        purchaseRate = draft.arrival.purchaseRate,
-                        saleRate = draft.saleRate,
-                        purchaseAmount = draft.purchaseAmount,
-                        saleAmount = draft.saleAmount,
-                        marginAmount = draft.saleAmount - draft.purchaseAmount,
-                        commissionPercent = 0.0,
-                        commissionAmount = 0.0,
-                        laborCharges = 0.0, // Moved to transaction level
-                        transportCharges = 0.0, // Moved to transaction level
-                        otherCharges = 0.0, // Moved to transaction level
-                        netAmount = draft.netAmount,
-                        date = System.currentTimeMillis()
-                    )
+                val farmerArrivalsList = mutableListOf<Triple<ArrivalEntity, SaleItemEntity, List<EntryDeductionEntity>>>()
+
+                for (group in groups) {
+                    for (farmerData in group.farmers) {
+                        val farmerBillNo = farmerData.billNumber.ifEmpty { currentBillNumber }
+
+                        for (gradeEntry in farmerData.gradeEntries) {
+                            val arrivalId = UUID.randomUUID().toString()
+                            val grossAmount = gradeEntry.grossAmount
+                            val commissionAmount = (grossAmount * farmerData.commissionPercent) / 100.0
+                            val netPayable = grossAmount - commissionAmount - farmerData.laborCharges - farmerData.transportCharges - farmerData.packingCharges - farmerData.farmerTotalDeductions
+
+                            val arrival = ArrivalEntity(
+                                id = arrivalId,
+                                farmerId = farmerData.farmerId,
+                                farmerName = farmerData.farmerName,
+                                productId = group.productName.lowercase().replace(" ", "_"),
+                                productName = group.productName,
+                                productType = group.productType,
+                                productCategory = group.category,
+                                grade = gradeEntry.grade,
+                                quantity = gradeEntry.quantity,
+                                unit = gradeEntry.unit,
+                                boxCount = gradeEntry.totalBoxes,
+                                tareWeight = gradeEntry.totalTareWeightKg,
+                                spoilageQuantity = gradeEntry.calculatedTotalSpoilageKg,
+                                netQuantity = gradeEntry.netQuantity,
+                                remainingQuantity = 0.0, // Fully sold to buyer in this transaction
+                                purchaseRate = gradeEntry.rate,
+                                grossAmount = grossAmount,
+                                commissionPercent = farmerData.commissionPercent,
+                                commissionAmount = commissionAmount,
+                                laborCharges = farmerData.laborCharges,
+                                transportCharges = farmerData.transportCharges,
+                                packingCharges = farmerData.packingCharges,
+                                otherDeductions = farmerData.farmerTotalDeductions,
+                                netAmount = netPayable,
+                                billNumber = farmerBillNo,
+                                totalKg = gradeEntry.totalGrossWeightKg,
+                                spoilagePerTon = if (gradeEntry.unit == "Ton") gradeEntry.spoilage else 0.0,
+                                totalSpoilageKg = gradeEntry.calculatedTotalSpoilageKg,
+                                otherCharges = farmerData.packingCharges + farmerData.farmerTotalDeductions,
+                                netPayable = netPayable,
+                                boxWeightMode = "AVERAGE",
+                                numberOfBoxes = gradeEntry.boxCount,
+                                totalWeightTon = if (gradeEntry.unit == "Boxes" || gradeEntry.unit == "Ton") gradeEntry.quantity else 0.0,
+                                emptyBoxWeightPerBox = if (gradeEntry.unit == "Boxes") gradeEntry.avgGrossWeight else 0.0,
+                                totalEmptyBoxWeightKg = if (gradeEntry.unit == "Boxes") gradeEntry.totalTareWeightKg else 0.0,
+                                spoilagePercentage = if (gradeEntry.unit == "Boxes" || gradeEntry.unit == "KG") gradeEntry.spoilage else 0.0,
+                                spoilageKg = gradeEntry.calculatedTotalSpoilageKg,
+                                grossWeightKg = gradeEntry.totalGrossWeightKg,
+                                weightAfterEmptyBoxesKg = gradeEntry.balanceKgBeforeSpoilage,
+                                finalNetWeightKg = gradeEntry.totalNetWeightKg,
+                                ratePerKg = gradeEntry.rate,
+                                date = System.currentTimeMillis()
+                            )
+
+                            val saleItem = SaleItemEntity(
+                                id = UUID.randomUUID().toString(),
+                                saleId = saleId,
+                                arrivalId = arrivalId,
+                                farmerId = farmerData.farmerId,
+                                farmerName = farmerData.farmerName,
+                                productId = arrival.productId,
+                                productName = group.productName,
+                                productType = group.productType,
+                                productCategory = group.category,
+                                grade = gradeEntry.grade,
+                                quantitySold = gradeEntry.totalNetWeightKg,
+                                inputQuantity = gradeEntry.quantity,
+                                unit = gradeEntry.unit,
+                                purchaseRate = gradeEntry.rate,
+                                saleRate = farmerData.buyerSaleRate,
+                                purchaseAmount = grossAmount,
+                                saleAmount = gradeEntry.totalNetWeightKg * farmerData.buyerSaleRate,
+                                marginAmount = (gradeEntry.totalNetWeightKg * farmerData.buyerSaleRate) - grossAmount,
+                                commissionPercent = 0.0,
+                                commissionAmount = 0.0,
+                                laborCharges = 0.0,
+                                transportCharges = 0.0,
+                                otherCharges = 0.0,
+                                netAmount = gradeEntry.totalNetWeightKg * farmerData.buyerSaleRate,
+                                date = System.currentTimeMillis()
+                            )
+
+                            val farmerDeductionsToSave = farmerData.deductions.map {
+                                it.copy(entryId = arrivalId, billId = farmerBillNo)
+                            }
+
+                            farmerArrivalsList.add(Triple(arrival, saleItem, farmerDeductionsToSave))
+                        }
+                    }
                 }
 
-                Timber.d("COMMISSION_DEBUG: Total Earnings for Sale: ${totals.totalCommission}")
+                val allDistinctFarmerNames = allFarmers.map { it.farmerName }.distinct()
+                val distinctProducts = groups.map { it.productName }.distinct()
 
                 val saleEntity = SaleEntity(
                     id = saleId,
                     buyerId = buyer.id,
                     buyerName = buyer.name,
-                    farmerName = items.map { it.arrival.farmerName }.distinct().joinToString(", "),
-                    productId = if (items.distinctBy { it.arrival.productId }.size > 1) "Multiple" else items.first().arrival.productId,
-                    productName = if (items.distinctBy { it.arrival.productId }.size > 1) "Multiple Products" else items.first().arrival.productName,
-                    productType = if (items.distinctBy { it.arrival.productType }.size > 1) "Multiple" else items.first().arrival.productType,
-                    grade = if (items.distinctBy { it.arrival.grade }.size > 1) "Multiple" else items.first().arrival.grade,
-                    totalQuantity = totals.totalQuantity,
-                    totalPurchaseAmount = totals.totalPurchaseAmount,
-                    totalAmount = totals.totalSaleAmount, // Sub-total
-                    totalCommission = totals.totalCommission,
+                    farmerName = allDistinctFarmerNames.joinToString(", "),
+                    productId = if (distinctProducts.size > 1) "Multiple" else distinctProducts.first().lowercase().replace(" ", "_"),
+                    productName = if (distinctProducts.size > 1) "Multiple Products" else distinctProducts.first(),
+                    productType = if (groups.map { it.productType }.distinct().size > 1) "Multiple" else groups.first().productType,
+                    grade = "Multiple",
+                    totalQuantity = totals.buyerNetWeightKg,
+                    totalPurchaseAmount = totals.totalFarmerPurchaseAmount,
+                    totalAmount = totals.totalBuyerSaleSubtotal,
+                    totalCommission = 0.0,
                     laborPercentage = totals.laborPercentage,
-                    laborCharges = totals.totalLabor,
-                    transportCharges = totals.totalTransport,
+                    laborCharges = totals.totalLaborCharges,
+                    transportCharges = totals.totalTransportCharges,
                     packingCharges = 0.0,
-                    otherCharges = currentDeductionsTotal,
+                    otherCharges = totals.totalOtherDeductions,
                     billNumber = currentBillNumber,
-                    totalNetAmount = totals.totalNetAmount + currentDeductionsTotal, // Final Collection
-                    totalMargin = totals.totalSaleAmount - totals.totalPurchaseAmount,
-                    pendingAmount = totals.totalNetAmount + currentDeductionsTotal,
+                    totalNetAmount = totals.totalFinalCollection,
+                    totalMargin = totals.totalBuyerSaleSubtotal - totals.totalFarmerPurchaseAmount,
+                    pendingAmount = totals.totalFinalCollection,
                     date = System.currentTimeMillis()
                 )
 
-                when (val result = saleRepository.createSale(saleEntity, saleItemEntities)) {
+                val buyerDeductionsToSave = _deductions.value.map {
+                    it.copy(entryId = saleId, billId = currentBillNumber)
+                }
+
+                when (val result = saleRepository.createBuyerSaleWithFarmerArrivals(
+                    sale = saleEntity,
+                    farmerArrivals = farmerArrivalsList,
+                    buyerDeductions = buyerDeductionsToSave
+                )) {
                     is Resource.Success -> {
-                        Timber.tag("BillRef").d("Saved ledger transaction id=$saleId billNumber=${saleEntity.billNumber} billId=${saleEntity.billNumber} referenceId=$saleId")
-                        // Save deductions
-                        val deductionsToSave = currentDeductionList.map { 
-                            it.copy(entryId = saleId, billId = currentBillNumber) 
-                        }
-                        billNumberRepository.saveDeductions(deductionsToSave)
-                        
-                        // Finalize bill number
                         billNumberRepository.incrementBillNumber(Constants.SeriesType.SALE)
+                        billNumberRepository.incrementBillNumber(Constants.SeriesType.STOCK)
 
                         _saveSuccess.emit(Unit)
-                        _saleItems.value = emptyList()
+                        _produceGroups.value = emptyList()
+                        _saleQuantityInput.value = ""
+                        _buyerGrossWeightInput.value = ""
+                        _buyerTareWeightInput.value = ""
                         _overallLaborPercent.value = ""
                         _overallTransport.value = ""
+                        _deductions.value = emptyList()
                     }
-                    is Resource.Error -> _error.emit(result.message ?: "Failed to save sale")
+                    is Resource.Error -> {
+                        _error.emit(result.message ?: "Failed to save Sale Entry")
+                    }
                     else -> {}
                 }
             } catch (e: Exception) {
-                Timber.e(e, "CREATE_SALE_FAILED")
+                Timber.e(e, "CREATE_BUYER_SALE_WITH_ARRIVALS_FAILED")
                 _error.emit("An error occurred while saving: ${e.message}")
             } finally {
                 _isLoading.value = false
@@ -381,17 +483,12 @@ class SaleViewModel @Inject constructor(
         }
     }
 
-    fun registerBuyerAndCreateSale(
-        context: android.content.Context,
+    fun registerBuyerAndCreateSaleWithFarmerArrivals(
+        context: Context,
         name: String,
         mobile: String,
         address: String,
-        gst: String,
-        unusedSaleRate: Double = 0.0,
-        unusedTransport: Double = 0.0,
-        unusedOther: Double = 0.0,
-        unusedLabor: Double = 0.0,
-        unusedPacking: Double = 0.0
+        gst: String
     ) {
         if (mobile.length != 10 || !mobile.all { it.isDigit() }) {
             viewModelScope.launch {
@@ -400,22 +497,19 @@ class SaleViewModel @Inject constructor(
             return
         }
 
-        if (_isLoading.value) return // Single-submission protection
+        if (_isLoading.value) return
 
         viewModelScope.launch {
             _isLoading.value = true
-            
-            // Check for existing buyer by name and normalized phone
             val normalizedMobile = PhoneNumberUtils.normalize(mobile)
-            val existingBuyer = buyers.value.find { 
-                it.name.equals(name, ignoreCase = true) && 
-                PhoneNumberUtils.normalize(it.mobileNumber) == normalizedMobile
+            val existingBuyer = buyers.value.find {
+                it.name.equals(name, ignoreCase = true) &&
+                        PhoneNumberUtils.normalize(it.mobileNumber) == normalizedMobile
             }
 
             if (existingBuyer != null) {
-                Timber.d("REGISTER_BUYER: Reusing existing buyer id=${existingBuyer.id}")
-                _isLoading.value = false // Set false so createSale can proceed
-                createSale(context = context, buyer = existingBuyer)
+                _isLoading.value = false
+                createBuyerSaleWithFarmerArrivals(context = context, buyer = existingBuyer)
                 return@launch
             }
 
@@ -432,8 +526,19 @@ class SaleViewModel @Inject constructor(
                 _error.emit(result.message ?: "Failed to add buyer")
                 _isLoading.value = false
             } else {
-                _isLoading.value = false // Set false so createSale can proceed
-                createSale(context = context, buyer = newBuyer)
+                _isLoading.value = false
+                createBuyerSaleWithFarmerArrivals(context = context, buyer = newBuyer)
+            }
+        }
+    }
+
+    companion object {
+        fun getUnitConversionFactor(unit: String): Double {
+            return when (unit.uppercase(Locale.getDefault())) {
+                "QUINTAL", "QTL" -> 100.0
+                "TON", "METRIC TON", "MT" -> 1000.0
+                "BAGS", "BAG" -> 50.0
+                else -> 1.0 // KG
             }
         }
     }

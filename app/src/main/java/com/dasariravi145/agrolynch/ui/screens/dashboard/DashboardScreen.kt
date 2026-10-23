@@ -32,7 +32,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     isPremium: Boolean,
     onUpgradeClick: () -> Unit,
-    onAddTransaction: () -> Unit,
+    onViewMarketOutlook: () -> Unit,
     onViewTransactions: () -> Unit,
     onViewFarmers: () -> Unit,
     onViewBuyers: () -> Unit,
@@ -241,11 +241,11 @@ fun DashboardScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         DashboardBoxItem(
-                            text = stringResource(R.string.farmer_arrival),
-                            icon = Icons.Default.AddBusiness,
-                            onClick = onAddTransaction,
+                            text = stringResource(R.string.market_outlook),
+                            icon = Icons.Default.QueryStats,
+                            onClick = onViewMarketOutlook,
                             modifier = Modifier.weight(1f),
-                            contentColor = Color(0xFF2E7D32)
+                            contentColor = Color(0xFF6366F1)
                         )
                         DashboardBoxItem(
                             text = stringResource(R.string.buyer_sale),

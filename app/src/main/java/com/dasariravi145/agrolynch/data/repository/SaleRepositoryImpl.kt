@@ -35,8 +35,12 @@ class SaleRepositoryImpl @Inject constructor(
     private val saleDao = database.saleDao()
     private val arrivalDao = database.arrivalDao()
     private val buyerDao = database.buyerDao()
+    private val farmerDao = database.farmerDao()
     private val paymentDao = database.paymentDao()
     private val profileDao = database.companyProfileDao()
+    private val productDao = database.productDao()
+    private val productTypeDao = database.productTypeDao()
+    private val entryDeductionDao = database.entryDeductionDao()
 
     private val repositoryScope = CoroutineScope(Dispatchers.IO)
 
@@ -179,6 +183,256 @@ class SaleRepositoryImpl @Inject constructor(
                 Resource.Success(Unit)
             } catch (e: Exception) {
                 timber.log.Timber.e(e, "Create Sale Failed")
+                Resource.Error(e.message ?: "An unknown error occurred")
+            }
+        }
+    }
+
+    private data class Quadruple<A, B, C, D>(
+        val first: A,
+        val second: B,
+        val third: C,
+        val fourth: D
+    )
+
+    override suspend fun createBuyerSaleWithFarmerArrivals(
+        sale: SaleEntity,
+        farmerArrivals: List<Triple<com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity, SaleItemEntity, List<com.dasariravi145.agrolynch.data.local.entity.EntryDeductionEntity>>>,
+        buyerDeductions: List<com.dasariravi145.agrolynch.data.local.entity.EntryDeductionEntity>
+    ): Resource<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val startTime = System.currentTimeMillis()
+                val (updatedBuyer, profile, savedArrivals, savedFarmers) = database.withTransaction {
+                    // 1. Buyer
+                    val buyer = buyerDao.getBuyerById(sale.buyerId) ?: throw Exception("Buyer not found")
+                    val profile = profileDao.getProfile().first() ?: CompanyProfileEntity()
+
+                    val savedArrivalsList = mutableListOf<com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity>()
+                    val savedFarmersMap = mutableMapOf<String, com.dasariravi145.agrolynch.data.local.entity.FarmerEntity>()
+                    val saleItemsToInsert = mutableListOf<SaleItemEntity>()
+
+                    // 2. Process each Farmer Arrival & Sale Item
+                    for ((arrival, saleItem, farmerDeductions) in farmerArrivals) {
+                        // Farmer check/update
+                        var farmer = savedFarmersMap[arrival.farmerId] ?: farmerDao.getFarmerById(arrival.farmerId)
+                        if (farmer == null) {
+                            val allFarmers = farmerDao.getFarmersList()
+                            farmer = allFarmers.find { it.name.equals(arrival.farmerName, ignoreCase = true) }
+                            if (farmer == null) {
+                                farmer = com.dasariravi145.agrolynch.data.local.entity.FarmerEntity(
+                                    id = arrival.farmerId,
+                                    name = arrival.farmerName
+                                )
+                                farmerDao.insertFarmer(farmer)
+                            }
+                        }
+
+                        val totalNetToPay = arrival.netAmount
+                        var newPending = farmer.pendingAmount + totalNetToPay
+                        var newAdvance = farmer.advanceAmount
+
+                        if (newAdvance > 0) {
+                            if (newAdvance >= newPending) {
+                                newAdvance -= newPending
+                                newPending = 0.0
+                            } else {
+                                newPending -= newAdvance
+                                newAdvance = 0.0
+                            }
+                        }
+
+                        val updatedFarmer = farmer.copy(
+                            totalArrivals = farmer.totalArrivals + arrival.grossAmount,
+                            pendingAmount = newPending,
+                            advanceAmount = newAdvance,
+                            lastUpdated = System.currentTimeMillis(),
+                            isSynced = false
+                        )
+                        farmerDao.updateFarmer(updatedFarmer)
+                        savedFarmersMap[updatedFarmer.id] = updatedFarmer
+
+                        // Product check/update
+                        var product = productDao.getProductById(arrival.productId)
+                        if (product == null) {
+                            product = productDao.getProductByName(arrival.productName)
+                            if (product == null) {
+                                product = com.dasariravi145.agrolynch.data.local.entity.ProductEntity(
+                                    id = arrival.productId,
+                                    name = arrival.productName,
+                                    category = arrival.productCategory,
+                                    availableGrades = listOf(arrival.grade)
+                                )
+                                productDao.insertProduct(product)
+                            }
+                        }
+
+                        if (arrival.productType.isNotBlank()) {
+                            val existingType = productTypeDao.getProductTypeByName(product.id, arrival.productType)
+                            if (existingType == null) {
+                                productTypeDao.insertProductType(
+                                    com.dasariravi145.agrolynch.data.local.entity.ProductTypeEntity(
+                                        id = java.util.UUID.randomUUID().toString(),
+                                        productId = product.id,
+                                        productName = arrival.productName,
+                                        productTypeName = arrival.productType
+                                    )
+                                )
+                            }
+                        }
+
+                        // Save Arrival (remainingQuantity is set to 0.0 as it is consumed in this Buyer Sale)
+                        val arrivalToSave = arrival.copy(remainingQuantity = 0.0)
+                        arrivalDao.insertArrival(arrivalToSave)
+                        savedArrivalsList.add(arrivalToSave)
+
+                        // Save Farmer Deductions
+                        if (farmerDeductions.isNotEmpty()) {
+                            entryDeductionDao.insertAll(farmerDeductions)
+                        }
+
+                        saleItemsToInsert.add(saleItem)
+                    }
+
+                    // 3. Save Sale & Sale Items
+                    saleDao.insertSale(sale)
+                    saleDao.insertSaleItems(saleItemsToInsert)
+
+                    // 4. Save Buyer Deductions
+                    if (buyerDeductions.isNotEmpty()) {
+                        entryDeductionDao.insertAll(buyerDeductions)
+                    }
+
+                    // 5. Update Buyer
+                    val totalNetReceivable = sale.totalNetAmount
+                    val updatedBuyer = buyer.copy(
+                        totalPurchase = buyer.totalPurchase + totalNetReceivable,
+                        pendingAmount = buyer.pendingAmount + totalNetReceivable,
+                        lastUpdated = System.currentTimeMillis(),
+                        isSynced = false
+                    )
+                    buyerDao.updateBuyer(updatedBuyer)
+                    profileDao.incrementInvoiceNumber()
+
+                    timber.log.Timber.tag("BillRef").d("Saved Buyer Sale + Farmer Arrivals transaction id=${sale.id} billNumber=${sale.billNumber}")
+
+                    Quadruple(updatedBuyer, profile, savedArrivalsList, savedFarmersMap.values.toList())
+                }
+
+                val dbTime = System.currentTimeMillis() - startTime
+                timber.log.Timber.i("Buyer Sale + Farmer Arrivals Save: DB transaction took %dms", dbTime)
+
+                // Async Background Tasks
+                repositoryScope.launch {
+                    try {
+                        val buyer = buyerDao.getBuyerById(sale.buyerId)
+                        exportService.exportSaleToPdf(
+                            context = context,
+                            profile = profile,
+                            sale = sale,
+                            items = farmerArrivals.map { it.second },
+                            deductions = buyerDeductions,
+                            buyerMobile = buyer?.mobileNumber ?: ""
+                        )
+                    } catch (e: Exception) {
+                        timber.log.Timber.e(e, "Error generating Sale PDF in background")
+                    }
+
+                    userId?.let { uid ->
+                        try {
+                            val userSalesRef = firestore.collection("users").document(uid).collection("sales")
+                            val userBuyersRef = firestore.collection("users").document(uid).collection("buyers")
+                            val userArrivalsRef = firestore.collection("users").document(uid).collection("arrivals")
+                            val userFarmersRef = firestore.collection("users").document(uid).collection("farmers")
+
+                            val batch = firestore.batch()
+
+                            val saleMap = mapOf(
+                                "id" to sale.id,
+                                "buyerId" to sale.buyerId,
+                                "buyerName" to sale.buyerName,
+                                "farmerName" to sale.farmerName,
+                                "totalAmount" to sale.totalAmount,
+                                "totalNetAmount" to sale.totalNetAmount,
+                                "paidAmount" to sale.paidAmount,
+                                "pendingAmount" to sale.pendingAmount,
+                                "billNumber" to sale.billNumber,
+                                "date" to sale.date,
+                                "ownerUserId" to uid
+                            )
+                            batch.set(userSalesRef.document(sale.id), saleMap)
+
+                            val buyerMap = mapOf(
+                                "id" to updatedBuyer.id,
+                                "name" to updatedBuyer.name,
+                                "mobileNumber" to updatedBuyer.mobileNumber,
+                                "pendingAmount" to updatedBuyer.pendingAmount,
+                                "totalPurchase" to updatedBuyer.totalPurchase,
+                                "lastUpdated" to updatedBuyer.lastUpdated,
+                                "ownerUserId" to uid
+                            )
+                            batch.set(userBuyersRef.document(updatedBuyer.id), buyerMap)
+
+                            for ((_, item, _) in farmerArrivals) {
+                                val itemMap = mapOf(
+                                    "id" to item.id,
+                                    "saleId" to item.saleId,
+                                    "productName" to item.productName,
+                                    "grade" to item.grade,
+                                    "quantitySold" to item.quantitySold,
+                                    "saleRate" to item.saleRate,
+                                    "saleAmount" to item.saleAmount,
+                                    "ownerUserId" to uid
+                                )
+                                batch.set(userSalesRef.document(sale.id).collection("items").document(item.id), itemMap)
+                            }
+
+                            for (arrival in savedArrivals) {
+                                val arrivalMap = mapOf(
+                                    "id" to arrival.id,
+                                    "farmerId" to arrival.farmerId,
+                                    "farmerName" to arrival.farmerName,
+                                    "productId" to arrival.productId,
+                                    "productName" to arrival.productName,
+                                    "grade" to arrival.grade,
+                                    "quantity" to arrival.quantity,
+                                    "unit" to arrival.unit,
+                                    "netAmount" to arrival.netAmount,
+                                    "grossAmount" to arrival.grossAmount,
+                                    "billNumber" to arrival.billNumber,
+                                    "date" to arrival.date,
+                                    "ownerUserId" to uid
+                                )
+                                batch.set(userArrivalsRef.document(arrival.id), arrivalMap)
+                            }
+
+                            for (f in savedFarmers) {
+                                val farmerMap = mapOf(
+                                    "id" to f.id,
+                                    "name" to f.name,
+                                    "mobileNumber" to f.mobileNumber,
+                                    "pendingAmount" to f.pendingAmount,
+                                    "advanceAmount" to f.advanceAmount,
+                                    "totalArrivals" to f.totalArrivals,
+                                    "lastUpdated" to f.lastUpdated,
+                                    "ownerUserId" to uid
+                                )
+                                batch.set(userFarmersRef.document(f.id), farmerMap)
+                            }
+
+                            batch.commit().await()
+
+                            saleDao.markAsSynced(sale.id)
+                            savedArrivals.forEach { arrivalDao.markAsSynced(it.id) }
+                        } catch (e: Exception) {
+                            timber.log.Timber.e(e, "Firebase sync failed for Buyer Sale + Farmer Arrivals")
+                        }
+                    }
+                }
+
+                Resource.Success(Unit)
+            } catch (e: Exception) {
+                timber.log.Timber.e(e, "createBuyerSaleWithFarmerArrivals Failed")
                 Resource.Error(e.message ?: "An unknown error occurred")
             }
         }

@@ -44,6 +44,7 @@ import com.dasariravi145.agrolynch.ui.screens.voice.VoiceEntryScreen
 import com.dasariravi145.agrolynch.ui.screens.voice.VoiceNavigationEvent
 import com.dasariravi145.agrolynch.ui.screens.voice.VoiceViewModel
 import com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileScreen
+import com.dasariravi145.agrolynch.ui.screens.template.InvoiceDesignerScreen
 import com.dasariravi145.agrolynch.util.ocr.ExtractedBillData
 import com.dasariravi145.agrolynch.util.ocr.ExtractedBillItem
 import com.dasariravi145.agrolynch.ui.screens.template.InvoiceProfileViewModel
@@ -164,7 +165,7 @@ fun SetupNavGraph(
                 viewModel = dashboardViewModel,
                 isPremium = isPremium,
                 onUpgradeClick = { navController.navigate(Screen.Premium.route) },
-                onAddTransaction = { navController.navigate(Screen.NewArrival.route) },
+                onViewMarketOutlook = { navController.navigate(Screen.MarketOutlook.route) },
                 onViewTransactions = { navController.navigate(Screen.TransactionList.route) },
                 onViewFarmers = { navController.navigate(Screen.FarmerList.route) },
                 onViewBuyers = { navController.navigate(Screen.BuyerList.route) },
@@ -368,7 +369,16 @@ fun SetupNavGraph(
             val marketRateViewModel: MarketRateViewModel = hiltViewModel()
             MarketRateScreen(
                 viewModel = marketRateViewModel,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onViewMarketOutlook = { navController.navigate(Screen.MarketOutlook.route) }
+            )
+        }
+        composable(route = Screen.MarketOutlook.route) {
+            val marketOutlookViewModel: com.dasariravi145.agrolynch.ui.screens.marketoutlook.MarketOutlookViewModel = hiltViewModel()
+            com.dasariravi145.agrolynch.ui.screens.marketoutlook.MarketOutlookScreen(
+                viewModel = marketOutlookViewModel,
+                onBackClick = { navController.popBackStack() },
+                onUpgradeClick = { navController.navigate(Screen.Premium.route) }
             )
         }
         composable(
@@ -404,7 +414,8 @@ fun SetupNavGraph(
                 ocrQty = qty,
                 ocrRate = rate,
                 ocrDeductions = deductions,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onScanBillClick = { navController.navigate(Screen.BillScan.route) }
             )
         }
         composable(
@@ -626,9 +637,8 @@ fun SetupNavGraph(
             )
         }
         composable(route = Screen.TemplateEditor.route) {
-            // Redirect to canonical Professional Invoice Setup
             val viewModel: InvoiceProfileViewModel = hiltViewModel()
-            InvoiceProfileScreen(
+            InvoiceDesignerScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
             )

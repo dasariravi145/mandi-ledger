@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -28,7 +29,8 @@ import java.util.*
 @Composable
 fun MarketRateScreen(
     viewModel: MarketRateViewModel,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onViewMarketOutlook: () -> Unit = {}
 ) {
     val rates by viewModel.currentRates.collectAsState()
     val products by viewModel.products.collectAsState()
@@ -46,6 +48,11 @@ fun MarketRateScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onViewMarketOutlook) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI Market Outlook", tint = Color(0xFF6366F1))
                     }
                 }
             )

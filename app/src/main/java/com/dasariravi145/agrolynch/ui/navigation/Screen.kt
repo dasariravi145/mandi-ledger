@@ -39,6 +39,7 @@ sealed class Screen(val route: String) {
         fun passId(id: String? = null) = if (id != null) "add_edit_product/$id" else "add_edit_product/new"
     }
     object MarketRate : Screen("market_rate")
+    object MarketOutlook : Screen("market_outlook")
     object Sale : Screen("sale") {
         const val routeTemplate = "sale?billNo={billNo}&amount={amount}&date={date}&buyer={buyer}&product={product}&qty={qty}&rate={rate}&deductions={deductions}"
         fun passOcr(billNo: String = "", amount: Double = 0.0, date: Long = 0L, buyer: String = "", product: String = "", qty: Double = 0.0, rate: Double = 0.0, deductions: String = "") = 

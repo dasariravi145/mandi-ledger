@@ -9,6 +9,11 @@ import kotlinx.coroutines.flow.Flow
 interface SaleRepository {
     fun getSales(): Flow<List<SaleEntity>>
     suspend fun createSale(sale: SaleEntity, items: List<SaleItemEntity>): Resource<Unit>
+    suspend fun createBuyerSaleWithFarmerArrivals(
+        sale: SaleEntity,
+        farmerArrivals: List<Triple<com.dasariravi145.agrolynch.data.local.entity.ArrivalEntity, SaleItemEntity, List<com.dasariravi145.agrolynch.data.local.entity.EntryDeductionEntity>>>,
+        buyerDeductions: List<com.dasariravi145.agrolynch.data.local.entity.EntryDeductionEntity>
+    ): Resource<Unit>
     suspend fun updateSale(sale: SaleEntity): Resource<Unit>
     suspend fun deleteSale(id: String): Resource<Unit>
     suspend fun addPaymentToSale(saleId: String, payment: PaymentEntity): Resource<Unit>

@@ -30,8 +30,11 @@ enum class EditorMode {
 class InvoiceProfileViewModel @Inject constructor(
     private val companyRepository: CompanyRepository,
     private val templateRepository: com.dasariravi145.agrolynch.domain.repository.TemplatePositionRepository,
+    private val premiumStateManager: com.dasariravi145.agrolynch.util.PremiumStateManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    val isPremium = premiumStateManager.isPremium
 
     private val _uiState = MutableStateFlow(ProfessionalInvoiceUiState())
     val uiState = _uiState.asStateFlow()
@@ -546,6 +549,142 @@ class InvoiceProfileViewModel @Inject constructor(
                  l2.yPercent + l2.heightPercent <= l1.yPercent + buffer)
     }
 
+    // --- Interactive Visual Designer & AI Methods ---
+
+    fun setZoomScale(scale: Float) {
+        _uiState.update { it.copy(zoomScale = scale.coerceIn(0.5f, 2.5f)) }
+    }
+
+    fun toggleLockElement(key: String) {
+        _uiState.update { state ->
+            val newLocked = state.lockedKeys.toMutableSet()
+            if (newLocked.contains(key)) newLocked.remove(key) else newLocked.add(key)
+            state.copy(lockedKeys = newLocked)
+        }
+    }
+
+    fun toggleVisibility(key: String) {
+        val currentLayout = _uiState.value.wizardConfig.getLayout(key)
+        updateElementLayout(key) { currentLayout.copy(visible = !currentLayout.visible) }
+    }
+
+    fun changeZIndex(key: String, delta: Int) {
+        val currentLayout = _uiState.value.wizardConfig.getLayout(key)
+        val newZ = (currentLayout.zIndex + delta).coerceIn(1, 20)
+        updateElementLayout(key) { currentLayout.copy(zIndex = newZ) }
+        recordUndo()
+    }
+
+    fun alignElement(key: String, alignType: String) {
+        val currentLayout = _uiState.value.wizardConfig.getLayout(key)
+        val updated = when (alignType.uppercase()) {
+            "LEFT" -> currentLayout.copy(xPercent = 2f)
+            "CENTER_HORIZON" -> currentLayout.copy(xPercent = (100f - currentLayout.widthPercent) / 2f)
+            "RIGHT" -> currentLayout.copy(xPercent = (100f - currentLayout.widthPercent - 2f).coerceAtLeast(0f))
+            "TOP" -> currentLayout.copy(yPercent = 2f)
+            "CENTER_VERTICAL" -> currentLayout.copy(yPercent = (100f - currentLayout.heightPercent) / 2f)
+            "BOTTOM" -> currentLayout.copy(yPercent = (100f - currentLayout.heightPercent - 2f).coerceAtLeast(0f))
+            else -> currentLayout
+        }
+        applyLayoutChange(key) { updated }
+    }
+
+    fun restoreOriginalTemplate() {
+        val templateId = _uiState.value.selectedTemplateId
+        val defaultConfig = getDefaultConfigForTemplate(templateId)
+        viewModelScope.launch {
+            templateRepository.resetToDefault(templateId)
+            templateRepository.saveWizardConfig(templateId, defaultConfig)
+            _uiState.update {
+                it.copy(
+                    wizardConfig = defaultConfig,
+                    aiPreviewConfig = null,
+                    aiReplyMessage = null,
+                    isDirty = true
+                )
+            }
+            generateLivePreview(immediate = true)
+            _message.emit("Restored original $templateId layout.")
+        }
+    }
+
+    fun processAiDesignRequest(userPrompt: String) {
+        if (userPrompt.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isAiProcessing = true) }
+            val (aiConfig, reply) = com.dasariravi145.agrolynch.util.pdf.InvoiceAiDesigner.processUserRequest(
+                currentConfig = _uiState.value.wizardConfig,
+                userPrompt = userPrompt
+            )
+            _uiState.update {
+                it.copy(
+                    isAiProcessing = false,
+                    aiPreviewConfig = aiConfig,
+                    aiReplyMessage = reply
+                )
+            }
+            generateLivePreviewForConfig(aiConfig)
+        }
+    }
+
+    fun applyAiDesign() {
+        val aiConfig = _uiState.value.aiPreviewConfig ?: return
+        recordUndo()
+        _uiState.update {
+            it.copy(
+                wizardConfig = aiConfig,
+                aiPreviewConfig = null,
+                aiReplyMessage = null,
+                isDirty = true
+            )
+        }
+        generateLivePreview(immediate = true)
+        viewModelScope.launch { _message.emit("AI design applied!") }
+    }
+
+    fun discardAiDesign() {
+        _uiState.update {
+            it.copy(
+                aiPreviewConfig = null,
+                aiReplyMessage = null
+            )
+        }
+        generateLivePreview(immediate = true)
+    }
+
+    private fun generateLivePreviewForConfig(config: InvoiceWizardConfig) {
+        previewJob?.cancel()
+        previewJob = viewModelScope.launch(Dispatchers.Default) {
+            val state = _uiState.value
+            val p = state.profile
+            try {
+                val businessProfile = BusinessProfile(
+                    companyName = p.companyName,
+                    address = formatAddress(p),
+                    mobile = com.dasariravi145.agrolynch.util.Formatter.formatBusinessPhones(p.mobile1, p.mobile2),
+                    gstNumber = p.gstNumber,
+                    tagline = p.tagline,
+                    logoPath = p.logoPath,
+                    qrPath = p.upiQrPath,
+                    signaturePath = p.signaturePath,
+                    godImagePath = p.godImagePath,
+                    stampPath = p.stampPath,
+                    proprietor = p.proprietorName,
+                    watermarkImagePath = p.customTemplatePath,
+                    marketName = p.marketName,
+                    city = p.city,
+                    state = p.state,
+                    pincode = p.pincode
+                )
+                val templateId = mapTemplateTypeToId(state.selectedTemplateId)
+                val html = InvoiceHtmlGenerator.buildHtml(context, templateId, businessProfile, CANONICAL_SAMPLE_DATA, config)
+                _previewHtml.value = html
+            } catch (e: Exception) {
+                Timber.e(e, "AI_PREVIEW_GEN_FAILED")
+            }
+        }
+    }
+
     companion object {
         val CANONICAL_SAMPLE_DATA = InvoiceData(
             billNumber = "SAMPLE-001",
@@ -579,5 +718,10 @@ data class ProfessionalInvoiceUiState(
     val guidedStepIndex: Int = 0,
     val selectedElementKey: String? = null,
     val undoStack: List<InvoiceWizardConfig> = emptyList(),
-    val redoStack: List<InvoiceWizardConfig> = emptyList()
+    val redoStack: List<InvoiceWizardConfig> = emptyList(),
+    val zoomScale: Float = 1.0f,
+    val lockedKeys: Set<String> = emptySet(),
+    val aiPreviewConfig: InvoiceWizardConfig? = null,
+    val aiReplyMessage: String? = null,
+    val isAiProcessing: Boolean = false
 )

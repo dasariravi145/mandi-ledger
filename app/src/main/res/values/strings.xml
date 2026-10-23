@@ -6,7 +6,8 @@
     <!-- Dashboard -->
     <string name="home">Home</string>
     <string name="farmer_arrival">Farmer Arrival</string>
-    <string name="buyer_sale">Buyer Sale</string>
+    <string name="market_outlook">Market Outlook</string>
+    <string name="buyer_sale">Sale Entry</string>
     <string name="farmers">Farmers</string>
     <string name="traders">Buyers &amp; Traders</string>
     <string name="pay_farmer">Pay Farmer</string>
@@ -35,11 +36,11 @@
 
     <!-- Legacy Keys for compatibility -->
     <string name="add_stock">Farmer Arrival</string>
-    <string name="sale">Buyer Sale</string>
+    <string name="sale">Sale Entry</string>
     <string name="payment">Payments</string>
     <string name="khata">Account Book</string>
     <string name="add_stock_entry">New Farmer Arrival</string>
-    <string name="add_sale_entry">New Buyer Sale</string>
+    <string name="add_sale_entry">New Sale Entry</string>
     <string name="analytics">Business Overview</string>
     <string name="bill_scan">Read Bill</string>
     <string name="voice_entry">Speak Details</string>
@@ -69,7 +70,7 @@
     <string name="product_label">Item</string>
     <string name="grade_label">Grade</string>
     <string name="rate">Rate</string>
-    <string name="sale_entry">Buyer Sale</string>
+    <string name="sale_entry">Sale Entry</string>
     <string name="new_buyer_details">New Buyer Details</string>
     <string name="mobile_number">Mobile Number</string>
     <string name="address">Address</string>

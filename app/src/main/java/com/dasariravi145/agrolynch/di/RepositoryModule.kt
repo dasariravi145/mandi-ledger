@@ -149,4 +149,10 @@ abstract class RepositoryModule {
     abstract fun bindArchiveRepository(
         archiveRepositoryImpl: com.dasariravi145.agrolynch.data.repository.ArchiveRepositoryImpl
     ): com.dasariravi145.agrolynch.domain.repository.ArchiveRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindMarketDataRepository(
+        marketDataRepositoryImpl: com.dasariravi145.agrolynch.data.repository.MarketDataRepositoryImpl
+    ): com.dasariravi145.agrolynch.domain.repository.MarketDataRepository
 }
